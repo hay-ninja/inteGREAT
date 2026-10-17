@@ -1,0 +1,43 @@
+{"_meta": {"synthetic": true, "scenario": "fault_a_wrong_gpio", "description": "Firmware drives GPIO19 but servo is wired to GPIO18: ACK present, no motion.", "command": "MOVE 90", "generated_by": "scripts/gen_synthetic_replays.py"}}
+{"t_ms": 0, "source": "host", "raw": "MOVE 90"}
+{"t_ms": 0, "source": "cv", "frame": 0, "quality": "valid", "angle_deg": 0.7}
+{"t_ms": 38, "source": "serial", "raw": "ACK MOVE 90"}
+{"t_ms": 66, "source": "cv", "frame": 1, "quality": "valid", "angle_deg": 0.7}
+{"t_ms": 132, "source": "cv", "frame": 2, "quality": "valid", "angle_deg": -0.7}
+{"t_ms": 198, "source": "cv", "frame": 3, "quality": "valid", "angle_deg": -0.7}
+{"t_ms": 264, "source": "cv", "frame": 4, "quality": "valid", "angle_deg": 0.5}
+{"t_ms": 330, "source": "cv", "frame": 5, "quality": "valid", "angle_deg": 0.4}
+{"t_ms": 396, "source": "cv", "frame": 6, "quality": "valid", "angle_deg": 0.3}
+{"t_ms": 462, "source": "cv", "frame": 7, "quality": "valid", "angle_deg": -0.3}
+{"t_ms": 528, "source": "cv", "frame": 8, "quality": "valid", "angle_deg": 0.2}
+{"t_ms": 594, "source": "cv", "frame": 9, "quality": "valid", "angle_deg": 0.2}
+{"t_ms": 660, "source": "cv", "frame": 10, "quality": "valid", "angle_deg": 0.1}
+{"t_ms": 726, "source": "cv", "frame": 11, "quality": "valid", "angle_deg": -0.5}
+{"t_ms": 792, "source": "cv", "frame": 12, "quality": "valid", "angle_deg": -0.1}
+{"t_ms": 858, "source": "cv", "frame": 13, "quality": "valid", "angle_deg": -0.2}
+{"t_ms": 924, "source": "cv", "frame": 14, "quality": "valid", "angle_deg": 0.4}
+{"t_ms": 990, "source": "cv", "frame": 15, "quality": "valid", "angle_deg": 0.8}
+{"t_ms": 1056, "source": "cv", "frame": 16, "quality": "valid", "angle_deg": 0.7}
+{"t_ms": 1122, "source": "cv", "frame": 17, "quality": "valid", "angle_deg": 0.1}
+{"t_ms": 1188, "source": "cv", "frame": 18, "quality": "valid", "angle_deg": -0.1}
+{"t_ms": 1254, "source": "cv", "frame": 19, "quality": "valid", "angle_deg": -0.4}
+{"t_ms": 1320, "source": "cv", "frame": 20, "quality": "valid", "angle_deg": -0.7}
+{"t_ms": 1386, "source": "cv", "frame": 21, "quality": "valid", "angle_deg": -0.8}
+{"t_ms": 1452, "source": "cv", "frame": 22, "quality": "valid", "angle_deg": -0.1}
+{"t_ms": 1518, "source": "cv", "frame": 23, "quality": "valid", "angle_deg": -0.3}
+{"t_ms": 1584, "source": "cv", "frame": 24, "quality": "valid", "angle_deg": -0.2}
+{"t_ms": 1650, "source": "cv", "frame": 25, "quality": "valid", "angle_deg": 0.6}
+{"t_ms": 1716, "source": "cv", "frame": 26, "quality": "valid", "angle_deg": 0.0}
+{"t_ms": 1782, "source": "cv", "frame": 27, "quality": "valid", "angle_deg": 0.1}
+{"t_ms": 1848, "source": "cv", "frame": 28, "quality": "valid", "angle_deg": -0.4}
+{"t_ms": 1914, "source": "cv", "frame": 29, "quality": "valid", "angle_deg": -0.8}
+{"t_ms": 1980, "source": "cv", "frame": 30, "quality": "valid", "angle_deg": -0.3}
+{"t_ms": 2046, "source": "cv", "frame": 31, "quality": "valid", "angle_deg": -0.6}
+{"t_ms": 2112, "source": "cv", "frame": 32, "quality": "valid", "angle_deg": 0.0}
+{"t_ms": 2178, "source": "cv", "frame": 33, "quality": "valid", "angle_deg": 0.8}
+{"t_ms": 2244, "source": "cv", "frame": 34, "quality": "valid", "angle_deg": 0.3}
+{"t_ms": 2310, "source": "cv", "frame": 35, "quality": "valid", "angle_deg": -0.5}
+{"t_ms": 2376, "source": "cv", "frame": 36, "quality": "valid", "angle_deg": 0.6}
+{"t_ms": 2442, "source": "cv", "frame": 37, "quality": "valid", "angle_deg": 0.5}
+{"t_ms": 2508, "source": "cv", "frame": 38, "quality": "valid", "angle_deg": 0.4}
+{"t_ms": 2574, "source": "cv", "frame": 39, "quality": "valid", "angle_deg": 0.7}

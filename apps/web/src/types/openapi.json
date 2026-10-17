@@ -1,0 +1,2962 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "inteGREAT API",
+  "version": "0.1.0"
+ },
+ "paths": {
+  "/api/v1/health": {
+   "get": {
+    "summary": "Health",
+    "operationId": "health_api_v1_health_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/demo-fixtures": {
+   "get": {
+    "summary": "Demo Fixtures",
+    "operationId": "demo_fixtures_api_v1_demo_fixtures_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/DemoFixture"
+         },
+         "type": "array",
+         "title": "Response Demo Fixtures Api V1 Demo Fixtures Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/projects/{pid}/evidence": {
+   "get": {
+    "summary": "Get Evidence",
+    "operationId": "get_evidence_api_v1_projects__pid__evidence_get",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     },
+     {
+      "name": "ids",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "maxItems": 200,
+       "default": [],
+       "title": "Ids"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Evidence"
+         },
+         "title": "Response Get Evidence Api V1 Projects  Pid  Evidence Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/replays": {
+   "get": {
+    "summary": "Replays",
+    "operationId": "replays_api_v1_replays_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/ReplayInfo"
+         },
+         "type": "array",
+         "title": "Response Replays Api V1 Replays Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/projects/import": {
+   "post": {
+    "summary": "Import Project",
+    "operationId": "import_project_api_v1_projects_import_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ImportRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Project"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/projects": {
+   "get": {
+    "summary": "List Projects",
+    "operationId": "list_projects_api_v1_projects_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/Project"
+         },
+         "type": "array",
+         "title": "Response List Projects Api V1 Projects Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/projects/{pid}": {
+   "get": {
+    "summary": "Get Project",
+    "operationId": "get_project_api_v1_projects__pid__get",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Project"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/projects/{pid}/graph": {
+   "get": {
+    "summary": "Get Graph",
+    "operationId": "get_graph_api_v1_projects__pid__graph_get",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     },
+     {
+      "name": "scope_node_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Scope Node Id"
+      }
+     },
+     {
+      "name": "depth",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 5,
+       "minimum": 0,
+       "default": 2,
+       "title": "Depth"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GraphSnapshot"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/projects/{pid}/subsystems": {
+   "get": {
+    "summary": "Get Subsystems",
+    "operationId": "get_subsystems_api_v1_projects__pid__subsystems_get",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Subsystem"
+         },
+         "title": "Response Get Subsystems Api V1 Projects  Pid  Subsystems Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/projects/{pid}/expectations": {
+   "get": {
+    "summary": "List Expectations",
+    "operationId": "list_expectations_api_v1_projects__pid__expectations_get",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Expectation"
+         },
+         "title": "Response List Expectations Api V1 Projects  Pid  Expectations Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/projects/{pid}/expectations/propose": {
+   "post": {
+    "summary": "Propose Expectation",
+    "operationId": "propose_expectation_api_v1_projects__pid__expectations_propose_post",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Expectation"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/projects/{pid}/expectations/{eid}/confirm": {
+   "post": {
+    "summary": "Confirm Expectation",
+    "operationId": "confirm_expectation_api_v1_projects__pid__expectations__eid__confirm_post",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     },
+     {
+      "name": "eid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Eid"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ExpectationEdit"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Expectation"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/projects/{pid}/tests": {
+   "post": {
+    "summary": "Start Test",
+    "operationId": "start_test_api_v1_projects__pid__tests_post",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/StartTestRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TestRun"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/projects/{pid}/incidents": {
+   "get": {
+    "summary": "List Incidents",
+    "operationId": "list_incidents_api_v1_projects__pid__incidents_get",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Incident"
+         },
+         "title": "Response List Incidents Api V1 Projects  Pid  Incidents Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/projects/{pid}/events": {
+   "get": {
+    "summary": "List Events",
+    "operationId": "list_events_api_v1_projects__pid__events_get",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     },
+     {
+      "name": "after_seq",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 0,
+       "title": "After Seq"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/IntegreatEvent"
+         },
+         "title": "Response List Events Api V1 Projects  Pid  Events Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tests/{run_id}": {
+   "get": {
+    "summary": "Get Test",
+    "operationId": "get_test_api_v1_tests__run_id__get",
+    "parameters": [
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Run Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TestRunDetail"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/investigations/{iid}": {
+   "get": {
+    "summary": "Get Investigation",
+    "operationId": "get_investigation_api_v1_investigations__iid__get",
+    "parameters": [
+     {
+      "name": "iid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Iid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/InvestigationView"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/investigations/{iid}/actions/{action_id}/execute": {
+   "post": {
+    "summary": "Execute Action",
+    "operationId": "execute_action_api_v1_investigations__iid__actions__action_id__execute_post",
+    "parameters": [
+     {
+      "name": "iid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Iid"
+      }
+     },
+     {
+      "name": "action_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Action Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ExecuteActionRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ActionExecution"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/investigations/{iid}/manual-results": {
+   "post": {
+    "summary": "Manual Result",
+    "operationId": "manual_result_api_v1_investigations__iid__manual_results_post",
+    "parameters": [
+     {
+      "name": "iid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Iid"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ManualResultRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/InvestigationView"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "ActionExecution": {
+    "properties": {
+     "result": {
+      "$ref": "#/components/schemas/ActionResult"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "result"
+    ],
+    "title": "ActionExecution"
+   },
+   "ActionKind": {
+    "type": "string",
+    "enum": [
+     "run_readonly_tool",
+     "request_manual_check",
+     "repeat_test",
+     "expand_scope",
+     "inspect_source",
+     "inspect_connection",
+     "verify_fix",
+     "ask_clarification"
+    ],
+    "title": "ActionKind"
+   },
+   "ActionResult": {
+    "properties": {
+     "action_id": {
+      "type": "string",
+      "title": "Action Id"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "completed",
+       "denied",
+       "failed"
+      ],
+      "title": "Status"
+     },
+     "summary": {
+      "type": "string",
+      "title": "Summary"
+     },
+     "source_excerpts": {
+      "items": {
+       "$ref": "#/components/schemas/SourceExcerpt"
+      },
+      "type": "array",
+      "title": "Source Excerpts"
+     },
+     "evidence": {
+      "items": {
+       "$ref": "#/components/schemas/Evidence"
+      },
+      "type": "array",
+      "title": "Evidence"
+     },
+     "test_run_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Test Run Id"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "action_id",
+     "status",
+     "summary",
+     "source_excerpts",
+     "evidence",
+     "test_run_id"
+    ],
+    "title": "ActionResult"
+   },
+   "DemoFixture": {
+    "properties": {
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "repo_path": {
+      "type": "string",
+      "title": "Repo Path"
+     },
+     "manifest_path": {
+      "type": "string",
+      "title": "Manifest Path"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "label",
+     "repo_path",
+     "manifest_path"
+    ],
+    "title": "DemoFixture"
+   },
+   "DiagnosticAction": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "incident_id": {
+      "type": "string",
+      "title": "Incident Id"
+     },
+     "kind": {
+      "$ref": "#/components/schemas/ActionKind"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "rationale": {
+      "type": "string",
+      "title": "Rationale"
+     },
+     "tool_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tool Name"
+     },
+     "arguments": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Arguments"
+     },
+     "permission_category": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Permission Category"
+     },
+     "approval_required": {
+      "type": "boolean",
+      "title": "Approval Required",
+      "default": false
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "proposed",
+       "running",
+       "completed",
+       "denied",
+       "failed"
+      ],
+      "title": "Status",
+      "default": "proposed"
+     },
+     "expected_outcomes": {
+      "items": {
+       "$ref": "#/components/schemas/ExpectedOutcome"
+      },
+      "type": "array",
+      "title": "Expected Outcomes"
+     },
+     "manual_instructions": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Manual Instructions"
+     },
+     "result_choices": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Result Choices"
+     },
+     "evidence_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Evidence Ids"
+     },
+     "related_node_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Related Node Ids"
+     },
+     "recommended": {
+      "type": "boolean",
+      "title": "Recommended",
+      "default": false
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "incident_id",
+     "kind",
+     "label",
+     "rationale",
+     "tool_name",
+     "arguments",
+     "permission_category",
+     "approval_required",
+     "status",
+     "expected_outcomes",
+     "manual_instructions",
+     "result_choices",
+     "evidence_ids",
+     "related_node_ids",
+     "recommended"
+    ],
+    "title": "DiagnosticAction"
+   },
+   "EdgeOrigin": {
+    "type": "string",
+    "enum": [
+     "structural",
+     "source_call_graph",
+     "source_config",
+     "declared_wiring",
+     "inferred_dependency"
+    ],
+    "title": "EdgeOrigin",
+    "description": "Where an edge came from. FR-03: call graph, declared wiring and inferred dependency must differ."
+   },
+   "EdgeRelation": {
+    "type": "string",
+    "enum": [
+     "contains",
+     "calls",
+     "configures",
+     "controls",
+     "connected_to",
+     "powered_by",
+     "reads_from",
+     "observed_by",
+     "depends_on"
+    ],
+    "title": "EdgeRelation"
+   },
+   "Epistemic": {
+    "type": "string",
+    "enum": [
+     "observed",
+     "verified",
+     "inferred",
+     "unknown"
+    ],
+    "title": "Epistemic",
+    "description": "What kind of knowledge a piece of evidence is (PRD \u00a79.3)."
+   },
+   "Evidence": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "project_id": {
+      "type": "string",
+      "title": "Project Id"
+     },
+     "kind": {
+      "$ref": "#/components/schemas/EvidenceKind"
+     },
+     "epistemic": {
+      "$ref": "#/components/schemas/Epistemic"
+     },
+     "summary": {
+      "type": "string",
+      "title": "Summary"
+     },
+     "payload": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Payload"
+     },
+     "provenance": {
+      "$ref": "#/components/schemas/Provenance"
+     },
+     "test_run_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Test Run Id"
+     },
+     "raw_ref": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Raw Ref"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "project_id",
+     "kind",
+     "epistemic",
+     "summary",
+     "payload",
+     "provenance",
+     "test_run_id",
+     "raw_ref"
+    ],
+    "title": "Evidence"
+   },
+   "EvidenceKind": {
+    "type": "string",
+    "enum": [
+     "source_excerpt",
+     "manifest_entry",
+     "netlist_entry",
+     "serial_line",
+     "host_command",
+     "cv_measurement",
+     "tool_output",
+     "engineer_assertion",
+     "rule_result"
+    ],
+    "title": "EvidenceKind"
+   },
+   "ExecuteActionRequest": {
+    "properties": {
+     "source": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ObservationSourceSpec-Input"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "title": "ExecuteActionRequest",
+    "description": "Optional override of the observation source for repeat/verify runs (e.g. pick a replay)."
+   },
+   "Expectation": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "project_id": {
+      "type": "string",
+      "title": "Project Id"
+     },
+     "test_definition_id": {
+      "type": "string",
+      "title": "Test Definition Id"
+     },
+     "component_id": {
+      "type": "string",
+      "title": "Component Id"
+     },
+     "trigger": {
+      "$ref": "#/components/schemas/ExpectationTrigger"
+     },
+     "metric": {
+      "type": "string",
+      "const": "servo_angle_deg",
+      "title": "Metric",
+      "default": "servo_angle_deg"
+     },
+     "unit": {
+      "type": "string",
+      "const": "deg",
+      "title": "Unit",
+      "default": "deg"
+     },
+     "target": {
+      "type": "number",
+      "title": "Target"
+     },
+     "tolerance": {
+      "type": "number",
+      "title": "Tolerance"
+     },
+     "deadline_ms": {
+      "type": "integer",
+      "title": "Deadline Ms"
+     },
+     "measurement_source": {
+      "type": "string",
+      "title": "Measurement Source",
+      "default": "camera"
+     },
+     "ack_pattern": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ack Pattern"
+     },
+     "min_motion_deg": {
+      "type": "number",
+      "title": "Min Motion Deg",
+      "default": 5.0
+     },
+     "min_valid_samples": {
+      "type": "integer",
+      "title": "Min Valid Samples",
+      "default": 3
+     },
+     "confirmed_by_engineer": {
+      "type": "boolean",
+      "title": "Confirmed By Engineer",
+      "default": false
+     },
+     "proposed_from_evidence_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Proposed From Evidence Ids"
+     },
+     "rationale": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rationale"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "project_id",
+     "test_definition_id",
+     "component_id",
+     "trigger",
+     "metric",
+     "unit",
+     "target",
+     "tolerance",
+     "deadline_ms",
+     "measurement_source",
+     "ack_pattern",
+     "min_motion_deg",
+     "min_valid_samples",
+     "confirmed_by_engineer",
+     "proposed_from_evidence_ids",
+     "rationale"
+    ],
+    "title": "Expectation"
+   },
+   "ExpectationEdit": {
+    "properties": {
+     "target": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Target"
+     },
+     "tolerance": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tolerance"
+     },
+     "deadline_ms": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Deadline Ms"
+     },
+     "trigger_value": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Trigger Value"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "title": "ExpectationEdit"
+   },
+   "ExpectationOutcome": {
+    "type": "string",
+    "enum": [
+     "pass",
+     "fail",
+     "inconclusive"
+    ],
+    "title": "ExpectationOutcome"
+   },
+   "ExpectationResult": {
+    "properties": {
+     "outcome": {
+      "$ref": "#/components/schemas/ExpectationOutcome"
+     },
+     "reason": {
+      "type": "string",
+      "title": "Reason"
+     },
+     "final_valid_value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Final Valid Value"
+     },
+     "max_displacement": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max Displacement"
+     },
+     "valid_samples": {
+      "type": "integer",
+      "title": "Valid Samples"
+     },
+     "invalid_samples": {
+      "type": "integer",
+      "title": "Invalid Samples"
+     },
+     "facts": {
+      "items": {
+       "$ref": "#/components/schemas/Fact"
+      },
+      "type": "array",
+      "title": "Facts"
+     },
+     "evidence_id": {
+      "type": "string",
+      "title": "Evidence Id"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "outcome",
+     "reason",
+     "final_valid_value",
+     "max_displacement",
+     "valid_samples",
+     "invalid_samples",
+     "facts",
+     "evidence_id"
+    ],
+    "title": "ExpectationResult"
+   },
+   "ExpectationTrigger": {
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "configured_serial_command",
+       "external_sequence"
+      ],
+      "title": "Kind"
+     },
+     "value": {
+      "type": "string",
+      "title": "Value"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "kind",
+     "value"
+    ],
+    "title": "ExpectationTrigger"
+   },
+   "ExpectedOutcome": {
+    "properties": {
+     "result": {
+      "type": "string",
+      "title": "Result"
+     },
+     "interpretation": {
+      "type": "string",
+      "title": "Interpretation"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "result",
+     "interpretation"
+    ],
+    "title": "ExpectedOutcome"
+   },
+   "Fact": {
+    "properties": {
+     "key": {
+      "type": "string",
+      "enum": [
+       "command_sent",
+       "command_acknowledged",
+       "physical_motion"
+      ],
+      "title": "Key"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "value": {
+      "type": "string",
+      "enum": [
+       "yes",
+       "no",
+       "unknown"
+      ],
+      "title": "Value"
+     },
+     "evidence_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Evidence Ids"
+     },
+     "note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Note"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "key",
+     "label",
+     "value",
+     "evidence_ids",
+     "note"
+    ],
+    "title": "Fact",
+    "description": "The three distinct facts PRD \u00a75.3 says must never be conflated."
+   },
+   "FaultCode": {
+    "type": "string",
+    "enum": [
+     "GPIO_CONFIG_MISMATCH",
+     "NO_PHYSICAL_MOTION",
+     "MISSING_SERIAL_ACK",
+     "CAMERA_MEASUREMENT_UNAVAILABLE",
+     "POSSIBLE_POWER_OR_SIGNAL_FAULT"
+    ],
+    "title": "FaultCode"
+   },
+   "GraphEdge": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "project_id": {
+      "type": "string",
+      "title": "Project Id"
+     },
+     "source_id": {
+      "type": "string",
+      "title": "Source Id"
+     },
+     "target_id": {
+      "type": "string",
+      "title": "Target Id"
+     },
+     "relation": {
+      "$ref": "#/components/schemas/EdgeRelation"
+     },
+     "origin": {
+      "$ref": "#/components/schemas/EdgeOrigin"
+     },
+     "verification": {
+      "$ref": "#/components/schemas/Verification"
+     },
+     "label": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Label"
+     },
+     "attributes": {
+      "additionalProperties": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        },
+        {
+         "type": "number"
+        },
+        {
+         "type": "boolean"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "type": "object",
+      "title": "Attributes"
+     },
+     "evidence_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Evidence Ids"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "project_id",
+     "source_id",
+     "target_id",
+     "relation",
+     "origin",
+     "verification",
+     "label",
+     "attributes",
+     "evidence_ids"
+    ],
+    "title": "GraphEdge"
+   },
+   "GraphNode": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "project_id": {
+      "type": "string",
+      "title": "Project Id"
+     },
+     "kind": {
+      "$ref": "#/components/schemas/NodeKind"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "subsystem_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Subsystem Id"
+     },
+     "parent_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Parent Id"
+     },
+     "attributes": {
+      "additionalProperties": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        },
+        {
+         "type": "number"
+        },
+        {
+         "type": "boolean"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "type": "object",
+      "title": "Attributes"
+     },
+     "verification": {
+      "$ref": "#/components/schemas/Verification"
+     },
+     "evidence_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Evidence Ids"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "project_id",
+     "kind",
+     "label",
+     "subsystem_id",
+     "parent_id",
+     "attributes",
+     "verification",
+     "evidence_ids"
+    ],
+    "title": "GraphNode"
+   },
+   "GraphSnapshot": {
+    "properties": {
+     "project_id": {
+      "type": "string",
+      "title": "Project Id"
+     },
+     "version": {
+      "type": "integer",
+      "title": "Version"
+     },
+     "created_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Created At Utc"
+     },
+     "nodes": {
+      "items": {
+       "$ref": "#/components/schemas/GraphNode"
+      },
+      "type": "array",
+      "title": "Nodes"
+     },
+     "edges": {
+      "items": {
+       "$ref": "#/components/schemas/GraphEdge"
+      },
+      "type": "array",
+      "title": "Edges"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "project_id",
+     "version",
+     "created_at_utc",
+     "nodes",
+     "edges"
+    ],
+    "title": "GraphSnapshot"
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "type": "array",
+      "title": "Detail"
+     }
+    },
+    "type": "object",
+    "title": "HTTPValidationError"
+   },
+   "Highlight": {
+    "properties": {
+     "element_id": {
+      "type": "string",
+      "title": "Element Id"
+     },
+     "style": {
+      "type": "string",
+      "enum": [
+       "failed_expectation",
+       "conflict",
+       "observed",
+       "unknown",
+       "suspect"
+      ],
+      "title": "Style"
+     },
+     "reason": {
+      "type": "string",
+      "title": "Reason"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "element_id",
+     "style",
+     "reason"
+    ],
+    "title": "Highlight"
+   },
+   "Hypothesis": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "incident_id": {
+      "type": "string",
+      "title": "Incident Id"
+     },
+     "fault_code": {
+      "$ref": "#/components/schemas/FaultCode"
+     },
+     "title": {
+      "type": "string",
+      "title": "Title"
+     },
+     "explanation": {
+      "type": "string",
+      "title": "Explanation"
+     },
+     "rank": {
+      "type": "integer",
+      "title": "Rank"
+     },
+     "status": {
+      "$ref": "#/components/schemas/HypothesisStatus"
+     },
+     "origin": {
+      "type": "string",
+      "enum": [
+       "rule",
+       "agent"
+      ],
+      "title": "Origin",
+      "default": "rule"
+     },
+     "supporting_evidence_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Supporting Evidence Ids"
+     },
+     "contradicting_evidence_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Contradicting Evidence Ids"
+     },
+     "unknowns": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Unknowns"
+     },
+     "recommended_action_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Recommended Action Ids"
+     },
+     "related_node_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Related Node Ids"
+     },
+     "related_edge_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Related Edge Ids"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "incident_id",
+     "fault_code",
+     "title",
+     "explanation",
+     "rank",
+     "status",
+     "origin",
+     "supporting_evidence_ids",
+     "contradicting_evidence_ids",
+     "unknowns",
+     "recommended_action_ids",
+     "related_node_ids",
+     "related_edge_ids"
+    ],
+    "title": "Hypothesis"
+   },
+   "HypothesisStatus": {
+    "type": "string",
+    "enum": [
+     "plausible",
+     "unverified",
+     "supported",
+     "weakened",
+     "ruled_out"
+    ],
+    "title": "HypothesisStatus"
+   },
+   "ImportIssue": {
+    "properties": {
+     "level": {
+      "type": "string",
+      "enum": [
+       "info",
+       "warning",
+       "error"
+      ],
+      "title": "Level"
+     },
+     "code": {
+      "type": "string",
+      "title": "Code"
+     },
+     "message": {
+      "type": "string",
+      "title": "Message"
+     },
+     "file": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "File"
+     },
+     "line": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Line"
+     },
+     "evidence_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Evidence Ids"
+     },
+     "related_node_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Related Node Ids"
+     },
+     "related_edge_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Related Edge Ids"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "level",
+     "code",
+     "message",
+     "file",
+     "line",
+     "evidence_ids",
+     "related_node_ids",
+     "related_edge_ids"
+    ],
+    "title": "ImportIssue"
+   },
+   "ImportRequest": {
+    "properties": {
+     "repo_path": {
+      "type": "string",
+      "title": "Repo Path"
+     },
+     "manifest_path": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Manifest Path"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "repo_path"
+    ],
+    "title": "ImportRequest"
+   },
+   "Incident": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "project_id": {
+      "type": "string",
+      "title": "Project Id"
+     },
+     "test_run_id": {
+      "type": "string",
+      "title": "Test Run Id"
+     },
+     "expectation_id": {
+      "type": "string",
+      "title": "Expectation Id"
+     },
+     "state": {
+      "$ref": "#/components/schemas/IncidentState"
+     },
+     "title": {
+      "type": "string",
+      "title": "Title"
+     },
+     "fault_codes": {
+      "items": {
+       "$ref": "#/components/schemas/FaultCode"
+      },
+      "type": "array",
+      "title": "Fault Codes"
+     },
+     "hypothesis_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Hypothesis Ids"
+     },
+     "action_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Action Ids"
+     },
+     "created_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Created At Utc"
+     },
+     "resolved_by_test_run_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Resolved By Test Run Id"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "project_id",
+     "test_run_id",
+     "expectation_id",
+     "state",
+     "title",
+     "fault_codes",
+     "hypothesis_ids",
+     "action_ids",
+     "created_at_utc",
+     "resolved_by_test_run_id"
+    ],
+    "title": "Incident"
+   },
+   "IncidentState": {
+    "type": "string",
+    "enum": [
+     "open",
+     "investigating",
+     "awaiting_engineer",
+     "verifying",
+     "resolved",
+     "inconclusive"
+    ],
+    "title": "IncidentState"
+   },
+   "IntegreatEvent": {
+    "properties": {
+     "seq": {
+      "type": "integer",
+      "title": "Seq",
+      "default": 0
+     },
+     "type": {
+      "type": "string",
+      "title": "Type"
+     },
+     "project_id": {
+      "type": "string",
+      "title": "Project Id"
+     },
+     "investigation_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Investigation Id"
+     },
+     "test_run_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Test Run Id"
+     },
+     "timestamp_utc": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Timestamp Utc"
+     },
+     "payload": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Payload"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "seq",
+     "type",
+     "project_id",
+     "investigation_id",
+     "test_run_id",
+     "timestamp_utc",
+     "payload"
+    ],
+    "title": "IntegreatEvent",
+    "description": "WebSocket envelope (PRD \u00a715)."
+   },
+   "InvestigationView": {
+    "properties": {
+     "incident": {
+      "$ref": "#/components/schemas/Incident"
+     },
+     "test_run": {
+      "$ref": "#/components/schemas/TestRun"
+     },
+     "followup_runs": {
+      "items": {
+       "$ref": "#/components/schemas/TestRun"
+      },
+      "type": "array",
+      "title": "Followup Runs"
+     },
+     "hypotheses": {
+      "items": {
+       "$ref": "#/components/schemas/Hypothesis"
+      },
+      "type": "array",
+      "title": "Hypotheses"
+     },
+     "actions": {
+      "items": {
+       "$ref": "#/components/schemas/DiagnosticAction"
+      },
+      "type": "array",
+      "title": "Actions"
+     },
+     "evidence": {
+      "items": {
+       "$ref": "#/components/schemas/Evidence"
+      },
+      "type": "array",
+      "title": "Evidence"
+     },
+     "highlights": {
+      "items": {
+       "$ref": "#/components/schemas/Highlight"
+      },
+      "type": "array",
+      "title": "Highlights"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "incident",
+     "test_run",
+     "followup_runs",
+     "hypotheses",
+     "actions",
+     "evidence",
+     "highlights"
+    ],
+    "title": "InvestigationView"
+   },
+   "ManualResultRequest": {
+    "properties": {
+     "action_id": {
+      "type": "string",
+      "title": "Action Id"
+     },
+     "result": {
+      "type": "string",
+      "title": "Result"
+     },
+     "note": {
+      "anyOf": [
+       {
+        "type": "string",
+        "maxLength": 2000
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Note"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "action_id",
+     "result"
+    ],
+    "title": "ManualResultRequest"
+   },
+   "NodeKind": {
+    "type": "string",
+    "enum": [
+     "subsystem",
+     "source_module",
+     "function",
+     "mcu",
+     "pin",
+     "component",
+     "power_source",
+     "interface",
+     "test",
+     "observation"
+    ],
+    "title": "NodeKind"
+   },
+   "Observation": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "project_id": {
+      "type": "string",
+      "title": "Project Id"
+     },
+     "test_run_id": {
+      "type": "string",
+      "title": "Test Run Id"
+     },
+     "source_type": {
+      "type": "string",
+      "enum": [
+       "opencv",
+       "replay_cv"
+      ],
+      "title": "Source Type"
+     },
+     "source_id": {
+      "type": "string",
+      "title": "Source Id"
+     },
+     "component_id": {
+      "type": "string",
+      "title": "Component Id"
+     },
+     "timestamp_utc": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Timestamp Utc"
+     },
+     "elapsed_ms": {
+      "type": "integer",
+      "title": "Elapsed Ms"
+     },
+     "metric": {
+      "type": "string",
+      "title": "Metric"
+     },
+     "value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Value"
+     },
+     "unit": {
+      "type": "string",
+      "title": "Unit"
+     },
+     "measurement_quality": {
+      "type": "string",
+      "enum": [
+       "valid",
+       "marker_not_found",
+       "calibration_invalid",
+       "dropped"
+      ],
+      "title": "Measurement Quality"
+     },
+     "evidence_ref": {
+      "type": "string",
+      "title": "Evidence Ref"
+     },
+     "evidence_id": {
+      "type": "string",
+      "title": "Evidence Id"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "project_id",
+     "test_run_id",
+     "source_type",
+     "source_id",
+     "component_id",
+     "timestamp_utc",
+     "elapsed_ms",
+     "metric",
+     "value",
+     "unit",
+     "measurement_quality",
+     "evidence_ref",
+     "evidence_id"
+    ],
+    "title": "Observation"
+   },
+   "ObservationSourceSpec-Input": {
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "replay",
+       "live"
+      ],
+      "title": "Kind"
+     },
+     "scenario": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^[a-z0-9_]+$"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scenario"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "kind"
+    ],
+    "title": "ObservationSourceSpec"
+   },
+   "ObservationSourceSpec-Output": {
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "replay",
+       "live"
+      ],
+      "title": "Kind"
+     },
+     "scenario": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^[a-z0-9_]+$"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scenario"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "kind",
+     "scenario"
+    ],
+    "title": "ObservationSourceSpec"
+   },
+   "Project": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "repo_root": {
+      "type": "string",
+      "title": "Repo Root"
+     },
+     "manifest_path": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Manifest Path"
+     },
+     "created_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Created At Utc"
+     },
+     "graph_version": {
+      "type": "integer",
+      "title": "Graph Version",
+      "default": 1
+     },
+     "issues": {
+      "items": {
+       "$ref": "#/components/schemas/ImportIssue"
+      },
+      "type": "array",
+      "title": "Issues"
+     },
+     "file_count": {
+      "type": "integer",
+      "title": "File Count",
+      "default": 0
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "repo_root",
+     "manifest_path",
+     "created_at_utc",
+     "graph_version",
+     "issues",
+     "file_count"
+    ],
+    "title": "Project"
+   },
+   "Provenance": {
+    "properties": {
+     "source_id": {
+      "type": "string",
+      "title": "Source Id"
+     },
+     "file": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "File"
+     },
+     "line_start": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Line Start"
+     },
+     "line_end": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Line End"
+     },
+     "captured_at_utc": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Captured At Utc"
+     },
+     "monotonic_ns": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Monotonic Ns"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "source_id",
+     "file",
+     "line_start",
+     "line_end",
+     "captured_at_utc",
+     "monotonic_ns"
+    ],
+    "title": "Provenance"
+   },
+   "ReplayInfo": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "description": {
+      "type": "string",
+      "title": "Description"
+     },
+     "synthetic": {
+      "type": "boolean",
+      "title": "Synthetic"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "description",
+     "synthetic"
+    ],
+    "title": "ReplayInfo"
+   },
+   "SerialEvent": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "project_id": {
+      "type": "string",
+      "title": "Project Id"
+     },
+     "test_run_id": {
+      "type": "string",
+      "title": "Test Run Id"
+     },
+     "direction": {
+      "type": "string",
+      "enum": [
+       "rx",
+       "tx"
+      ],
+      "title": "Direction"
+     },
+     "timestamp_utc": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Timestamp Utc"
+     },
+     "elapsed_ms": {
+      "type": "integer",
+      "title": "Elapsed Ms"
+     },
+     "raw": {
+      "type": "string",
+      "title": "Raw"
+     },
+     "evidence_id": {
+      "type": "string",
+      "title": "Evidence Id"
+     },
+     "matched_function_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Matched Function Ids"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "project_id",
+     "test_run_id",
+     "direction",
+     "timestamp_utc",
+     "elapsed_ms",
+     "raw",
+     "evidence_id",
+     "matched_function_ids"
+    ],
+    "title": "SerialEvent"
+   },
+   "SourceExcerpt": {
+    "properties": {
+     "file": {
+      "type": "string",
+      "title": "File"
+     },
+     "line_start": {
+      "type": "integer",
+      "title": "Line Start"
+     },
+     "lines": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Lines"
+     },
+     "highlight_lines": {
+      "items": {
+       "type": "integer"
+      },
+      "type": "array",
+      "title": "Highlight Lines"
+     },
+     "evidence_id": {
+      "type": "string",
+      "title": "Evidence Id"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "file",
+     "line_start",
+     "lines",
+     "highlight_lines",
+     "evidence_id"
+    ],
+    "title": "SourceExcerpt"
+   },
+   "StartTestRequest": {
+    "properties": {
+     "expectation_id": {
+      "type": "string",
+      "title": "Expectation Id"
+     },
+     "source": {
+      "$ref": "#/components/schemas/ObservationSourceSpec-Input"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "expectation_id",
+     "source"
+    ],
+    "title": "StartTestRequest"
+   },
+   "Subsystem": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "module_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Module Ids"
+     },
+     "component_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Component Ids"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "label",
+     "module_ids",
+     "component_ids"
+    ],
+    "title": "Subsystem"
+   },
+   "TestRun": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "project_id": {
+      "type": "string",
+      "title": "Project Id"
+     },
+     "expectation_id": {
+      "type": "string",
+      "title": "Expectation Id"
+     },
+     "attempt_kind": {
+      "type": "string",
+      "enum": [
+       "initial",
+       "repeat",
+       "verify"
+      ],
+      "title": "Attempt Kind",
+      "default": "initial"
+     },
+     "verifies_test_run_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Verifies Test Run Id"
+     },
+     "source": {
+      "$ref": "#/components/schemas/ObservationSourceSpec-Output"
+     },
+     "synthetic": {
+      "type": "boolean",
+      "title": "Synthetic",
+      "default": false
+     },
+     "state": {
+      "$ref": "#/components/schemas/TestRunState",
+      "default": "configured"
+     },
+     "started_at_utc": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Started At Utc"
+     },
+     "ended_at_utc": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ended At Utc"
+     },
+     "result": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ExpectationResult"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "incident_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Incident Id"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "project_id",
+     "expectation_id",
+     "attempt_kind",
+     "verifies_test_run_id",
+     "source",
+     "synthetic",
+     "state",
+     "started_at_utc",
+     "ended_at_utc",
+     "result",
+     "incident_id",
+     "error"
+    ],
+    "title": "TestRun"
+   },
+   "TestRunDetail": {
+    "properties": {
+     "run": {
+      "$ref": "#/components/schemas/TestRun"
+     },
+     "observations": {
+      "items": {
+       "$ref": "#/components/schemas/Observation"
+      },
+      "type": "array",
+      "title": "Observations"
+     },
+     "serial": {
+      "items": {
+       "$ref": "#/components/schemas/SerialEvent"
+      },
+      "type": "array",
+      "title": "Serial"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "run",
+     "observations",
+     "serial"
+    ],
+    "title": "TestRunDetail"
+   },
+   "TestRunState": {
+    "type": "string",
+    "enum": [
+     "configured",
+     "running",
+     "completed",
+     "failed",
+     "cancelled"
+    ],
+    "title": "TestRunState"
+   },
+   "ValidationError": {
+    "properties": {
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "type": "array",
+      "title": "Location"
+     },
+     "msg": {
+      "type": "string",
+      "title": "Message"
+     },
+     "type": {
+      "type": "string",
+      "title": "Error Type"
+     },
+     "input": {
+      "title": "Input"
+     },
+     "ctx": {
+      "type": "object",
+      "title": "Context"
+     }
+    },
+    "type": "object",
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError"
+   },
+   "Verification": {
+    "type": "string",
+    "enum": [
+     "observed",
+     "verified",
+     "inferred",
+     "unverified",
+     "conflicting"
+    ],
+    "title": "Verification",
+    "description": "Confidence category for graph nodes/edges (PRD FR-03)."
+   }
+  }
+ }
+}

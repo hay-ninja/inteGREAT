@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+apps/api/.data/
+
+# Node
+node_modules/
+apps/web/dist/
+*.tsbuildinfo
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

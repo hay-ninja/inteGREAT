@@ -1,0 +1,64 @@
+# inteGREAT hardware manifest (fallback when no KiCad netlist). Engineer-authored.
+# `verification: verified` means the engineer physically confirmed the connection.
+schema: integreat-manifest/v1
+board:
+  id: esp32
+  label: ESP32 DevKitC (ASSUMED variant - verify before Fault A demo)
+  mcu: esp32
+
+subsystems:
+  - id: motor_control
+    label: Motor Control
+    source_globs: ["servo_control.*", "*.ino"]
+    components: [servo_1, psu_5v]
+  - id: connectivity
+    label: Connectivity / Status
+    source_globs: ["wifi_status.*"]
+    components: [status_led]
+
+components:
+  - id: servo_1
+    type: servo
+    label: Servo 1 (SG90)
+    pins: [signal, vcc, gnd]
+    attributes:
+      rated_voltage: "4.8-6 V (per datasheet)"
+  - id: status_led
+    type: led
+    label: Status LED
+    pins: [anode]
+
+power_sources:
+  - id: psu_5v
+    label: External 5 V supply
+    terminals: [pos, neg]
+
+connections:
+  - id: servo_signal
+    from: mcu.GPIO18
+    to: servo_1.signal
+    kind: signal
+    verification: verified
+    note: Engineer traced jumper on breadboard
+  - id: servo_power
+    from: psu_5v.pos
+    to: servo_1.vcc
+    kind: power
+    verification: verified
+  - id: servo_ground
+    from: psu_5v.neg
+    to: servo_1.gnd
+    kind: ground
+    verification: verified
+  - id: common_ground
+    from: psu_5v.neg
+    to: mcu.GND
+    kind: ground
+    verification: verified
+    note: Common ground between supply and ESP32
+  - id: led_signal
+    from: mcu.GPIO2
+    to: status_led.anode
+    kind: signal
+    verification: unverified
+    note: Onboard LED on most DevKitC boards; not checked
