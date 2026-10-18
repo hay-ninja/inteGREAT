@@ -47,8 +47,8 @@ export function BottomDrawer(p: Props) {
     <VStack gap={0} height={p.open ? 260 : undefined}>
       <HStack hAlign="between" vAlign="center" gap={2} paddingInline={2} wrap="wrap">
         <TabList value={p.tab} size="sm" onChange={(t) => { p.onTab(t as DrawerTab); p.onOpen(true); }}>
-          <Tab value="angle" label="Angle" />
-          <Tab value="serial" label="Serial" />
+          <Tab value="angle" label="Arm angle" />
+          <Tab value="serial" label="Board messages" />
           <Tab value="devices" label="Devices" />
           <Tab value="activity" label="Activity" />
         </TabList>
@@ -85,7 +85,7 @@ export function BottomDrawer(p: Props) {
 }
 
 function AnglePlot({ obs, exp }: { obs: Observation[]; exp: Expectation | null }) {
-  if (!obs.length) return <EmptyState isCompact title="No measurements yet" description="Run a test to see the servo angle over time." />;
+  if (!obs.length) return <EmptyState isCompact title="No measurements yet" description="Run a test and the camera will plot where the arm was over time." />;
   const W = 900, H = 170, pad = { l: 36, r: 8, t: 8, b: 20 };
   const maxT = Math.max(exp?.deadline_ms ?? 0, ...obs.map((o) => o.elapsed_ms)) * 1.05;
   const x = (t: number) => pad.l + (t / maxT) * (W - pad.l - pad.r);
@@ -116,15 +116,15 @@ function AnglePlot({ obs, exp }: { obs: Observation[]; exp: Expectation | null }
 interface Row extends Record<string, unknown> { id: string; t: string; dir: string; raw: string; note: string }
 
 function SerialLog({ serial }: { serial: SerialEvent[] }) {
-  if (!serial.length) return <EmptyState isCompact title="No serial traffic" description="Lines sent and received during a test appear here." />;
+  if (!serial.length) return <EmptyState isCompact title="No messages yet" description="Everything sent to and heard back from the board during a test appears here." />;
   const rows: Row[] = serial.map((s) => ({
     id: s.id, t: `${s.elapsed_ms} ms`, dir: s.direction === "tx" ? "→ board" : "← board", raw: s.raw,
     note: s.matched_function_ids.length ? `printed by ${s.matched_function_ids.map((f) => f.split("::")[1]).join(", ")}()` : "",
   }));
   return (
     <Table<Row> data={rows} idKey="id" density="compact" textOverflow="truncate"
-               columns={[{ key: "t", header: "Time", width: pixel(80) }, { key: "dir", header: "", width: pixel(80) },
-                         { key: "raw", header: "Line" }, { key: "note", header: "" }]} />
+               columns={[{ key: "t", header: "Time", width: pixel(80) }, { key: "dir", header: "Direction", width: pixel(80) },
+                         { key: "raw", header: "Message" }, { key: "note", header: "From code" }]} />
   );
 }
 
@@ -184,7 +184,7 @@ function DeviceSummary({ status, onOpenSetup }: { status: DeviceStatus | null; o
     <HStack gap={4} vAlign="center" wrap="wrap">
       <HStack gap={1.5} vAlign="center">
         <StatusDot variant={s?.connected ? "success" : "neutral"} label="ESP32 serial" />
-        <Text type="body">ESP32</Text>
+        <Text type="body">Controller board</Text>
         <Text type="supporting">{s?.connected ? `${s.port} · ${s.baud}` : "not connected"}</Text>
       </HStack>
       <HStack gap={1.5} vAlign="center">
@@ -214,7 +214,7 @@ export function DeviceControls({ status, onStatus, onError }: { status: DeviceSt
         <VStack gap={2}>
           <HStack gap={1} vAlign="center">
             <StatusDot variant={s.connected ? "success" : "neutral"} label={s.connected ? "connected" : "not connected"} />
-            <Text type="label">ESP32 serial</Text>
+            <Text type="label">Controller board (ESP32)</Text>
             <Text type="supporting">{s.connected ? `${s.port} · ${s.baud}` : "not connected"}</Text>
           </HStack>
           {s.connected ? (
@@ -227,7 +227,7 @@ export function DeviceControls({ status, onStatus, onError }: { status: DeviceSt
             </HStack>
           )}
           {s.last_error && <Text type="supporting" color="secondary">{s.last_error}</Text>}
-          <Text type="supporting">Reset lines are held low on open. Verify that your board stays running. Release the port before reflashing.</Text>
+          <Text type="supporting">The board runs your code. Only one program can hold the cable at a time — release the port before flashing new firmware.</Text>
         </VStack>
       </Card>
       <Card padding={3} width={380}>
@@ -256,8 +256,8 @@ export function DeviceControls({ status, onStatus, onError }: { status: DeviceSt
               <Button label="Release" size="sm" variant="ghost" clickAction={() => run(api.cameraRelease())} />
             </HStack>
           )}
-          <Text type="supporting">ArUco id 1 on the horn, id 0 beside the servo.</Text>
-          <Text type="supporting">Missing markers mean measurement unavailable. Calibrate at a known angle before a live test.</Text>
+          <Text type="supporting">Two printed marker stickers let the camera measure the arm: id 1 on the moving arm, id 0 beside the servo.</Text>
+          <Text type="supporting">If the camera can't see the markers, the measurement is reported as unavailable — never as a fault. Calibrate at a known angle before a live test.</Text>
         </VStack>
       </Card>
       {c.connected && <img className="camera-preview" src="/api/v1/devices/camera/stream.mjpg" alt="Live camera preview" />}

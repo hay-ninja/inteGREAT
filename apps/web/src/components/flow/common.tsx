@@ -34,9 +34,9 @@ export function EvidenceList({ ids, evById, title, onInspect }: { ids: string[];
   );
 }
 
-/** The three facts PRD §5.3 says must never be conflated. */
+/** The three facts PRD §5.3 says must never be conflated — in words a non-hardware reader can follow. */
 export function Facts({ result }: { result: ExpectationResult }) {
-  const labels = { command_sent: "Command sent", command_acknowledged: "Firmware ACK (serial)", physical_motion: "Motion observed (camera)" };
+  const labels = { command_sent: "The command went out", command_acknowledged: "The board said it got it", physical_motion: "The camera saw the arm move" };
   return (
     <VStack gap={1}>
       {result.facts.map((f) => (
@@ -67,6 +67,12 @@ export function SourceBadge({ run }: { run: TestRun }) {
 }
 
 /** Where test data comes from: two small choices instead of one long list. */
+const SOURCE_PLAIN: Record<string, string> = {
+  sim: "Pretend hardware — safe to explore. Nothing physical is connected.",
+  replay: "A saved recording of an earlier run. Nothing happens on the device.",
+  live: "The real board, servo, and camera on the bench.",
+};
+
 export function SourcePicker({ value, onChange, sources, liveReady }: {
   value: string;
   onChange: (v: string) => void;
@@ -82,20 +88,20 @@ export function SourcePicker({ value, onChange, sources, liveReady }: {
   };
   return (
     <VStack gap={1.5}>
-      <SegmentedControl label="Test data source" value={kind} onChange={pick} layout="fill" size="sm">
+      <SegmentedControl label="Where the test runs" value={kind} onChange={pick} layout="fill" size="sm">
         <SegmentedControlItem value="sim" label="Simulated" />
         <SegmentedControlItem value="replay" label="Replay" />
         <SegmentedControlItem value="live" label="Live rig" />
       </SegmentedControl>
-      {kind !== "live" ? (
+      <Text type="supporting">
+        {SOURCE_PLAIN[kind] ?? ""}
+        {kind === "live" && !liveReady ? " Open Rig setup to connect the board and calibrate the camera." : ""}
+      </Text>
+      {kind !== "live" && (
         <Selector label={kind === "sim" ? "Simulated condition" : "Recording"} isLabelHidden size="sm"
                   value={scenario} onChange={(v) => onChange(`${kind}:${v}`)} width="100%"
                   options={list.map((r) => ({ value: r.id, label: r.id.replace(/_/g, " "),
                                               description: r.description }))} />
-      ) : (
-        <Text type="supporting">
-          {liveReady ? "ESP32 and calibrated camera are connected." : "Open Rig setup to connect the ESP32 and calibrate the camera."}
-        </Text>
       )}
     </VStack>
   );

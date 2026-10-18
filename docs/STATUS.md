@@ -101,6 +101,14 @@ this adds context without changing P0 scope.
 - Re-verified: `tsc -b` clean, `vitest` 17/17, `pytest` 100/100, `vite build`, headless-Chromium
   walkthrough (now covering Activity tab + Devices→setup routing) at 1280×720 / 1024×768 / 800×600 —
   zero console errors, no horizontal overflow.
+- **Plain-language pass** for non-hardware readers: the incident card adds an "In short:" sentence
+  derived from the three facts ("the board received the command and replied OK, but the arm never
+  moved"); the facts read "The command went out / The board said it got it / The camera saw the arm
+  move"; source picker explains Simulated/Replay/Live in one line each; event-flow lanes renamed
+  "What we asked · What the board said · What the camera saw · The verdict" (with hover hints);
+  drawer tabs read "Arm angle · Board messages · Devices · Activity"; top bar shows "Board" not
+  "ESP32"; import fields explain themselves ("Your code folder", "Wiring notes file", KiCad
+  description). Provenance wording unchanged — nothing technical was removed, only translated.
 
 ## Live provider validation (2026-10-18) — verified
 - `stepfun_smoke.py`: step-5-preview triage OK (~8s). `gemini_smoke.py`: OK after model update —

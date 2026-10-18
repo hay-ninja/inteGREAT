@@ -24,6 +24,7 @@ import {
   type DiagnosticAction,
   type Evidence,
   type Expectation,
+  type ExpectationResult,
   type Hypothesis,
   type InvestigationView,
   type PermissionCategory,
@@ -157,7 +158,8 @@ function SetupStep(p: FlowProps) {
       <Card padding={3} variant="muted">
         <VStack gap={3}>
           <Eyebrow>Test parameters</Eyebrow>
-          <TextInput label="Serial command" value={draft.trigger} onChange={(v) => setDraft({ ...draft, trigger: v })} />
+          <Text type="supporting">inteGREAT sends this command to the board, then watches the arm to check it actually moved.</Text>
+          <TextInput label="Command to send" value={draft.trigger} onChange={(v) => setDraft({ ...draft, trigger: v })} />
           <HStack gap={2}>
             <NumberInput label="Target" units="°" value={draft.target} onChange={(v) => setDraft({ ...draft, target: v })} />
             <NumberInput label="± tolerance" units="°" value={draft.tolerance} min={0} onChange={(v) => setDraft({ ...draft, tolerance: v })} />
@@ -217,6 +219,21 @@ function recommendedFor(h: Hypothesis | undefined, actions: DiagnosticAction[]):
   return options.find((a) => a.kind !== "verify_fix" && a.status === "proposed") ?? options.find((a) => a.kind !== "verify_fix");
 }
 
+/** One-sentence story of the run for readers who don't know hardware: what went out, what came back, what moved. */
+function inPlainTerms(result: ExpectationResult): string {
+  const f = (k: string) => result.facts.find((x) => x.key === k)?.value;
+  if (result.outcome === "inconclusive")
+    return "In short: the camera could not measure the arm, so what happened physically is unknown — not proven broken.";
+  const ack = f("command_acknowledged"), moved = f("physical_motion");
+  if (moved === "no")
+    return ack === "yes"
+      ? "In short: the board received the command and replied OK, but the arm never moved — something between the code and the motor is wrong."
+      : "In short: the command went out, but the board never confirmed it and the arm did not move.";
+  if (moved === "unknown")
+    return "In short: the command went out, but whether the arm moved is unknown — the camera produced no measurement.";
+  return "";
+}
+
 const STATUS_LABEL: Record<string, string> = {
   supported: "supported", plausible: "plausible", unverified: "unverified", weakened: "weakened", ruled_out: "ruled out",
 };
@@ -259,7 +276,8 @@ function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
           <Heading level={2} type="display-3">{result?.outcome === "pass" ? "Repeat test passed" : result?.outcome === "inconclusive" ? "Measurement unavailable" : view.incident.title}</Heading>
           <SourceBadge run={currentRun} />
         </HStack>
-        {result && <Text type="supporting">{result.final_valid_value == null ? "No valid angle measurement is available." : `${result.final_valid_value.toFixed(1)}° measured · target ${p.expectation?.target ?? "?"}° ± ${p.expectation?.tolerance ?? "?"}°`}</Text>}
+        {result && <Text type="supporting">{result.final_valid_value == null ? "No valid angle measurement is available." : `Expected the arm at ${p.expectation?.target ?? "?"}° ± ${p.expectation?.tolerance ?? "?"}°, camera measured ${result.final_valid_value.toFixed(1)}°`}</Text>}
+        {result && inPlainTerms(result) && <Text type="body" color="secondary">{inPlainTerms(result)}</Text>}
       </VStack>
       {result && <Facts result={result} />}
       <Divider />

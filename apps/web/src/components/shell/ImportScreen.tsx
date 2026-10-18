@@ -97,12 +97,12 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
             <Eyebrow num={recent.length ? "03" : "02"}>Import your own project</Eyebrow>
             <Card padding={4} variant="muted">
               <VStack gap={3}>
-                <TextInput label="Firmware folder" value={repo} onChange={(v) => {
+                <TextInput label="Your code folder" value={repo} onChange={(v) => {
                   setRepo(v); ++previewRequest.current; setPreview(null); setMapping(null); setPreviewError(""); setPreviewBusy(false);
-                }} placeholder="C:\path\to\sketch" />
-                <TextInput label="Hardware manifest (YAML)" isOptional value={manifest} onChange={setManifest}
-                           description="Used directly, or as a fallback if the netlist can't be read." />
-                <TextInput label="KiCad netlist (XML)" isOptional value={netlist} width="100%"
+                }} placeholder="C:\path\to\sketch" description="The folder with your Arduino / ESP32 code (.ino, .cpp)." />
+                <TextInput label="Wiring notes file (YAML)" isOptional value={manifest} onChange={setManifest}
+                           description="A small file describing what is plugged into which pin. Also used as a fallback if the netlist can't be read." />
+                <TextInput label="KiCad netlist (XML)" isOptional value={netlist} width="100%" description="If you drew the circuit in KiCad, inteGREAT reads the real connections from it."
                            onChange={(v) => { setNetlist(v); ++previewRequest.current; setPreview(null); setMapping(null); setPreviewError(""); setPreviewBusy(false); }} />
                 <HStack gap={2} wrap="wrap">
                   <Button label="Read netlist" isDisabled={!netlist.trim() || p.busy} isLoading={previewBusy} onClick={() => doPreview(netlist, repo)} />

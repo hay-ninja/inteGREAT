@@ -18,10 +18,17 @@ import { InspectorCard } from "./InspectorCard";
 import { CanvasToggles, type CanvasMode } from "../graph/GraphView";
 
 const LANE_LABEL: Record<FlowLane, string> = {
-  command: "Test command",
-  software: "Software / serial",
-  hardware: "Hardware observations",
-  result: "Test result",
+  command: "What we asked",
+  software: "What the board said",
+  hardware: "What the camera saw",
+  result: "The verdict",
+};
+
+const LANE_HINT: Record<FlowLane, string> = {
+  command: "The command inteGREAT sent to run the test",
+  software: "Messages the board printed back over the serial link",
+  hardware: "Angle measurements the camera took of the servo arm",
+  result: "Whether the test passed, and why it didn't",
 };
 
 /** Which lanes stay bright under each graph layer — the layer choice stays meaningful here too. */
@@ -32,7 +39,7 @@ function laneDimmed(lane: FlowLane, layer: GraphLayer): boolean {
 }
 
 function runLabel(r: TestRun, all: TestRun[]): string {
-  const kind = r.attempt_kind === "initial" ? "Initial" : r.attempt_kind === "verify" ? "Verify" : "Repeat";
+  const kind = r.attempt_kind === "initial" ? "First run" : r.attempt_kind === "verify" ? "Verify" : "Retry";
   const dup = all.filter((x) => x.attempt_kind === r.attempt_kind);
   const idx = dup.length > 1 ? ` #${dup.indexOf(r) + 1}` : "";
   const res = r.result?.outcome ? ` — ${r.result.outcome.replace(/_/g, " ")}` : ` — ${r.state.replace(/_/g, " ")}`;
@@ -151,7 +158,7 @@ export function EventFlowView(p: Props) {
           {lanes.map(({ lane, events: evs }) => (
             <div key={lane} className={`lane-row ${laneDimmed(lane, p.layer) ? "lane-dimmed" : ""}`}>
               <div className="lane-label">
-                <Eyebrow>{LANE_LABEL[lane]}</Eyebrow>
+                <span title={LANE_HINT[lane]}><Eyebrow>{LANE_LABEL[lane]}</Eyebrow></span>
                 {laneDimmed(lane, p.layer) && <Text type="supporting">dimmed by the {p.layer} view</Text>}
               </div>
               <div className="lane-track">

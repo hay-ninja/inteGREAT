@@ -36,17 +36,17 @@ export function TopBar(p: {
         <HStack gap={3} vAlign="center">
           <HStack gap={1} vAlign="center">
             <StatusDot variant={serial ? "success" : "neutral"} label="ESP32 serial"
-                       tooltip={serial ? `ESP32 on ${p.devices?.serial.port}` : "ESP32 not connected"} />
-            <Text type="supporting">ESP32</Text>
+                       tooltip={serial ? `Controller board connected on ${p.devices?.serial.port}` : "Controller board (ESP32) not connected"} />
+            <Text type="supporting">Board</Text>
           </HStack>
           <HStack gap={1} vAlign="center">
             <StatusDot variant={cam?.connected ? (cam.calibrated ? "success" : "warning") : "neutral"} label="Camera"
-                       tooltip={cam?.connected ? (cam.calibrated ? "Camera ready" : "Camera needs calibration") : "Camera not connected"} />
+                       tooltip={cam?.connected ? (cam.calibrated ? "Camera watching the arm — calibrated" : "Camera connected, needs calibration") : "Camera not connected"} />
             <Text type="supporting">Camera</Text>
           </HStack>
           <HStack gap={1} vAlign="center">
             <StatusDot variant={p.agents?.available ? "accent" : "neutral"} label="AI agents"
-                       tooltip={p.agents?.available ? `AI agents on (${p.agents.model})` : `AI agents off: ${p.agents?.reason ?? ""}`} />
+                       tooltip={p.agents?.available ? `AI review available (${p.agents.model}) — optional; everything works without it` : `AI review off: ${p.agents?.reason ?? ""} — the built-in checks still work`} />
             <Text type="supporting">AI</Text>
           </HStack>
         </HStack>

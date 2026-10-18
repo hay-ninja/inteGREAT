@@ -23,7 +23,7 @@ export function RigSetupDialog(p: {
   const ready = checks.every((c) => c.ready);
   return (
     <Dialog isOpen={p.open} onOpenChange={(open) => !open && p.onClose()} width={840} maxHeight="90dvh" purpose="form">
-      <DialogHeader title="Set up the live rig" subtitle="Connect the devices, then calibrate the angle measurement." onOpenChange={(open) => !open && p.onClose()} />
+      <DialogHeader title="Set up the live rig" subtitle="Plug in the board and camera, then tell it the arm's current angle so the camera can measure movement." onOpenChange={(open) => !open && p.onClose()} />
       <VStack gap={4} padding={4}>
         <HStack gap={3} wrap="wrap">
           {checks.map((c) => (
