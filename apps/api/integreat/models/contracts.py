@@ -233,6 +233,13 @@ class ExpectationEdit(Model):
     trigger_value: str | None = None
 
 
+class ProposeExpectationRequest(Model):
+    """Optional targeting for rigs with more than one testable component (D-045)."""
+
+    component_id: str | None = None  # graph node id; default = first known component
+    command: str | None = None       # command literal; default = the preferred ON command
+
+
 class ObservationSourceSpec(Model):
     """replay = recorded/synthetic file; sim = simulated environment through the live pipeline; live = real devices."""
 

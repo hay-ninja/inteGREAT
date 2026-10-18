@@ -249,7 +249,9 @@ export const api = {
     ids.length
       ? req<Evidence[]>("GET", `/projects/${enc(pid)}/evidence?${ids.map((i) => `ids=${enc(i)}`).join("&")}`)
       : Promise.resolve([] as Evidence[]),
-  proposeExpectation: (pid: string) => req<Expectation>("POST", `/projects/${enc(pid)}/expectations/propose`),
+  proposeExpectation: (pid: string, componentId?: string) =>
+    req<Expectation>("POST", `/projects/${enc(pid)}/expectations/propose`,
+                   componentId ? { component_id: componentId } : undefined),
   confirmExpectation: (pid: string, eid: string, edit: ExpectationEdit) =>
     req<Expectation>("POST", `/projects/${enc(pid)}/expectations/${enc(eid)}/confirm`, edit),
   startTest: (pid: string, expectation_id: string, source: ObservationSourceSpec) =>

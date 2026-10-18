@@ -396,7 +396,10 @@ class Service:
         led = str(f / "manifests" / "esp32_led_demo.yaml")
         led_low = str(f / "manifests" / "esp32_led_demo_active_low.yaml")
         servo = str(f / "manifests" / "esp32_servo_demo.yaml")
-        return [DemoFixture(label="LED demo — code drives the wrong pin",
+        return [DemoFixture(label="Halloween — two LEDs, two faults (inverted ghost + dead candle)",
+                            repo_path=str(f / "esp32_halloween"),
+                            manifest_path=str(f / "manifests" / "esp32_halloween.yaml")),
+                DemoFixture(label="LED demo — code drives the wrong pin",
                             repo_path=str(f / "esp32_led_demo_fault_a"), manifest_path=led),
                 DemoFixture(label="LED demo — correct firmware (pairs with signal/power faults)",
                             repo_path=str(f / "esp32_led_demo"), manifest_path=led),
@@ -418,15 +421,18 @@ class Service:
 
     # ------------------------------------------------------------------ expectations
 
-    def propose_expectation(self, pid: str) -> Expectation:
+    def propose_expectation(self, pid: str, component_id: str | None = None,
+                            command: str | None = None) -> Expectation:
         g = self.graph(pid)
         analysis = self.store.get(K_ANALYSIS, pid, ProjectAnalysis)
         evs = self.store.list(K_EVIDENCE, Evidence, project_id=pid)
         exp = expmod.propose_expectation(pid, g.nodes, g.edges, evs,
-                                         [lit.text for lit in analysis.log_literals])
+                                         [lit.text for lit in analysis.log_literals],
+                                         component_id=component_id, command=command)
         if exp is None:
             raise ServiceError(422, "no_testable_component",
-                               "No testable component (servo, led) in the hardware graph")
+                               "No testable component (servo, led) in the hardware graph"
+                               + (f" matching {component_id}" if component_id else ""))
         self.store.put(K_EXPECT, exp)
         return exp
 
@@ -440,6 +446,14 @@ class Service:
         upd = {k: v for k, v in edit.model_dump().items() if v is not None and k != "trigger_value"}
         if edit.trigger_value is not None:
             upd["trigger"] = exp.trigger.model_copy(update={"value": edit.trigger_value})
+            if edit.trigger_value != exp.trigger.value:
+                # The ACK pattern belongs to the command — re-resolve it against the edited
+                # trigger or a stale pattern would invent a MISSING_SERIAL_ACK (D-045).
+                analysis = self.store.get(K_ANALYSIS, pid, ProjectAnalysis)
+                lit = edit.trigger_value.strip()
+                upd["ack_pattern"] = next(
+                    (s.text.strip() for s in analysis.log_literals
+                     if s.text.strip().endswith(lit) and s.text.strip() != lit), None)
         ev = Evidence(id=f"evidence:engineer:{eid}:confirm:{uuid.uuid4().hex[:6]}", project_id=pid,
                       kind=EvidenceKind.engineer_assertion, epistemic=Epistemic.verified,
                       summary="Engineer confirmed expectation", provenance=Provenance(source_id="engineer"),
@@ -1096,12 +1110,17 @@ class Service:
 
     def _software_evidence(self, inc: Incident) -> bool:
         """A remote code fix is only offered when the incident has evidence of a software issue —
-        never as a remedy for an unverified power/signal problem."""
-        if FaultCode.GPIO_CONFIG_MISMATCH not in inc.fault_codes:
-            return False
+        never as a remedy for an unverified power/signal problem (D-045):
+        - a software-implicating fault code (GPIO mismatch, inverted logic) not ruled out, or
+        - power/signal hypotheses the engineer has weakened by manual checks — a verified-healthy
+          physical path shifts suspicion to firmware behaviour."""
         hyps = self.store.get_many(K_HYP, inc.hypothesis_ids, Hypothesis)
-        return any(h.fault_code == FaultCode.GPIO_CONFIG_MISMATCH
-                   and h.status != HypothesisStatus.ruled_out for h in hyps)
+        software_codes = {FaultCode.GPIO_CONFIG_MISMATCH, FaultCode.INVERTED_LOGIC}
+        if any(h.fault_code in software_codes and h.status != HypothesisStatus.ruled_out for h in hyps):
+            return True
+        physical = [h for h in hyps if h.fault_code == FaultCode.POSSIBLE_POWER_OR_SIGNAL_FAULT]
+        return bool(physical) and all(
+            h.status in (HypothesisStatus.weakened, HypothesisStatus.ruled_out) for h in physical)
 
     def repair_preflight(self, iid: str) -> RepairPreflight:
         inc = self.incident(iid)

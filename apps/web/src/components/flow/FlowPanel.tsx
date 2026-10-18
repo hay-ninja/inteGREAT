@@ -17,6 +17,7 @@ import { NumberInput } from "@astryxdesign/core/NumberInput";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { Switch } from "@astryxdesign/core/Switch";
+import { Selector } from "@astryxdesign/core/Selector";
 import { Spinner } from "@astryxdesign/core/Spinner";
 import { TabList, Tab } from "@astryxdesign/core/TabList";
 import { Badge } from "@astryxdesign/core/Badge";
@@ -50,7 +51,9 @@ export interface FlowProps {
   projectId: string;
   conflictNote: string | null;
   expectation: Expectation | null;
-  onExpectation: (e: Expectation) => void;
+  expectations: Expectation[];
+  testables: { id: string; label: string }[];
+  onExpectation: (e: Expectation | null) => void;
   run: TestRun | null;
   running: boolean;
   view: InvestigationView | null;
@@ -159,9 +162,25 @@ const goalText = (exp: { metric: string; unit: string; target: number; tolerance
     ? `${noun(exp)} should ${exp.target === 1 ? "turn on" : "turn off"} within ${exp.deadline_ms} ms`
     : `${noun(exp)} should reach ${exp.target}° ± ${exp.tolerance}° within ${exp.deadline_ms} ms`;
 
+/** Compact expectation switcher shown when a project has more than one test (D-045). */
+function ExpectationPicker(p: FlowProps) {
+  if (p.expectations.length < 2) return null;
+  const compLabel = (id: string) => p.testables.find((t) => t.id === id)?.label ?? id;
+  return (
+    <Selector label="Test" isLabelHidden size="sm" width={300} placement="below"
+              value={p.expectation?.id ?? p.expectations[0].id}
+              onChange={(v) => { const e = p.expectations.find((x) => x.id === v); if (e) p.onExpectation(e); }}
+              options={p.expectations.map((e) => ({
+                value: e.id,
+                label: `${e.trigger.value} — ${compLabel(e.component_id)}`,
+              }))} />
+  );
+}
+
 function TestView(p: FlowProps) {
   const exp = p.expectation;
   const [draft, setDraft] = useState({ target: 90, tolerance: 8, deadline_ms: 2000, trigger: "MOVE 90" });
+  const [comp, setComp] = useState("");
   const [cites, setCites] = useState<Evidence[]>([]);
   useEffect(() => {
     if (!exp) return;
@@ -170,6 +189,7 @@ function TestView(p: FlowProps) {
   }, [exp, p.projectId]);
 
   if (!exp) {
+    const target = comp || p.testables[0]?.id;
     return (
       <VStack gap={3}>
         <Eyebrow>Test — define what should happen</Eyebrow>
@@ -178,8 +198,15 @@ function TestView(p: FlowProps) {
           inteGREAT reads the firmware and suggests a test. You confirm it before it decides pass or fail.
         </Text>
         {p.conflictNote && <Notice tone="warning" title="Already spotted a problem" body={p.conflictNote} />}
+        {p.testables.length > 1 && (
+          <Selector label="Component" size="sm" width={300} placement="below"
+                    value={target} onChange={setComp}
+                    options={p.testables.map((t) => ({ value: t.id, label: t.label }))} />
+        )}
         <Button label="Suggest a test from the code" variant="primary" className="flow-primary"
-                clickAction={() => api.proposeExpectation(p.projectId).then(p.onExpectation).catch((e) => p.onError(e.message))} />
+                clickAction={() => api.proposeExpectation(p.projectId, p.testables.length > 1 ? target : undefined)
+                  .then(p.onExpectation).catch((e) => p.onError(e.message))} />
+        {p.expectations.length > 0 && <ExpectationPicker {...p} />}
       </VStack>
     );
   }
@@ -188,6 +215,7 @@ function TestView(p: FlowProps) {
     const evById = new Map(cites.map((c) => [c.id, c]));
     return (
       <VStack gap={3}>
+        <ExpectationPicker {...p} />
         <Eyebrow>Test — confirm it first</Eyebrow>
         <Heading level={2} type="display-3">Confirm the test</Heading>
         <Text type="body" color="secondary">Send a command, then the camera checks whether {noun(exp)} responded.</Text>
@@ -226,6 +254,7 @@ function TestView(p: FlowProps) {
   const passed = last?.result?.outcome === "pass" && !incidentOpen;
   return (
     <VStack gap={3}>
+      <ExpectationPicker {...p} />
       <Eyebrow>Test</Eyebrow>
       <Heading level={2} type="display-3">{resolved ? "Start fresh, or re-run" : "Run the test"}</Heading>
       <Card padding={3} variant="muted">
@@ -264,6 +293,9 @@ function TestView(p: FlowProps) {
         <Text type="supporting">
           A failure or missing measurement opens an investigation in Debug — re-running here keeps it in the same incident.
         </Text>
+      )}
+      {!incidentOpen && (
+        <Button label="Plan a different test" variant="ghost" size="sm" onClick={() => p.onExpectation(null)} />
       )}
     </VStack>
   );

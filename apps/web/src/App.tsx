@@ -61,6 +61,7 @@ export default function App() {
   const [sources, setSources] = useState<SourceOptions>({ replays: [], sim: [] });
   const [source, setSource] = useState("sim:connected");
   const [expectation, setExpectation] = useState<Expectation | null>(null);
+  const [expectations, setExpectations] = useState<Expectation[]>([]);
   const [run, setRun] = useState<TestRun | null>(null);
   // Stream data (test.observation/serial + the event timeline) lives in
   // lib/stream.ts — an external store batched at 200ms so runs don't re-render
@@ -134,6 +135,7 @@ export default function App() {
     setDrawerOpen(false); setDrawerTab("serial"); setBusy(false); setBusyAction(null); setDiagnosing(false);
     const lastInc = fresh ? null : incs[incs.length - 1] ?? null;
     const open = lastInc;
+    setExpectations(exps);
     setExpectation(exps.find((e) => e.id === open?.expectation_id)
       ?? [...exps].reverse().find((e) => e.confirmed_by_engineer) ?? exps[exps.length - 1] ?? null);
     incidentRef.current = open?.id ?? null; setIncidentId(open?.id ?? null);
@@ -470,7 +472,12 @@ export default function App() {
           <ResizeHandle resizable={guide.props} hasDivider isReversed label="Resize steps panel" />
           <LayoutPanel resizable={guide.props} label="Debugging steps" padding={4}>
           <VStack gap={4}>
-            <FlowPanel projectId={project.id} conflictNote={conflict} expectation={expectation} onExpectation={setExpectation}
+            <FlowPanel projectId={project.id} conflictNote={conflict} expectation={expectation}
+                       expectations={expectations}
+                       testables={(graph?.nodes ?? [])
+                         .filter((n) => n.kind === "component" && ["led", "servo"].includes(String(n.attributes?.type)))
+                         .map((n) => ({ id: n.id, label: n.label }))}
+                       onExpectation={(e) => { setExpectation(e); if (e) setExpectations((xs) => [...xs.filter((x) => x.id !== e.id), e]); }}
                        run={run} running={busy} view={view} sources={sources} source={source} onSource={setSource}
                        liveReady={liveReady} onRun={runTest} busyActionId={busyAction} onAction={(a) => runAction(a)}
                        onPermission={setPermission}

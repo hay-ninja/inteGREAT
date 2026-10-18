@@ -68,25 +68,36 @@ def _on_level(component_id: str, literal: str, nodes: list[GraphNode], edges: li
 
 
 def propose_expectation(project_id: str, nodes: list[GraphNode], edges: list[GraphEdge],
-                        evidence: list[Evidence], log_literals: list[str]) -> Expectation | None:
-    """Deterministic proposal from source evidence. Engineer must confirm before use."""
+                        evidence: list[Evidence], log_literals: list[str],
+                        component_id: str | None = None, command: str | None = None) -> Expectation | None:
+    """Deterministic proposal from source evidence. Engineer must confirm before use.
+
+    `component_id` targets a specific testable component (multi-component rigs); `command`
+    picks a specific command literal instead of the preferred ON command. Both default to
+    the previous first-match behaviour (D-045)."""
     comp, kind = next(((n, _KIND[n.attributes["type"]]) for n in nodes
-                       if n.kind == NodeKind.component and n.attributes.get("type") in _KIND), (None, None))
+                       if n.kind == NodeKind.component and n.attributes.get("type") in _KIND
+                       and (component_id is None or n.id == component_id)), (None, None))
     if comp is None:
         return None
-    # Prefer the literal that reads as an "on" command for binary outputs
     cmds = [e for e in evidence if e.id.endswith(":cmd") and str(e.payload.get("literal", "")).strip()]
-    cmd = (next((e for e in cmds if str(e.payload["literal"]).strip().upper().endswith("ON")), None)
-           if kind["unit"] == "state" else None) or (cmds[0] if cmds else None)
-    literal = str(cmd.payload["literal"]).strip() if cmd else None
+    if command is not None:
+        cmd = next((e for e in cmds if str(e.payload["literal"]).strip() == command.strip()), None)
+    else:
+        # Prefer the literal that reads as an "on" command for binary outputs
+        cmd = (next((e for e in cmds if str(e.payload["literal"]).strip().upper().endswith("ON")), None)
+               if kind["unit"] == "state" else None) or (cmds[0] if cmds else None)
+    literal = command.strip() if command is not None else (str(cmd.payload["literal"]).strip() if cmd else None)
     if literal is None:
         trigger = ExpectationTrigger(kind="external_sequence", value="Engineer starts the action sequence")
         rationale = "No serial command handler found in source; requires an engineer-initiated sequence."
     else:
-        arg = "" if literal.upper().endswith(" ON") else kind["command_arg"]
+        arg = "" if command is not None or literal.upper().endswith(" ON") else kind["command_arg"]
         trigger = ExpectationTrigger(kind="configured_serial_command", value=f"{literal}{arg}")
         rationale = (f'Firmware parses serial commands matching "{literal}" '
-                     f"({cmd.provenance.file}:{cmd.provenance.line_start}).")
+                     f"({cmd.provenance.file}:{cmd.provenance.line_start})." if cmd else
+                     f'Command "{literal}" was specified by the engineer; no matching literal was '
+                     "found in source — treat as an assertion, not evidence.")
     # Only expect an ACK if the firmware itself prints one that echoes the command (no instrumentation).
     ack_pattern = None
     if literal:

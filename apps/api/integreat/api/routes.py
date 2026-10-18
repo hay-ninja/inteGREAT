@@ -21,6 +21,7 @@ from ..models import (
     ExecuteActionRequest,
     Expectation,
     ExpectationEdit,
+    ProposeExpectationRequest,
     GraphSnapshot,
     ImportRequest,
     Incident,
@@ -210,8 +211,9 @@ def list_expectations(pid: str, request: Request):
 
 
 @router.post("/projects/{pid}/expectations/propose", response_model=Expectation)
-def propose_expectation(pid: str, request: Request):
-    return svc(request).propose_expectation(pid)
+def propose_expectation(pid: str, request: Request, req: ProposeExpectationRequest | None = None):
+    return svc(request).propose_expectation(pid, component_id=req.component_id if req else None,
+                                            command=req.command if req else None)
 
 
 @router.post("/projects/{pid}/expectations/{eid}/confirm", response_model=Expectation)
