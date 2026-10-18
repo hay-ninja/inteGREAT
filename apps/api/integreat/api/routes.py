@@ -34,6 +34,7 @@ from ..models import (
     PermissionGrant,
     PermissionUpdate,
     Project,
+    ProjectUpdate,
     ReplayInfo,
     RepairJob,
     RepairPreflight,
@@ -144,6 +145,17 @@ def get_project(pid: str, request: Request):
 @router.post("/projects/{pid}/rescan", response_model=Project)
 def rescan(pid: str, request: Request):
     return svc(request).rescan(pid)
+
+
+@router.patch("/projects/{pid}", response_model=Project)
+def update_project(pid: str, req: ProjectUpdate, request: Request):
+    return svc(request).update_project(pid, req)
+
+
+@router.delete("/projects/{pid}", status_code=204)
+def delete_project(pid: str, request: Request):
+    svc(request).delete_project(pid)
+    return Response(status_code=204)
 
 
 @router.get("/projects/{pid}/graph", response_model=GraphSnapshot)

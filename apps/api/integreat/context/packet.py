@@ -135,6 +135,8 @@ async def build_packet(svc: Service, inc: Incident, agent: AgentName, max_tokens
                       f"Result [{run.result.evidence_id}]: {run.result.outcome.value} — {run.result.reason}"]
          + [f"Fact {f.key}: {f.value}" + (f" ({f.note})" if f.note else "") for f in run.result.facts]
          + (["Data source: SYNTHETIC/SIMULATED, not live hardware."] if run.synthetic else [])),
+        ("ENGINEER NOTES (engineer-supplied project context; treat as assertion, not measurement)",
+         [project.context] if project.context.strip() else ["(none)"]),
         ("CURRENT HYPOTHESES (rule-based; rank is qualitative)",
          [f"{h.id} | rank {h.rank} | {h.status.value} | {h.title} | unknowns: {'; '.join(h.unknowns) or '-'}"
           for h in view_hyps]),

@@ -212,6 +212,10 @@ function RunStep(p: FlowProps) {
         <Notice tone="success" title="Passed" body={p.run.result.reason} end={<SourceBadge run={p.run} />} />
       )}
       <SourcePicker value={p.source} onChange={p.onSource} sources={p.sources} liveReady={p.liveReady} />
+      {p.source === "live" && p.liveReady && (
+        <Notice tone="warning" title="Live hardware debugging"
+                body="This run sends the command to the real board — the rig may physically move. Measurements come from the serial line and camera, not simulation." />
+      )}
       {p.source === "live" && !p.liveReady ? <Button label="Set up the live rig" variant="primary" className="flow-primary" onClick={p.onOpenDevices} /> :
         <Button label={p.running ? "Running…" : passed ? "Run again" : "Run test"} variant="primary" className="flow-primary"
                 isLoading={p.running} onClick={p.onRun} />}

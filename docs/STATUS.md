@@ -174,6 +174,24 @@ this adds context without changing P0 scope.
 - Not replayed (honest `hosted_demo` errors): real imports, netlist preview, rescan,
   save-replay, device connects, AI diagnose, repair job creation.
 
+## Project management + live separation (D-040) — done 2026-10-18
+- Backend: `PATCH /projects/{pid}` (name, `context` notes, `subsystem_names` display
+  overrides, `repo_path`/`manifest_path`/`netlist_path` — path changes rebuild the graph
+  in place keeping wiring confirmations) and `DELETE /projects/{pid}` (all docs + event
+  timeline; code folder untouched). `context` is injected into agent packets as
+  `ENGINEER NOTES` (engineer assertion, never a measurement). 5 new pytest cases pass;
+  rescan/update carry `context`/`subsystem_names` across `_build`.
+- Frontend: shared `ProjectSettingsDialog` (name, context, file paths with rebuild
+  notice, subsystem renames, two-step danger-zone delete) opened from the ⋯ menu on
+  each projects-hub card and from More → "Project settings…" in the workspace. Hosted
+  demo disables mutations with an honest banner.
+- Live separation: persistent mode `Badge` in the top bar (Live rig / Replay /
+  Simulated) driven by the active source, plus a warning Notice in RunStep when live is
+  armed+ready and the existing "Set up the live rig" gate when it isn't. Verified
+  headless: PATCH 200, delete confirm removes the card, all three badges render.
+- Verified: `tsc -b` clean, 17/17 vitest, `vite build`, `pytest tests/test_projects.py`
+  5/5, headless walkthrough zero console errors, no 800px overflow.
+
 ## Debug panel tabs (D-039) — done 2026-10-18
 - Incident step split into clickable tabs (Astryx `TabList`): **Overview** (run story +
   facts + collapsed evidence chain), **Potential causes** (hypothesis card, suggested

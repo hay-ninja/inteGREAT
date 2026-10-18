@@ -98,3 +98,13 @@ class Store:
                 "SELECT data FROM events WHERE project_id=? AND seq>? ORDER BY seq LIMIT ?",
                 (project_id, after_seq, limit)).fetchall()
         return [IntegreatEvent.model_validate(json.loads(r[0])) for r in rows]
+
+    def delete_project(self, project_id: str) -> None:
+        """Remove every document and timeline event belonging to a project. Covers docs keyed
+        by project_id (runs, incidents, evidence, graph snapshots incl. versions), docs linked by
+        parent_id (subsystems), and docs whose id IS the project id (project, analysis)."""
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM docs WHERE project_id=? OR parent_id=? OR id=?",
+                (project_id, project_id, project_id))
+            self._conn.execute("DELETE FROM events WHERE project_id=?", (project_id,))

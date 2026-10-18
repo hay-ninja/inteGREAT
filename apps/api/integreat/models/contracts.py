@@ -186,6 +186,8 @@ class Project(Model):
     netlist_path: str | None = None
     netlist_mapping: dict[str, Any] | None = None  # engineer-confirmed NetlistMapping
     wiring_overrides: dict[str, Literal["verified", "unverified"]] = Field(default_factory=dict)  # edge id → state
+    context: str = ""                             # engineer notes fed into agent packets + repair briefs
+    subsystem_names: dict[str, str] = Field(default_factory=dict)  # subsystem id → display-name override
 
 
 class Subsystem(Model):
@@ -598,6 +600,21 @@ class ImportRequest(Model):
     netlist_path: str | None = None
     netlist_mapping: dict[str, Any] | None = None  # confirmed mapping from /netlist/preview; required with netlist
     name: str | None = None
+
+
+class ProjectUpdate(Model):
+    """Engineer edits to an existing project. Any *_path change (or rescan=True) rebuilds the graph
+    from the new inputs in place — same project id, graph_version + 1, wiring confirmations kept.
+    Fields left as None keep their current value."""
+
+    name: str | None = Field(default=None, max_length=200)
+    context: str | None = Field(default=None, max_length=8000)
+    subsystem_names: dict[str, str] | None = None  # subsystem id → display name ("" clears the override)
+    repo_path: str | None = None
+    manifest_path: str | None = None
+    netlist_path: str | None = None
+    netlist_mapping: dict[str, Any] | None = None
+    rescan: bool = False
 
 
 class StartTestRequest(Model):

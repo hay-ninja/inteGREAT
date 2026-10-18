@@ -31,7 +31,7 @@ if (await landingCta.isVisible().catch(() => false)) {
 await shot("00-import");
 const onImport = await page.getByText("Try it on pretend hardware").isVisible().catch(() => false);
 if (onImport) {
-  await page.getByText("Wrong pin in the code").click();
+  await page.getByText(/drives the wrong pin|Wrong pin/i).first().click();
   await shot("00b-demo-modal");
   await page.locator("dialog").getByText("Load demo").click().catch(async () => {
     await page.getByRole("button", { name: "Load demo" }).click();

@@ -14,8 +14,10 @@ import { Selector } from "@astryxdesign/core/Selector";
 import { Grid } from "@astryxdesign/core/Grid";
 import { ClickableCard } from "@astryxdesign/core/ClickableCard";
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
-import { api, type DemoFixture, type NetlistPreview, type Project } from "../../lib/api";
+import { MoreMenu } from "@astryxdesign/core/MoreMenu";
+import { api, type DemoFixture, type NetlistPreview, type Project, type Subsystem } from "../../lib/api";
 import { Eyebrow, HostedDemoBanner } from "../flow/common";
+import { ProjectSettingsDialog } from "../dialogs/ProjectSettingsDialog";
 
 type Mapping = {
   mcu_ref: string;
@@ -45,6 +47,10 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
   const [previewBusy, setPreviewBusy] = useState(false);
   const [pending, setPending] = useState<null | { title: string; lines: string[]; action: string; onConfirm: () => void }>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [editing, setEditing] = useState<{ project: Project; subsystems: Subsystem[] } | null>(null);
+  const [deleting, setDeleting] = useState<Project | null>(null);
+  const [manageError, setManageError] = useState("");
+  const [manageBusy, setManageBusy] = useState(false);
   const previewRequest = useRef(0);
 
   // Card copy from the fixture label — demo fixtures come from the backend; nothing is hardcoded per index.
@@ -59,15 +65,35 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
     return "A hardware project with a seeded fault and pretend observations — safe to click through.";
   };
 
-  useEffect(() => {
-    api.demo().then((d) => { setFixtures(d.fixtures); setDemoNetlist(d.netlist_path); }).catch(() => undefined);
-    // One card per folder — re-importing the same repo updates the entry, not duplicates it.
+  const reloadProjects = () =>
     api.projects().then((ps) => {
       const byRoot = new Map<string, Project>();
       for (const pr of ps) byRoot.set(pr.repo_root, pr);
       setRecent([...byRoot.values()].slice(-8).reverse());
     }).catch(() => undefined);
+
+  useEffect(() => {
+    api.demo().then((d) => { setFixtures(d.fixtures); setDemoNetlist(d.netlist_path); }).catch(() => undefined);
+    // One card per folder — re-importing the same repo updates the entry, not duplicates it.
+    reloadProjects();
   }, []);
+
+  const openSettings = (pr: Project) =>
+    api.subsystems(pr.id).then((subs) => setEditing({ project: pr, subsystems: subs }))
+      .catch((e) => setManageError((e as Error).message));
+
+  const doDelete = async (pr: Project) => {
+    setManageBusy(true); setManageError("");
+    try {
+      await api.deleteProject(pr.id);
+      setDeleting(null);
+      reloadProjects();
+    } catch (e) {
+      setManageError((e as Error).message);
+    } finally {
+      setManageBusy(false);
+    }
+  };
 
   const doPreview = async (nl: string, rp: string) => {
     const request = ++previewRequest.current;
@@ -134,20 +160,29 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
               {recent.length ? (
                 <Grid columns={{ minWidth: 240, repeat: "fill" }} gap={3}>
                   {recent.map((r) => (
-                    <ClickableCard key={r.id} padding={4} isDisabled={p.busy} label={r.name}
-                      onClick={() => setPending({
-                        title: r.name,
-                        lines: [r.repo_root,
-                          `Graph version ${r.graph_version}. Reopens the workspace where you left it — map, test runs, and investigation state included.`],
-                        action: "Open project",
-                        onConfirm: () => p.onOpen(r),
-                      })}>
-                      <VStack gap={2}>
-                        <Text type="body" weight="semibold">{r.name}</Text>
-                        <Text type="supporting" color="secondary" style={{ wordBreak: "break-all" }}>{r.repo_root}</Text>
-                        <Text type="supporting" color="secondary">Graph v{r.graph_version}</Text>
-                      </VStack>
-                    </ClickableCard>
+                    <div key={r.id} style={{ position: "relative" }}>
+                      <ClickableCard padding={4} isDisabled={p.busy} label={r.name}
+                        onClick={() => setPending({
+                          title: r.name,
+                          lines: [r.repo_root,
+                            `Graph version ${r.graph_version}. Reopens the workspace where you left it — map, test runs, and investigation state included.`],
+                          action: "Open project",
+                          onConfirm: () => p.onOpen(r),
+                        })}>
+                        <VStack gap={2}>
+                          <Text type="body" weight="semibold">{r.name}</Text>
+                          <Text type="supporting" color="secondary" style={{ wordBreak: "break-all" }}>{r.repo_root}</Text>
+                          <Text type="supporting" color="secondary">Graph v{r.graph_version}</Text>
+                        </VStack>
+                      </ClickableCard>
+                      <div className="card-menu" onClick={(e) => e.stopPropagation()}>
+                        <MoreMenu label={`${r.name} actions`} alignment="end" items={[
+                          { label: "Edit details…", description: "Name, files, context, subsystems", onClick: () => openSettings(r) },
+                          { type: "divider" },
+                          { label: "Delete…", description: "Removes the project from this computer", onClick: () => setDeleting(r) },
+                        ]} />
+                      </div>
+                    </div>
                   ))}
                 </Grid>
               ) : (
@@ -205,6 +240,34 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
         </HStack>
       </VStack>
     </Dialog>
+
+    {/* Delete confirmation — removes the project from this computer, never the code folder */}
+    <Dialog isOpen={!!deleting} onOpenChange={(o) => !o && setDeleting(null)} width={440} purpose="form">
+      <DialogHeader title={`Delete "${deleting?.name}"?`} subtitle="This can't be undone"
+                    onOpenChange={(o) => !o && setDeleting(null)} />
+      <VStack gap={3} padding={4}>
+        <Text type="body" color="secondary">
+          The project, its map, test runs, investigations and event history are removed from this computer.
+          The code folder itself is not touched — you can re-import it any time.
+        </Text>
+        {manageError && <Banner status="error" collapsible={false} title="Couldn't delete" description={manageError} />}
+        <HStack gap={2} hAlign="end">
+          <Button label="Keep it" variant="ghost" onClick={() => setDeleting(null)} />
+          <Button label="Delete project" variant="primary" isLoading={manageBusy} onClick={() => deleting && doDelete(deleting)} />
+        </HStack>
+      </VStack>
+    </Dialog>
+
+    {manageError && !deleting && (
+      <Banner status="error" title="Couldn't open settings" description={manageError} onDismiss={() => setManageError("")} />
+    )}
+
+    {editing && (
+      <ProjectSettingsDialog project={editing.project} subsystems={editing.subsystems}
+        onClose={() => setEditing(null)}
+        onSaved={() => { setEditing(null); reloadProjects(); }}
+        onDeleted={() => { setEditing(null); reloadProjects(); }} />
+    )}
     </>
   );
 }

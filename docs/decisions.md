@@ -480,3 +480,23 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   shortcut still reaches the suggested check from any tab, and Collapsible open state
   survives switching. The causal chain moved behind a collapsible since it largely
   restates the three headline facts.
+
+### D-040 Project management + live/simulated separation — 2026-10-18
+- `PATCH /projects/{pid}` (`ProjectUpdate`): name, `context` notes, `subsystem_names`
+  (id → display label; "" restores the derived label), and `repo_path`/`manifest_path`/
+  `netlist_path` — any path change rebuilds the graph in place (version + 1, wiring
+  confirmations and created_at kept), so "editing files" never forks the project.
+  `rescan` and `update_project` both carry `context`/`subsystem_names` across `_build`
+  (it constructs a fresh Project — without the carry, notes were silently dropped).
+- `DELETE /projects/{pid}` removes every doc (`project_id`, `parent_id`, or `id` = pid)
+  plus the event timeline rows for that project. The user's code folder is untouched.
+- `project.context` is injected into every agent packet as an `ENGINEER NOTES` section
+  explicitly framed as engineer assertion — never a measurement (provenance rule).
+- Frontend: `ProjectSettingsDialog` shared by the hub card ⋯ menu (MoreMenu icon trigger
+  on each project card) and the workspace top bar's More → "Project settings…". Delete
+  is a two-step danger zone; hosted-demo mode disables mutations with an honest banner
+  instead of pretending persistence.
+- Live/simulated separation: the top bar carries a persistent mode `Badge` (Live rig /
+  Replay / Simulated) driven by the current source, and `RunStep` shows a warning
+  Notice when live is armed and devices are ready. Simulated/replay verification still
+  can't be worded as a live-hardware verification (existing `verify_fix` gating).

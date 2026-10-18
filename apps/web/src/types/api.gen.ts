@@ -185,10 +185,12 @@ export interface paths {
         get: operations["get_project_api_v1_projects__pid__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete Project */
+        delete: operations["delete_project_api_v1_projects__pid__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Project */
+        patch: operations["update_project_api_v1_projects__pid__patch"];
         trace?: never;
     };
     "/api/v1/projects/{pid}/rescan": {
@@ -1764,6 +1766,46 @@ export interface components {
             wiring_overrides: {
                 [key: string]: "verified" | "unverified";
             };
+            /**
+             * Context
+             * @default
+             */
+            context: string;
+            /** Subsystem Names */
+            subsystem_names: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * ProjectUpdate
+         * @description Engineer edits to an existing project. Any *_path change (or rescan=True) rebuilds the graph
+         *     from the new inputs in place — same project id, graph_version + 1, wiring confirmations kept.
+         *     Fields left as None keep their current value.
+         */
+        ProjectUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Context */
+            context?: string | null;
+            /** Subsystem Names */
+            subsystem_names?: {
+                [key: string]: string;
+            } | null;
+            /** Repo Path */
+            repo_path?: string | null;
+            /** Manifest Path */
+            manifest_path?: string | null;
+            /** Netlist Path */
+            netlist_path?: string | null;
+            /** Netlist Mapping */
+            netlist_mapping?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Rescan
+             * @default false
+             */
+            rescan: boolean;
         };
         /** Provenance */
         Provenance: {
@@ -2424,6 +2466,70 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_project_api_v1_projects__pid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_project_api_v1_projects__pid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectUpdate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -65,6 +65,7 @@ from .models import (
     ObservationSourceSpec,
     Project,
     ProjectAnalysis,
+    ProjectUpdate,
     Provenance,
     ProviderStatus,
     ReplayInfo,
@@ -181,6 +182,10 @@ class Service:
                             netlist_mapping=old.netlist_mapping, name=old.name)
         project = self._build(pid, req, version=old.graph_version + 1, overrides=old.wiring_overrides,
                               created_at=old.created_at_utc)
+        if old.context or old.subsystem_names:
+            project = project.model_copy(update={"context": old.context,
+                                                 "subsystem_names": old.subsystem_names})
+            self.store.put(K_PROJECT, project)
         self._emit("graph.updated", pid, {"version": project.graph_version, "reason": "rescan"})
         return project
 
@@ -288,6 +293,48 @@ class Service:
     def list_projects(self) -> list[Project]:
         return self.store.list(K_PROJECT, Project)
 
+    def update_project(self, pid: str, req: ProjectUpdate) -> Project:
+        """Engineer edits: rename, context notes, subsystem display names, file pointers.
+        Changed paths (or rescan=True) rebuild the graph in place — see `rescan` semantics."""
+        old = self.project(pid)
+        paths_changed = any(v is not None for v in
+                            (req.repo_path, req.manifest_path, req.netlist_path, req.netlist_mapping))
+        if paths_changed or req.rescan:
+            nvl = lambda new, cur: cur if new is None else (new or None)  # "" clears a path
+            imp = ImportRequest(repo_path=nvl(req.repo_path, old.repo_root),
+                                manifest_path=nvl(req.manifest_path, old.manifest_path),
+                                netlist_path=nvl(req.netlist_path, old.netlist_path),
+                                netlist_mapping=req.netlist_mapping if req.netlist_mapping is not None
+                                                else (old.netlist_mapping if req.netlist_path is None else None),
+                                name=old.name)
+            project = self._build(pid, imp, version=old.graph_version + 1, overrides=old.wiring_overrides,
+                                  created_at=old.created_at_utc)
+            self._emit("graph.updated", pid, {"version": project.graph_version, "reason": "project_update"})
+        else:
+            project = old
+        updates: dict = {}
+        if req.name is not None and req.name.strip():
+            updates["name"] = req.name.strip()
+        if req.context is not None:
+            updates["context"] = req.context
+        elif paths_changed or req.rescan:
+            updates["context"] = old.context  # _build starts fresh — carry notes across rebuild
+        if req.subsystem_names is not None:
+            names = {k: v.strip() for k, v in req.subsystem_names.items()}
+            updates["subsystem_names"] = {k: v for k, v in names.items() if v}
+        elif paths_changed or req.rescan:
+            updates["subsystem_names"] = old.subsystem_names
+        if updates:
+            project = project.model_copy(update=updates)
+            self.store.put(K_PROJECT, project)
+        self._emit("project.updated", pid, {"name": project.name, "rebuilt": paths_changed or req.rescan})
+        return project
+
+    def delete_project(self, pid: str) -> None:
+        project = self.project(pid)
+        self._emit("project.deleted", pid, {"name": project.name})
+        self.store.delete_project(pid)
+
     def graph(self, pid: str, scope_node_id: str | None = None, depth: int = 2) -> GraphSnapshot:
         self.project(pid)
         g = self.store.get(K_GRAPH, pid, GraphSnapshot)
@@ -330,8 +377,12 @@ class Service:
         return project
 
     def subsystems(self, pid: str) -> list[Subsystem]:
-        self.project(pid)
-        return self.store.list(K_SUBSYS, Subsystem, parent_id=pid)
+        project = self.project(pid)
+        subs = self.store.list(K_SUBSYS, Subsystem, parent_id=pid)
+        if project.subsystem_names:
+            subs = [s.model_copy(update={"label": project.subsystem_names[s.id]})
+                    if s.id in project.subsystem_names else s for s in subs]
+        return subs
 
     def evidence(self, ids: list[str]) -> list[Evidence]:
         return self.store.get_many(K_EVIDENCE, list(dict.fromkeys(ids)), Evidence)

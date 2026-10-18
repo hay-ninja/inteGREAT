@@ -40,6 +40,7 @@ import { LandingScreen } from "./components/shell/LandingScreen";
 import { useResizable, ResizeHandle } from "@astryxdesign/core/Resizable";
 import { ApprovalDialog, EvidenceDialog, GraphInspector, InspectDialog, ManualCheckDialog, RepeatTestDialog, ToolOutputDialog } from "./components/dialogs/Dialogs";
 import { RepairDialog } from "./components/dialogs/RepairDialog";
+import { ProjectSettingsDialog } from "./components/dialogs/ProjectSettingsDialog";
 
 const LAST_PROJECT = "integreat.lastProject";
 const store = {
@@ -88,6 +89,7 @@ export default function App() {
   const [mode, setMode] = useState<CanvasMode>("deps");
   const [flowSeq, setFlowSeq] = useState(0);
   const [repairOpen, setRepairOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const runRef = useRef<string | null>(null);
   const incidentRef = useRef<string | null>(null);
   const projectRef = useRef<string | null>(null);
@@ -395,8 +397,9 @@ export default function App() {
       header={
         <LayoutHeader hasDivider>
           <TopBar project={project} subsystems={subsystems} focus={focusSub} onFocus={focusSubsystem}
-                  devices={devices} agents={agentStatus} onRescan={rescan}
+                  devices={devices} agents={agentStatus} source={source} onRescan={rescan}
                   onRigSetup={() => setRigSetupOpen(true)}
+                  onSettings={() => setSettingsOpen(true)}
                   onOpenDrawer={(t) => { setDrawerTab(t); setDrawerOpen(true); }}
                   onProjects={() => { store.set(LAST_PROJECT, null); ++loadVersion.current; projectRef.current = null; incidentRef.current = null; runRef.current = null; setIncidentId(null); setProject(null); setGraph(null); setView(null); setRun(null); setExpectation(null); setBusy(false); setBusyAction(null); setDiagnosing(false); setEntered(false); }} />
         </LayoutHeader>
@@ -478,6 +481,26 @@ export default function App() {
                         onRepeat={() => { const action = repeat!; setRepeat(null); runAction(action, false, true); }} />
       {repairOpen && view && (
         <RepairDialog investigation={view} onClose={() => { setRepairOpen(false); if (incidentId) refreshView(incidentId); }} />
+      )}
+      {settingsOpen && (
+        <ProjectSettingsDialog project={project} subsystems={subsystems}
+          onClose={() => setSettingsOpen(false)}
+          onSaved={(p) => {
+            const rebuilt = p.graph_version !== project.graph_version;
+            setProject(p);
+            if (rebuilt) reloadGraph(p.id).catch(fail);
+            else api.subsystems(p.id).then(setSubsystems).catch(() => undefined);
+            notify(rebuilt ? `Saved — map rebuilt (v${p.graph_version})` : "Project settings saved");
+          }}
+          onDeleted={() => {
+            setSettingsOpen(false);
+            store.set(LAST_PROJECT, null);
+            ++loadVersion.current;
+            projectRef.current = null; incidentRef.current = null; runRef.current = null;
+            setIncidentId(null); setProject(null); setGraph(null); setView(null); setRun(null);
+            setExpectation(null); setBusy(false); setBusyAction(null); setDiagnosing(false);
+            notify("Project deleted");
+          }} />
       )}
       <ApprovalDialog request={approval}
                       onGrant={async () => { const a = approval!.action; const c = approval!.category; setApproval(null); await setPermission(c as PermissionCategory, true); runAction(a); }}

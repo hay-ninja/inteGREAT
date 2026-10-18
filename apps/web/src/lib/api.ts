@@ -42,6 +42,18 @@ export type RepairPreflight = S["RepairPreflight"];
 export type ProviderStatus = S["ProviderStatus"];
 export type GraphLayer = "combined" | "hardware" | "software";
 
+// Project edits — name/context/subsystem labels are instant; any *_path change rebuilds the graph.
+export interface ProjectUpdate {
+  name?: string;
+  context?: string;
+  subsystem_names?: Record<string, string>;
+  repo_path?: string | null;
+  manifest_path?: string | null;
+  netlist_path?: string | null;
+  netlist_mapping?: Record<string, unknown> | null;
+  rescan?: boolean;
+}
+
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string, public details: Record<string, unknown> = {}) {
     super(message);
@@ -181,6 +193,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
     }
     throw new ApiError(r.status, code, message, details);
   }
+  if (r.status === 204) return undefined as T;
   return r.json() as Promise<T>;
 }
 
@@ -201,6 +214,8 @@ export const api = {
   netlistPreview: (netlist_path: string, repo_path?: string) =>
     req<NetlistPreview>("POST", "/netlist/preview", { netlist_path, repo_path }),
   rescan: (pid: string) => req<Project>("POST", `/projects/${enc(pid)}/rescan`),
+  updateProject: (pid: string, body: ProjectUpdate) => req<Project>("PATCH", `/projects/${enc(pid)}`, body),
+  deleteProject: (pid: string) => req<void>("DELETE", `/projects/${enc(pid)}`),
   verifyWiring: (pid: string, edge_id: string, verification: "verified" | "unverified", note?: string) =>
     req<Project>("PATCH", `/projects/${enc(pid)}/graph/verification`, { edge_id, verification, note }),
   expectations: (pid: string) => req<Expectation[]>("GET", `/projects/${enc(pid)}/expectations`),
