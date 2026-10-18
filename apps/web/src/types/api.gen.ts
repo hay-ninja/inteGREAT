@@ -1507,6 +1507,13 @@ export interface components {
             agent_rounds_used: number;
             /** Agent Summary */
             agent_summary: string | null;
+            /** Agent Contradictions */
+            agent_contradictions: string[];
+            /**
+             * Agent Check Explanation
+             * @default
+             */
+            agent_check_explanation: string;
             /** Agent Recommended Action Id */
             agent_recommended_action_id: string | null;
         };

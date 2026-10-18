@@ -184,6 +184,8 @@ class Orchestrator:
         t_round = time.perf_counter()
         try:
             # 1) triage — orchestration provider (StepFun), deterministic fallback
+            svc._emit("agent.stage", inc.project_id, {"stage": "triage", "round": rnd},
+                      investigation_id=inc.id)
             triage_run = AgentRun(id=f"agentrun:{uuid.uuid4().hex[:10]}", incident_id=inc.id, project_id=inc.project_id,
                                   round=rnd, agent=AgentName.orchestrator, status="completed",
                                   model=svc.orchestrator_llm.model, provider=svc.orchestrator_llm.name)
@@ -212,6 +214,8 @@ class Orchestrator:
             runs.append(triage_run)
             svc._emit("agent.started", inc.project_id, {"agents": [a.value for a in dispatch], "round": rnd},
                       investigation_id=inc.id)
+            svc._emit("agent.stage", inc.project_id, {"stage": "specialists", "round": rnd,
+                      "agents": [a.value for a in dispatch]}, investigation_id=inc.id)
 
             # 2) specialists in parallel — specialist provider (Gemini)
             pairs = await asyncio.gather(*(self._run_agent(inc, a, rnd, questions.get(a)) for a in dispatch))
@@ -295,6 +299,8 @@ class Orchestrator:
         t0 = time.perf_counter()
         hyps = [h for h in svc.store.get_many("hypothesis", inc.hypothesis_ids, Hypothesis)
                 if h.status not in (HypothesisStatus.ruled_out,)]
+        svc._emit("agent.stage", inc.project_id, {"stage": "critique", "round": rnd},
+                  investigation_id=inc.id)
         if not hyps:
             run.status = "skipped"
             svc.store.put(K_AGENT_RUN, run, parent_id=inc.id)
@@ -389,6 +395,8 @@ class Orchestrator:
             lines.append(f"AMBIGUITY: {len(tied)} hypotheses are tied at the top rank "
                          f"({', '.join(h.title for h in tied)}). The recommended action MUST be one "
                          f"that discriminates between them: {discriminating}. Say what each outcome rules out.")
+        svc._emit("agent.stage", inc.project_id, {"stage": "synthesis", "round": rnd},
+                  investigation_id=inc.id)
         t0 = time.perf_counter()
         try:
             packet = await build_packet(svc, inc, AgentName.orchestrator, s.max_context_tokens)
@@ -416,7 +424,11 @@ class Orchestrator:
             if out.outcome_explanation:
                 run.summary += f"\nWhat the recommended check shows: {out.outcome_explanation}"
             inc = svc.incident(inc.id)
-            inc.agent_summary = run.summary
+            # The incident keeps the summary structured so the UI can render sections
+            # and a runnable next check; run.summary keeps the composite for the audit record.
+            inc.agent_summary = out.summary
+            inc.agent_contradictions = list(out.contradictions)
+            inc.agent_check_explanation = out.outcome_explanation
             inc.agent_recommended_action_id = out.recommended_action_id or None
             svc.store.put("incident", inc)
         except (LLMUnavailable, LLMInvalidOutput, asyncio.TimeoutError) as e:

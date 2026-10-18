@@ -122,6 +122,9 @@ export function RepairDialog({ investigation, onClose }: {
                     subtitle="Devin works on an isolated remote branch and returns a reviewable diff. inteGREAT never patches your checkout, flashes firmware, or verifies hardware for you."
                     onOpenChange={(o) => !o && onClose()} />
       <VStack gap={3}>
+        <Text type="supporting" color="secondary">
+          AI-generated proposal by Devin — review the diff before anything is applied.
+        </Text>
         {jobs.map((j) => <JobCard key={j.id} job={j} onRefresh={() => api.refreshRepair(j.id).then((x) => setJobs((p) => p.map((y) => y.id === x.id ? x : y))).catch(() => undefined)} />)}
 
         {preflight && !jobs.some((j) => ACTIVE.includes(j.state)) && (

@@ -555,6 +555,8 @@ class Incident(Model):
     resolved_by_test_run_id: str | None = None
     agent_rounds_used: int = 0
     agent_summary: str | None = None
+    agent_contradictions: list[str] = Field(default_factory=list)
+    agent_check_explanation: str = ""  # what the recommended check would establish, per outcome
     agent_recommended_action_id: str | None = None
 
 

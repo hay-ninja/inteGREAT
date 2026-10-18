@@ -118,8 +118,8 @@
   .eyebrow .num { color: var(--color-text-disabled); font-weight: var(--font-weight-regular); }
   .eyebrow-muted .num { color: var(--color-text-disabled); }
 
-  /* Numbered chapter strip — the reference's "01 FEATURES  02 ABOUT" row, in the guided panel */
-  .chapters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* View strip — Test / Debug / Analyze are views, not sequential steps (D-041) */
+  .chapters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
               border: 1px solid var(--color-border); border-radius: var(--radius-element);
               background: var(--color-background-card); overflow: hidden; }
   .chapter { appearance: none; background: none; border: 0; border-right: 1px solid var(--color-border);

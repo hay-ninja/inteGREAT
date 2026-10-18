@@ -8,7 +8,7 @@ import { CodeBlock } from "@astryxdesign/core/CodeBlock";
 import { Card } from "@astryxdesign/core/Card";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { List, ListItem } from "@astryxdesign/core/List";
-import { Selector } from "@astryxdesign/core/Selector";
+import { SelectableCard } from "@astryxdesign/core/SelectableCard";
 import type { ActionResult, DiagnosticAction, Evidence, Expectation, SourceOptions, TestRun } from "../../lib/api";
 import { cite, SourceBadge, SourcePicker } from "../flow/common";
 
@@ -61,6 +61,9 @@ export function InspectDialog({ result, onClose }: { result: ActionResult | null
     <Dialog isOpen onOpenChange={(o) => !o && onClose()} width={720}>
       <DialogHeader title="Pin configuration vs wiring" subtitle={result.summary} onOpenChange={(o) => !o && onClose()} />
       <VStack gap={3} padding={4}>
+        <Text type="supporting" color="secondary">
+          Output of a fixed read-only tool — recorded as evidence, not AI-generated.
+        </Text>
         {result.source_excerpts.map((ex) => (
           <CodeBlock key={ex.evidence_id} code={ex.lines.join("\n")} language="cpp" width="100%"
                      title={`${ex.file} · lines ${ex.line_start}–${ex.line_start + ex.lines.length - 1}`}
@@ -97,13 +100,29 @@ export function ManualCheckDialog({ action, onSubmit, onClose, run }: {
     <Dialog isOpen onOpenChange={(o) => !o && onClose()} width={480} purpose="form">
       <DialogHeader title={action.label} subtitle={action.rationale} onOpenChange={(o) => !o && onClose()} />
       <VStack gap={3} padding={4}>
+        <Text type="supporting" color="secondary">
+          Deterministic check — suggested by the rules engine from your code + wiring files, not AI.
+        </Text>
         {run && <SourceBadge run={run} />}
         <List listStyle="decimal" density="compact">
           {action.manual_instructions.map((s) => <ListItem key={s} label={s} />)}
         </List>
         <TextArea label="What did you see?" isOptional value={note} rows={2} onChange={setNote} />
-        <Selector label="What did you find?" value={result} onChange={setResult} placeholder="Choose the result you observed"
-                  options={action.result_choices.map((c) => ({ value: c, label: c }))} width="100%" />
+        <VStack gap={1}>
+          <Text type="label" color="secondary">What did you find?</Text>
+          {action.result_choices.map((c) => {
+            const outcome = action.expected_outcomes.find((o) => o.result === c);
+            return (
+              <SelectableCard key={c} label={c} isSelected={result === c}
+                              onChange={(selected) => setResult(selected ? c : "")} padding={3} width="100%">
+                <VStack gap={0.5}>
+                  <Text type="body">{c}</Text>
+                  {outcome && <Text type="supporting" color="secondary">{outcome.interpretation}</Text>}
+                </VStack>
+              </SelectableCard>
+            );
+          })}
+        </VStack>
         <Button label="Record check result" variant="primary" isDisabled={!result} clickAction={() => onSubmit(result, note)} />
       </VStack>
     </Dialog>
@@ -147,6 +166,9 @@ export function ToolOutputDialog({ result, onClose }: { result: ActionResult | n
     <Dialog isOpen onOpenChange={(o) => !o && onClose()} width={720}>
       <DialogHeader title="Tool output" subtitle={result.summary} onOpenChange={(o) => !o && onClose()} />
       <VStack gap={2} padding={4}>
+        <Text type="supporting" color="secondary">
+          Output of a fixed read-only tool — recorded as evidence, not AI-generated.
+        </Text>
         {result.lines.length ? (
           <CodeBlock code={result.lines.join("\n")} width="100%" maxHeight={360} />
         ) : (

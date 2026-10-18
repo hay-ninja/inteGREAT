@@ -500,3 +500,22 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   Replay / Simulated) driven by the current source, and `RunStep` shows a warning
   Notice when live is armed and devices are ready. Simulated/replay verification still
   can't be worded as a live-hardware verification (existing `verify_fix` gating).
+
+### D-041 Analyze view + agent progress + structured AI summary — 2026-10-18
+- The guided flow became three freely-switchable views — **Test, Debug, Analyze** —
+  instead of numbered steps: debugging is a loop, not a wizard. All AI surface lives
+  behind Analyze, fenced by an "everything else on this screen is deterministic" card.
+- `Incident.agent_summary` used to be one flat string with "Contradictions:" and "What
+  the recommended check shows:" appended — a wall of text. `SynthesisOut` already
+  returned them as separate fields, so the incident now stores them structured:
+  `agent_summary` (paragraph), `agent_contradictions[]`, `agent_check_explanation`,
+  `agent_recommended_action_id`. `AgentRun.summary` still keeps the composite text as
+  the audit record. Old incidents degrade gracefully (empty lists, text renders as-is).
+- Frontend renders the synthesis as sections + an "Evidence cited" chip row extracted
+  from the text, and the recommended check as a real button resolved via `nextCheck()`
+  — always a catalog action, never agent-authored text (provenance/bounded-agent rules).
+- Live progress (the "what is the AI doing" ask): the orchestrator emits `agent.stage`
+  websocket events at each phase — triage → specialists (with the dispatched roster) →
+  critique → synthesis — and `agent.reported` already marked per-agent completion.
+  The Analyze view renders them as a step checklist with per-agent ✓/…, and the
+  Analyze chapter tab shows a "…" while a round runs.

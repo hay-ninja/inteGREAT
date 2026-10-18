@@ -23,7 +23,7 @@ this adds context without changing P0 scope.
 | M8 | Expansion: graph layers (D-023), Event Flow (D-024), StepFun orchestration + Devin repair (D-025) | **done in software** — real adapters + deterministic fallbacks tested; **live StepFun/Gemini/Devin calls blocked: no API keys** |
 
 ## What works now (verified 2026-10-18, `feature/dsg-agent-arch`)
-- **Tests:** 131 backend (pytest) + 17 frontend (vitest) passing; `tsc -b` clean; production build passing.
+- **Tests:** 136 backend (pytest) + 17 frontend (vitest) passing; `tsc -b` clean; production build passing.
 - **LED demo end-to-end (all replay + sim, no hardware):** import `esp32_led_demo*` fixtures →
   `led_state` expectation (`LED ON`, `on_level: HIGH` resolved from source) → three faults
   diagnosed distinctly — wrong-pin `GPIO_CONFIG_MISMATCH`, dead-lead `POSSIBLE_POWER_OR_SIGNAL_FAULT`,
@@ -296,3 +296,14 @@ What remains is hardware validation.
 - Re-verified: `tsc -b` clean; headless walkthrough updated for the landing step —
   rail labels, layers, timeline, Activity, Devices→setup, repair dialog all pass;
   zero console errors; no 800px overflow.
+
+## Analyze view + agent progress (D-041) — done 2026-10-18
+- Flow views are now Test / Debug / Analyze; all AI lives behind Analyze behind a
+  "deterministic vs AI" explainer card.
+- Agent rounds emit `agent.stage` events (triage → specialists+roster → critique →
+  synthesis) — the Analyze view renders a live step checklist with per-agent ✓/… and
+  the Analyze tab shows "…" while running.
+- `Incident` stores the synthesis structured (`agent_summary`, `agent_contradictions`,
+  `agent_check_explanation`, `agent_recommended_action_id`) — the card renders sections,
+  an "Evidence cited" chip row, and a real Run button resolved via `nextCheck`.
+- Verified: `tsc -b` clean, 17/17 vitest, 136/136 pytest, regenerated openapi/types.

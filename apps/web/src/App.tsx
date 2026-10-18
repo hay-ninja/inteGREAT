@@ -54,7 +54,8 @@ export default function App() {
   const toast = useToast();
   const [project, setProject] = useState<Project | null>(null);
   const [entered, setEntered] = useState(false);
-  const guide = useResizable({ defaultSize: 420, minSize: 320, maxSize: 620, autoSaveId: "integreat.guide" });
+  const guide = useResizable({ defaultSize: 420, minSize: 320,
+    maxSize: Math.max(620, Math.floor(window.innerWidth / 2)), autoSaveId: "integreat.guide" });
   const [graph, setGraph] = useState<GraphSnapshot | null>(null);
   const [subsystems, setSubsystems] = useState<Subsystem[]>([]);
   const [sources, setSources] = useState<SourceOptions>({ replays: [], sim: [] });
@@ -80,6 +81,10 @@ export default function App() {
   const [devices, setDevices] = useState<DeviceStatus | null>(null);
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
+  // Live view of an agent round, fed by agent.stage / agent.reported events (D-041).
+  const [agentProgress, setAgentProgress] = useState<
+    { phase: "triage" | "specialists" | "critique" | "synthesis" | "done"; agents: string[]; reported: string[] } | null
+  >(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<DrawerTab>("serial");
   const [fitKey, setFitKey] = useState("init");
@@ -186,9 +191,35 @@ export default function App() {
         }
         case "graph.updated": reloadGraph(pid).catch(fail); break;
         case "hypotheses.updated":
-          if (mine) { refreshView(ev.investigation_id!); if (p.round !== undefined) setDiagnosing(false); }
+          if (mine) {
+            refreshView(ev.investigation_id!);
+            if (p.round !== undefined) {
+              setDiagnosing(false);
+              setAgentProgress((s) => (s ? { ...s, phase: "done" } : s));
+            }
+          }
           break;
-        case "incident.resolved": case "action.completed": case "agent.reported": case "agent.started":
+        case "agent.stage":
+          if (mine) {
+            refreshView(ev.investigation_id!);
+            const stage = String(p.stage);
+            if (stage === "triage") setAgentProgress({ phase: "triage", agents: [], reported: [] });
+            else setAgentProgress((s) => s && {
+              ...s,
+              phase: stage as "specialists" | "critique" | "synthesis",
+              agents: stage === "specialists" ? ((p.agents as string[] | undefined) ?? s.agents) : s.agents,
+            });
+          }
+          break;
+        case "agent.reported":
+          if (mine) {
+            refreshView(ev.investigation_id!);
+            const agent = String(p.agent ?? "");
+            if (agent) setAgentProgress((s) => s && !s.reported.includes(agent)
+              ? { ...s, reported: [...s.reported, agent] } : s);
+          }
+          break;
+        case "incident.resolved": case "action.completed": case "agent.started":
         case "permissions.updated": case "message.added": case "test.verification_completed":
         case "repair.requested": case "repair.updated":
           if (mine) refreshView(ev.investigation_id!);
@@ -217,7 +248,7 @@ export default function App() {
   }, [view]);
 
   // Keyboard layer (ux-blueprint Part 4). Space triggers the single primary action,
-  // 1–4 jump to chapters, D/E switch canvas modes, H/S/C switch graph layers.
+  // 1–3 jump between Test/Debug/Analyze views, D/E switch canvas modes, H/S/C switch graph layers.
   // ←/→ event scrubbing lives in EventFlowView; Esc is handled by Astryx dialogs.
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
@@ -227,7 +258,7 @@ export default function App() {
       if (ev.key === " ") {
         const btn = document.querySelector<HTMLButtonElement>(".flow-primary:not(:disabled)");
         if (btn) { ev.preventDefault(); btn.click(); }
-      } else if (/^[1-4]$/.test(ev.key)) {
+      } else if (/^[1-3]$/.test(ev.key)) {
         const tabs = document.querySelectorAll<HTMLButtonElement>(".chapter[role='tab']");
         tabs[Number(ev.key) - 1]?.click();
       } else if (ev.key === "d" || ev.key === "D") {
@@ -332,7 +363,9 @@ export default function App() {
   const diagnose = async () => {
     if (!incidentId) return;
     setDiagnosing(true);
-    try { await api.diagnose(incidentId); refreshView(incidentId); } catch (e) { setDiagnosing(false); fail(e); }
+    setAgentProgress({ phase: "triage", agents: [], reported: [] });
+    try { await api.diagnose(incidentId); refreshView(incidentId); }
+    catch (e) { setDiagnosing(false); setAgentProgress(null); fail(e); }
   };
 
   const submitManual = async (result: string, note: string) => {
@@ -420,6 +453,7 @@ export default function App() {
                        onPermission={setPermission}
                        onMessage={async (t) => { if (incidentId) setView(await api.message(incidentId, t)); }}
                        agentStatus={agentStatus} diagnosing={diagnosing} onDiagnose={diagnose}
+                       agentProgress={agentProgress}
                        onReveal={(ids) => revealNodes(ids, true)}
                        onEvidence={showEvidence} onOpenDevices={() => setRigSetupOpen(true)}
                        projectReview={<ProjectReview project={project} graph={graph} onConnection={setSelectedEdgeIds} />}

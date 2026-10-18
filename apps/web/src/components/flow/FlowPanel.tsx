@@ -19,6 +19,7 @@ import { TextArea } from "@astryxdesign/core/TextArea";
 import { Switch } from "@astryxdesign/core/Switch";
 import { Spinner } from "@astryxdesign/core/Spinner";
 import { TabList, Tab } from "@astryxdesign/core/TabList";
+import { Badge } from "@astryxdesign/core/Badge";
 import {
   api,
   type AgentStatus,
@@ -35,7 +36,14 @@ import {
 import { CausalChain, EvidenceList, Eyebrow, Facts, SourceBadge, SourcePicker } from "./common";
 import { latestRun, nextCheck } from "./flowState";
 
-const STEPS = ["Setup", "Run", "Debug", "Verify"] as const;
+/**
+ * Guided debugging flow (D-021, views per D-041): Test → Debug → Analyze are freely
+ * switchable views, not a locked wizard — debugging is a loop, so Test stays reachable.
+ * Rule of thumb: each view shows ONE primary button. Alternatives are collapsed.
+ */
+
+const VIEWS = ["Test", "Debug", "Analyze"] as const;
+type FlowView = "test" | "debug" | "analyze";
 
 export interface FlowProps {
   projectId: string;
@@ -56,6 +64,7 @@ export interface FlowProps {
   onMessage: (text: string) => Promise<void>;
   agentStatus: AgentStatus | null;
   diagnosing: boolean;
+  agentProgress: { phase: "triage" | "specialists" | "critique" | "synthesis" | "done"; agents: string[]; reported: string[] } | null;
   onDiagnose: () => void;
   onReveal: (ids: string[]) => void;
   onNewTest: () => void;
@@ -65,41 +74,49 @@ export interface FlowProps {
   projectReview: ReactNode;
 }
 
-export function autoStep(p: Pick<FlowProps, "expectation" | "view">): number {
-  if (p.view) return ["verifying", "resolved"].includes(p.view.incident.state) ? 3 : 2;
-  return p.expectation?.confirmed_by_engineer ? 1 : 0;
+/** Which view to show when the user hasn't picked one: an open/resolved incident → Debug. */
+export function autoView(p: Pick<FlowProps, "view">): FlowView {
+  return p.view ? "debug" : "test";
 }
 
 export function FlowPanel(p: FlowProps) {
-  const auto = autoStep(p);
-  const [viewing, setViewing] = useState<number | null>(null);
+  const auto = autoView(p);
+  const [viewing, setViewing] = useState<FlowView | null>(null);
   useEffect(() => setViewing(null), [auto]);
-  const step = viewing ?? auto;
+  const view = viewing ?? auto;
 
   return (
     <VStack gap={4}>
-      <div className="chapters" role="tablist" aria-label="Debugging steps">
-        {STEPS.map((s, i) => {
-          const state =
-            i === 2 && p.view && p.view.incident.state !== "resolved" && latestRun(p.view).result?.outcome === "fail" ? "error"
-            : i === 3 && p.view?.incident.state === "resolved" ? "done"
-            : i < auto ? "done" : i === auto ? "active" : "locked";
+      <div className="chapters" role="tablist" aria-label="Workspace views">
+        {VIEWS.map((v) => {
+          const id = v.toLowerCase() as FlowView;
+          const active = view === id;
+          const alert = id === "debug" && p.view && p.view.incident.state !== "resolved"
+                        && latestRun(p.view).result?.outcome === "fail";
+          const resolved = id === "debug" && p.view?.incident.state === "resolved";
           return (
-            <button key={s} type="button" role="tab" className="chapter" data-state={state}
-                    aria-selected={step === i} disabled={i > auto || (!!p.view && i < auto)}
-                    onClick={() => setViewing(i <= auto ? (i === auto ? null : i) : viewing)}>
-              <span className="cnum">{String(i + 1).padStart(2, "0")}</span>
-              <span className="cname">{s}</span>
+            <button key={v} type="button" role="tab" className="chapter"
+                    data-state={alert ? "error" : resolved ? "done" : active ? "active" : "idle"}
+                    aria-selected={active} onClick={() => setViewing(active ? null : id)}>
+              <span className="cname">{v}{id === "analyze" && p.diagnosing ? " …" : ""}</span>
               <span className="cbar" />
             </button>
           );
         })}
       </div>
-      {step === 0 && <>{p.projectReview}<SetupStep {...p} /></>}
-      {step === 1 && <RunStep {...p} />}
-      {step === 2 && p.view && <InvestigateStep {...p} view={p.view} />}
-      {step === 3 && p.view && <VerifyStep {...p} view={p.view} />}
-      <Text type="supporting">Space — next action · 1–4 chapters · D graph · E event flow</Text>
+      {view === "test" && <>{p.projectReview}<TestView {...p} /></>}
+      {view === "debug" && (p.view ? <DebugView {...p} view={p.view} /> : (
+        <VStack gap={3}>
+          <Eyebrow>Debug</Eyebrow>
+          <Heading level={2} type="display-3">Nothing to debug yet</Heading>
+          <Text type="body" color="secondary">
+            Run a test in the Test view. If it fails or can't be measured, the investigation opens here —
+            causes ranked by evidence, with a suggested next check.
+          </Text>
+        </VStack>
+      ))}
+      {view === "analyze" && <AnalyzeView {...p} />}
+      <Text type="supporting">Space — next action · 1–3 views · D graph · E event flow</Text>
     </VStack>
   );
 }
@@ -124,7 +141,7 @@ export function Notice({ tone, title, body, end }: {
   );
 }
 
-// ------------------------------------------------------------------ 1. Set up
+// ------------------------------------------------------------------ Test view (define + run — always reachable)
 
 /** Plain-English name for what the camera measures, derived from the expectation's metric. */
 const NOUNS: Record<string, string> = { led_state: "the light", servo_angle_deg: "the arm" };
@@ -134,7 +151,7 @@ const goalText = (exp: { metric: string; unit: string; target: number; tolerance
     ? `${noun(exp)} should ${exp.target === 1 ? "turn on" : "turn off"} within ${exp.deadline_ms} ms`
     : `${noun(exp)} should reach ${exp.target}° ± ${exp.tolerance}° within ${exp.deadline_ms} ms`;
 
-function SetupStep(p: FlowProps) {
+function TestView(p: FlowProps) {
   const exp = p.expectation;
   const [draft, setDraft] = useState({ target: 90, tolerance: 8, deadline_ms: 2000, trigger: "MOVE 90" });
   const [cites, setCites] = useState<Evidence[]>([]);
@@ -147,7 +164,7 @@ function SetupStep(p: FlowProps) {
   if (!exp) {
     return (
       <VStack gap={3}>
-        <Eyebrow num="01">Setup — define the test</Eyebrow>
+        <Eyebrow>Test — define what should happen</Eyebrow>
         <Heading level={2} type="display-3">What should happen?</Heading>
         <Text type="body" color="secondary">
           inteGREAT reads the firmware and suggests a test. You confirm it before it decides pass or fail.
@@ -158,67 +175,88 @@ function SetupStep(p: FlowProps) {
       </VStack>
     );
   }
-  const evById = new Map(cites.map((c) => [c.id, c]));
+
+  if (!exp.confirmed_by_engineer) {
+    const evById = new Map(cites.map((c) => [c.id, c]));
+    return (
+      <VStack gap={3}>
+        <Eyebrow>Test — confirm it first</Eyebrow>
+        <Heading level={2} type="display-3">Confirm the test</Heading>
+        <Text type="body" color="secondary">Send a command, then the camera checks whether {noun(exp)} responded.</Text>
+        <Card padding={3} variant="muted">
+          <VStack gap={3}>
+            <Eyebrow>Test parameters</Eyebrow>
+            <Text type="supporting">inteGREAT sends this command to the board, then watches {noun(exp)} to check it actually responded.</Text>
+            <TextInput label="Command to send" value={draft.trigger} onChange={(v) => setDraft({ ...draft, trigger: v })} />
+            <HStack gap={2}>
+              <NumberInput label="Target" units={exp.unit === "state" ? "state" : exp.unit} value={draft.target} onChange={(v) => setDraft({ ...draft, target: v })} />
+              <NumberInput label="± tolerance" units={exp.unit === "state" ? "state" : exp.unit} value={draft.tolerance} min={0} onChange={(v) => setDraft({ ...draft, tolerance: v })} />
+              <NumberInput label="Within" units="ms" value={draft.deadline_ms} min={100} step={100}
+                           onChange={(v) => setDraft({ ...draft, deadline_ms: v })} />
+            </HStack>
+          </VStack>
+        </Card>
+        <Collapsible defaultIsOpen={false} trigger={<Text type="supporting">Why this test?</Text>}>
+          <VStack gap={1}>
+            {exp.rationale && <Text type="supporting">{exp.rationale}</Text>}
+            <EvidenceList ids={cites.map((c) => c.id)} evById={evById} onInspect={p.onEvidence} />
+          </VStack>
+        </Collapsible>
+        <Button label="Confirm test" variant="primary" className="flow-primary"
+                clickAction={() => api.confirmExpectation(p.projectId, exp.id, {
+                  target: draft.target, tolerance: draft.tolerance, deadline_ms: draft.deadline_ms, trigger_value: draft.trigger,
+                }).then(p.onExpectation).catch((e) => p.onError(e.message))} />
+      </VStack>
+    );
+  }
+
+  // Confirmed — the runnable test. Stays reachable from any debugging state.
+  const incidentOpen = !!p.view && p.view.incident.state !== "resolved";
+  const resolved = p.view?.incident.state === "resolved";
+  const repeat = p.view?.actions.find((a) => a.kind === "repeat_test" && a.status === "proposed");
+  const last = p.view ? latestRun(p.view) : p.run;
+  const passed = last?.result?.outcome === "pass" && !incidentOpen;
   return (
     <VStack gap={3}>
-      <Eyebrow num="01">Setup — confirm the test</Eyebrow>
-      <Heading level={2} type="display-3">Confirm the test</Heading>
-      <Text type="body" color="secondary">Send a command, then the camera checks whether {noun(exp)} responded.</Text>
-      <Card padding={3} variant="muted">
-        <VStack gap={3}>
-          <Eyebrow>Test parameters</Eyebrow>
-          <Text type="supporting">inteGREAT sends this command to the board, then watches {noun(exp)} to check it actually responded.</Text>
-          <TextInput label="Command to send" value={draft.trigger} onChange={(v) => setDraft({ ...draft, trigger: v })} />
-          <HStack gap={2}>
-            <NumberInput label="Target" units={exp.unit === "state" ? "state" : exp.unit} value={draft.target} onChange={(v) => setDraft({ ...draft, target: v })} />
-            <NumberInput label="± tolerance" units={exp.unit === "state" ? "state" : exp.unit} value={draft.tolerance} min={0} onChange={(v) => setDraft({ ...draft, tolerance: v })} />
-            <NumberInput label="Within" units="ms" value={draft.deadline_ms} min={100} step={100}
-                         onChange={(v) => setDraft({ ...draft, deadline_ms: v })} />
-          </HStack>
-        </VStack>
-      </Card>
-      <Collapsible defaultIsOpen={false} trigger={<Text type="supporting">Why this test?</Text>}>
-        <VStack gap={1}>
-          {exp.rationale && <Text type="supporting">{exp.rationale}</Text>}
-          <EvidenceList ids={cites.map((c) => c.id)} evById={evById} onInspect={p.onEvidence} />
-        </VStack>
-      </Collapsible>
-      <Button label="Confirm test" variant="primary" className="flow-primary"
-              clickAction={() => api.confirmExpectation(p.projectId, exp.id, {
-                target: draft.target, tolerance: draft.tolerance, deadline_ms: draft.deadline_ms, trigger_value: draft.trigger,
-              }).then(p.onExpectation).catch((e) => p.onError(e.message))} />
-    </VStack>
-  );
-}
-
-// ------------------------------------------------------------------ 2. Run
-
-function RunStep(p: FlowProps) {
-  const exp = p.expectation!;
-  const passed = p.run?.result?.outcome === "pass" && !p.view;
-  return (
-    <VStack gap={3}>
-      <Eyebrow num="02">Run — collect evidence</Eyebrow>
-      <Heading level={2} type="display-3">Run the test</Heading>
+      <Eyebrow>Test</Eyebrow>
+      <Heading level={2} type="display-3">{resolved ? "Start fresh, or re-run" : "Run the test"}</Heading>
       <Card padding={3} variant="muted">
         <VStack gap={0.5}>
           <Text type="code">{exp.trigger.value}</Text>
-          <Text type="supporting">
-            {goalText(exp)}
-          </Text>
+          <Text type="supporting">{goalText(exp)}</Text>
         </VStack>
       </Card>
-      {passed && p.run?.result && (
-        <Notice tone="success" title="Passed" body={p.run.result.reason} end={<SourceBadge run={p.run} />} />
+      {resolved && (
+        <Notice tone="success" title="Previous incident verified"
+                body="The last verification passed. Running again starts a fresh record."
+                end={last ? <SourceBadge run={last} /> : undefined} />
+      )}
+      {passed && last?.result && (
+        <Notice tone="success" title="Passed" body={last.result.reason} end={<SourceBadge run={last} />} />
+      )}
+      {incidentOpen && last?.result && last.result.outcome !== "pass" && (
+        <Notice tone="warning" title={`Latest run: ${last.result.outcome}`}
+                body={last.result.reason} end={<SourceBadge run={last} />} />
       )}
       <SourcePicker value={p.source} onChange={p.onSource} sources={p.sources} liveReady={p.liveReady} />
       {p.source === "live" && p.liveReady && (
         <Notice tone="warning" title="Live hardware debugging"
                 body="This run sends the command to the real board — the rig may physically move. Measurements come from the serial line and camera, not simulation." />
       )}
-      {p.source === "live" && !p.liveReady ? <Button label="Set up the live rig" variant="primary" className="flow-primary" onClick={p.onOpenDevices} /> :
-        <Button label={p.running ? "Running…" : passed ? "Run again" : "Run test"} variant="primary" className="flow-primary"
-                isLoading={p.running} onClick={p.onRun} />}
+      {p.source === "live" && !p.liveReady
+        ? <Button label="Set up the live rig" variant="primary" className="flow-primary" onClick={p.onOpenDevices} />
+        : resolved
+          ? <Button label="Start a new test" variant="primary" className="flow-primary" onClick={p.onNewTest} />
+          : incidentOpen && repeat
+            ? <Button label="Run the test again" variant="primary" className="flow-primary"
+                      isLoading={p.busyActionId === repeat.id} onClick={() => p.onAction(repeat)} />
+            : <Button label={p.running ? "Running…" : passed ? "Run again" : "Run test"} variant="primary" className="flow-primary"
+                      isLoading={p.running} onClick={p.onRun} />}
+      {incidentOpen && (
+        <Text type="supporting">
+          A failure or missing measurement opens an investigation in Debug — re-running here keeps it in the same incident.
+        </Text>
+      )}
     </VStack>
   );
 }
@@ -256,18 +294,26 @@ const STATUS_LABEL: Record<string, string> = {
   supported: "supported", plausible: "plausible", unverified: "unverified", weakened: "weakened", ruled_out: "ruled out",
 };
 
-function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
+/** Where a hypothesis came from — the difference between the rules engine and an AI inference (D-041). */
+function OriginTag({ origin }: { origin: "rule" | "agent" }) {
+  return origin === "agent"
+    ? <Badge variant="purple" label="AI" icon={undefined} />
+    : <Badge variant="neutral" label="Rules" icon={undefined} />;
+}
+
+function DebugView(p: FlowProps & { view: InvestigationView }) {
   const { view } = p;
-  const [tab, setTab] = useState<"overview" | "causes" | "ai">("overview");
+  const [tab, setTab] = useState<"overview" | "causes">("overview");
   const evById = new Map(view.evidence.map((e) => [e.id, e]));
   const [top] = view.hypotheses;
   const primary = nextCheck(view);
   // Once the suggested check is done, the next real step is "fix it, then verify" — promote that instead.
   const currentRun = latestRun(view);
   const result = currentRun.result;
+  if (view.incident.state === "resolved") return <VerifyRecord {...p} view={view} />;
   if (p.running || currentRun.state === "running" || currentRun.state === "configured") return (
     <VStack gap={3}>
-      <Eyebrow num="03">Debug — collect evidence</Eyebrow>
+      <Eyebrow>Debug — collect evidence</Eyebrow>
       <Heading level={2} type="display-3">Collecting measurements</Heading>
       <SourceBadge run={currentRun} />
       <Spinner label="Collecting new measurements…" />
@@ -287,7 +333,7 @@ function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
   return (
     <VStack gap={3}>
       <VStack gap={1}>
-        <Eyebrow num="03">Debug — the incident</Eyebrow>
+        <Eyebrow>Debug — the incident</Eyebrow>
         <HStack hAlign="between" vAlign="center" wrap="wrap">
           <Heading level={2} type="display-3">{result?.outcome === "pass" ? "Repeat test passed" : result?.outcome === "inconclusive" ? "Measurement unavailable" : view.incident.title}</Heading>
           <SourceBadge run={currentRun} />
@@ -300,7 +346,6 @@ function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
         <Tab value="overview" label="Overview" panelId="dbg-overview" />
         <Tab value="causes" label="Potential causes" panelId="dbg-causes"
              endContent={view.hypotheses.length ? <Text type="supporting">{view.hypotheses.length}</Text> : undefined} />
-        <Tab value="ai" label="AI analysis" panelId="dbg-ai" />
       </TabList>
 
       {/* Panels stay mounted (hidden, not unmounted) so the primary action keeps
@@ -336,9 +381,12 @@ function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
               <Eyebrow>{top.fault_code === "CAMERA_MEASUREMENT_UNAVAILABLE" ? "Observation issue" : tied.length > 1 ? "Possible causes · tied" : "Leading hypothesis"}</Eyebrow>
               <Text type="supporting">{STATUS_LABEL[top.status]}</Text>
             </HStack>
-            <Heading level={3}>{tied.length > 1
-              ? tied.every((h) => h.fault_code === "POSSIBLE_POWER_OR_SIGNAL_FAULT") ? "Signal or power connection" : `${tied.length} causes need a distinguishing check`
-              : top.title}</Heading>
+            <HStack gap={2} vAlign="center">
+              <Heading level={3}>{tied.length > 1
+                ? tied.every((h) => h.fault_code === "POSSIBLE_POWER_OR_SIGNAL_FAULT") ? "Signal or power connection" : `${tied.length} causes need a distinguishing check`
+                : top.title}</Heading>
+              <OriginTag origin={top.origin} />
+            </HStack>
             {primary && (
               <Button label={checkDone ? `${primary.label} again` : primary.label}
                       variant={checkDone ? "ghost" : "primary"} className={checkDone ? undefined : "flow-primary"}
@@ -394,21 +442,6 @@ function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
           )}
         </VStack>
       </div>
-
-      <div id="dbg-ai" role="tabpanel" hidden={tab !== "ai"}>
-        <VStack gap={3}>
-          {view.incident.agent_summary && (
-            <Card padding={3} variant="muted">
-              <VStack gap={1}>
-                <Eyebrow>AI agents (inference, not measurement)</Eyebrow>
-                <Text type="body">{view.incident.agent_summary}</Text>
-              </VStack>
-            </Card>
-          )}
-          <AIReview {...p} />
-          <MoreTools {...p} />
-        </VStack>
-      </div>
     </VStack>
   );
 }
@@ -418,7 +451,10 @@ function OtherHypothesis(p: FlowProps & { h: Hypothesis; view: InvestigationView
   return (
       <VStack gap={1}>
         <HStack hAlign="between" vAlign="center">
-          <Text type="body" weight="medium">{p.h.title}</Text>
+          <HStack gap={2} vAlign="center">
+            <Text type="body" weight="medium">{p.h.title}</Text>
+            <OriginTag origin={p.h.origin} />
+          </HStack>
           <Text type="supporting">{STATUS_LABEL[p.h.status]}</Text>
         </HStack>
         <Text type="supporting" maxLines={3}>{p.h.explanation}</Text>
@@ -537,15 +573,15 @@ function MoreTools(p: FlowProps & { view: InvestigationView }) {
   );
 }
 
-// ------------------------------------------------------------------ 4. Verify
+// ------------------------------------------------------------------ Debug view: resolved state
 
-function VerifyStep(p: FlowProps & { view: InvestigationView }) {
+function VerifyRecord(p: FlowProps & { view: InvestigationView }) {
   const { view } = p;
   const inc = view.incident;
   if (inc.state === "verifying") {
     return (
       <VStack gap={3} hAlign="center">
-        <Eyebrow num="04">Verify — same test again</Eyebrow>
+        <Eyebrow>Debug — verifying</Eyebrow>
         <Spinner size="lg" label="Re-running the same test…" />
         <Text type="supporting">Same command, same pass criteria.</Text>
       </VStack>
@@ -557,13 +593,120 @@ function VerifyStep(p: FlowProps & { view: InvestigationView }) {
     : v?.source.kind === "live" ? "Fixed — verified on live hardware" : "Verification record unavailable";
   return (
     <VStack gap={3}>
-      <Eyebrow num="04">Verify — closed loop</Eyebrow>
+      <Eyebrow>Debug — resolved</Eyebrow>
       <Notice tone="success" title={title}
               body={v?.result?.reason ?? "The same test now passes."} end={v ? <SourceBadge run={v} /> : undefined} />
       {v?.synthetic && <Text type="supporting">Verified on synthetic data, not live hardware.</Text>}
       {v?.result && <Facts result={v.result} />}
       <Text type="body" color="secondary">Was: {view.hypotheses[0]?.title ?? inc.title}</Text>
       <Button label="Start a new test" variant="primary" className="flow-primary" onClick={p.onNewTest} />
+    </VStack>
+  );
+}
+
+// The stages an agent round moves through (D-041) — a live step list the engineer
+// watches while diagnosis runs, fed by agent.stage / agent.reported events.
+const AGENT_STAGES = [
+  { key: "triage", label: "Triage — choosing which specialists to consult" },
+  { key: "specialists", label: "Specialists — reviewing the evidence" },
+  { key: "critique", label: "Critic — trying to falsify the leading hypotheses" },
+  { key: "synthesis", label: "Synthesis — writing the summary and next check" },
+] as const;
+
+function AgentSteps({ progress }: { progress: NonNullable<FlowProps["agentProgress"]> }) {
+  const order = AGENT_STAGES.map((s) => s.key) as string[];
+  const at = progress.phase === "done" ? order.length : order.indexOf(progress.phase);
+  return (
+    <Card padding={3} variant="muted">
+      <VStack gap={1.5}>
+        <Eyebrow>{progress.phase === "done" ? "Agent round finished" : "Agents working…"}</Eyebrow>
+        {AGENT_STAGES.map((s, i) => (
+          <HStack key={s.key} gap={2} vAlign="center">
+            {i < at ? <StatusDot variant="success" label="done" />
+              : i === at ? <Spinner size="sm" />
+              : <StatusDot variant="neutral" label="pending" />}
+            <Text type="supporting" color={i > at ? "secondary" : undefined}>{s.label}</Text>
+          </HStack>
+        ))}
+        {progress.agents.length > 0 && (
+          <Text type="supporting" color="secondary" style={{ paddingLeft: 24 }}>
+            {progress.agents.map((a) => `${a}${progress.reported.includes(a) ? " ✓" : " …"}`).join("   ")}
+          </Text>
+        )}
+      </VStack>
+    </Card>
+  );
+}
+
+/** Structured agent synthesis (D-041): the summary stays a paragraph, contradictions and
+    the outcome explanation render as their own sections, and the recommended check is a
+    real button — resolved from the action catalog, never agent-authored text. */
+function AgentSummary(p: FlowProps & { view: InvestigationView }) {
+  const inc = p.view.incident;
+  const evById = new Map(p.view.evidence.map((e) => [e.id, e]));
+  const action = nextCheck(p.view);
+  const cited = [...new Set(
+    [inc.agent_summary ?? "", ...inc.agent_contradictions, inc.agent_check_explanation]
+      .join(" ").match(/evidence:[A-Za-z0-9_.:-]+/g) ?? [],
+  )].slice(0, 10);
+  return (
+    <Card padding={3} variant="muted">
+      <VStack gap={2}>
+        <Eyebrow>AI agents (inference, not measurement)</Eyebrow>
+        <Text type="body">{inc.agent_summary}</Text>
+        {inc.agent_contradictions.length > 0 && (
+          <VStack gap={0.5}>
+            <Text type="label">Contradictions</Text>
+            {inc.agent_contradictions.map((c, i) => <Text key={i} type="supporting">• {c}</Text>)}
+          </VStack>
+        )}
+        {inc.agent_check_explanation && (
+          <VStack gap={0.5}>
+            <Text type="label">What the recommended check shows</Text>
+            <Text type="supporting">{inc.agent_check_explanation}</Text>
+          </VStack>
+        )}
+        {cited.length > 0 && <EvidenceList title="Evidence cited" ids={cited} evById={evById} onInspect={p.onEvidence} />}
+        {action && (
+          <Button label={`Run: ${action.label}`} variant="primary" size="sm" tooltip={action.rationale}
+                  isLoading={p.busyActionId === action.id} onClick={() => p.onAction(action)} />
+        )}
+      </VStack>
+    </Card>
+  );
+}
+
+// ------------------------------------------------------------------ Analyze view (AI — clearly fenced)
+
+function AnalyzeView(p: FlowProps) {
+  const view = p.view;
+  return (
+    <VStack gap={3}>
+      <Eyebrow>Analyze — where AI helps</Eyebrow>
+      <Heading level={2} type="display-3">AI analysis</Heading>
+      <Card padding={3} variant="muted">
+        <VStack gap={1.5}>
+          <Text type="body" weight="semibold">Everything else on this screen is deterministic.</Text>
+          <Text type="supporting">
+            The map comes from your code and wiring files, checks come from fixed rules, and every claim cites
+            evidence you can open. AI only helps reason over that evidence — it never produces a measurement:
+          </Text>
+          <VStack gap={1}>
+            <Text type="supporting">1. <Text type="supporting" weight="semibold">Evidence review</Text> — a StepFun orchestrator dispatches Gemini specialists (code, hardware, telemetry, vision). Findings must cite existing evidence or they're rejected.</Text>
+            <Text type="supporting">2. <Text type="supporting" weight="semibold">New hypotheses</Text> — causes an agent proposes appear in Debug → Potential causes tagged "AI". Rule-based causes are tagged "Rules".</Text>
+            <Text type="supporting">3. <Text type="supporting" weight="semibold">Repair brief</Text> — a remote Devin session can draft a code fix as a reviewable proposal. Nothing is applied automatically.</Text>
+          </VStack>
+          {!view && <Text type="supporting">Run a test in the Test view first — AI reviews the evidence a run produces.</Text>}
+        </VStack>
+      </Card>
+      {view && (
+        <>
+          {p.agentProgress && <AgentSteps progress={p.agentProgress} />}
+          {view.incident.agent_summary && <AgentSummary {...p} view={view} />}
+          <AIReview {...p} view={view} />
+          <MoreTools {...p} view={view} />
+        </>
+      )}
     </VStack>
   );
 }
