@@ -434,3 +434,15 @@ What remains is hardware validation.
 - Verified: 174 pytest, tsc clean, 17/17 vitest; `inspector_test.mjs` +
   `trace_test.mjs` headless — path red+animated, sibling circuit unaffected,
   panel docks right and scrolls.
+
+## Stream store for scroll responsiveness (D-049) — done 2026-10-18
+- `lib/stream.ts`: `useSyncExternalStore` snapshot `{events, serial, seq}` fed by
+  the WS handler via `streamEvent` (200ms batch) — App no longer re-renders on
+  stream events at all (D-046 batched but still re-rendered ~5x/sec). Only
+  subscribers update: drawer panes, History, EventFlow.
+- `streamReplaceSerial` (run select/completed refetch/new test), `streamReset`
+  (project switch), `streamFlush` (completed). Non-run events also push so the
+  timeline keeps lifecycle entries; seq-dedupe preserved.
+- Drawer tables capped (serial 800 / timeline+audit 500 rows).
+- Verified: tsc clean, 17/17 vitest, build clean, drawer_test all gestures,
+  scroll_test 579px on 8 wheel ticks, zero console errors.

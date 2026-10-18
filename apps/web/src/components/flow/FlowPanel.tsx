@@ -34,6 +34,7 @@ import {
   type TestRun,
 } from "../../lib/api";
 import { CausalChain, EvidenceList, Eyebrow, Facts, SourceBadge, SourcePicker } from "./common";
+import { useStream } from "../../lib/stream";
 import { latestRun, nextCheck } from "./flowState";
 
 /**
@@ -73,7 +74,6 @@ export interface FlowProps {
   onEvidence: (e: Evidence) => void;
   onSelectRun: (r: TestRun) => void;
   viewRequest: { view: FlowView; seq: number } | null;
-  flowSeq: number;
   projectReview: ReactNode;
 }
 
@@ -738,6 +738,7 @@ function HistoryView(p: FlowProps) {
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [labels, setLabels] = useState<Record<string, string>>({});
   const [err, setErr] = useState("");
+  const streamSeq = useStream().seq;
   const lastFetch = useRef(0);
   useEffect(() => {
     let live = true;
@@ -751,11 +752,11 @@ function HistoryView(p: FlowProps) {
         })
         .catch((e) => live && setErr((e as Error).message));
     };
-    // Runs bump flowSeq ~5x/sec; refetching that often fights scrolling. Cap it.
+    // Runs bump the stream seq ~5x/sec; refetching that often fights scrolling. Cap it.
     const wait = Date.now() - lastFetch.current;
     const t = wait < 1500 ? window.setTimeout(load, 1500 - wait) : (load(), 0);
     return () => { live = false; window.clearTimeout(t); };
-  }, [p.projectId, p.flowSeq]);
+  }, [p.projectId, streamSeq]);
   const selected = p.run?.id;
   return (
     <VStack gap={3}>

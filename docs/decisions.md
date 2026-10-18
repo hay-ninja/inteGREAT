@@ -685,3 +685,14 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
 - Verified: 174 pytest, tsc clean, 17/17 vitest; headless screenshot shows the
   GPIO18→resistor→LED1→GND chain red+animated while LED2's circuit stays
   neutral; inspector panel docks right, scrolls, Escape closes.
+
+### D-049 External stream store (supersedes D-046 batching) — 2026-10-18
+- **Problem:** D-046's in-component batching still re-rendered the whole
+  workspace ~5x/sec during runs (App held `events`/`serial`/`flowSeq` state) —
+  and the merge showed how easily the machinery could be clobbered.
+- **Choice:** stream data moved to `lib/stream.ts`, a `useSyncExternalStore`
+  store. The WS handler pushes events (200ms flush window, seq-dedupe);
+  BottomDrawer reads `useStream()` directly, History/EventFlow subscribe for
+  their refresh trigger. App state now only changes on lifecycle events, so
+  stream traffic produces zero App-tree renders. Drawer tables capped at
+  800/500 rows to bound rebuild cost per flush.

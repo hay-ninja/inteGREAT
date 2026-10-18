@@ -25,6 +25,7 @@ import {
   type ToolCall,
 } from "../../lib/api";
 import { Eyebrow, SourceBadge } from "../flow/common";
+import { useStream } from "../../lib/stream";
 
 export type DrawerTab = "serial" | "devices" | "activity" | "camera";
 
@@ -41,8 +42,6 @@ interface Props {
   tab: DrawerTab;
   onTab: (t: DrawerTab) => void;
   run: TestRun | null;
-  serial: SerialEvent[];
-  events: IntegreatEvent[];
   toolCalls: ToolCall[];
   devices: DeviceStatus | null;
   onEnvSetup: () => void;
@@ -58,16 +57,19 @@ function DrawerTabs({ value, onChange }: { value: DrawerTab; onChange: (t: Drawe
   );
 }
 
-/** One tab's content — shared by the single view, the left pane, and the split pane. */
+/** One tab's content — shared by the single view, the left pane, and the split pane.
+    Serial + events come from the stream store so stream updates re-render only the
+    drawer, not the whole workspace. */
 function PaneContent({ tab, p }: { tab: DrawerTab; p: Props }) {
-  if (tab === "serial") return <SerialLog serial={p.serial} />;
+  const stream = useStream();
+  if (tab === "serial") return <SerialLog serial={stream.serial} />;
   if (tab === "devices") return <DeviceSummary status={p.devices} onOpenSetup={p.onEnvSetup} />;
   if (tab === "camera") return <CameraPane devices={p.devices} onOpenSetup={p.onEnvSetup} />;
   return (
     <VStack gap={3}>
       <VStack gap={1}>
         <Eyebrow>Investigation events</Eyebrow>
-        <Timeline events={p.events} />
+        <Timeline events={stream.events} />
       </VStack>
       <VStack gap={1}>
         <Eyebrow>Tool audit — every run, approval, and denial</Eyebrow>
@@ -182,7 +184,7 @@ interface Row extends Record<string, unknown> { id: string; t: string; dir: stri
 
 const SerialLog = memo(function SerialLog({ serial }: { serial: SerialEvent[] }) {
   if (!serial.length) return <EmptyState isCompact title="No messages yet" description="Everything sent to and heard back from the board during a test appears here." />;
-  const rows: Row[] = serial.map((s) => ({
+  const rows: Row[] = serial.slice(-800).map((s) => ({
     id: s.id, t: `${s.elapsed_ms} ms`, dir: s.direction === "tx" ? "→ board" : "← board", raw: s.raw,
     note: s.matched_function_ids.length ? `printed by ${s.matched_function_ids.map((f) => f.split("::")[1]).join(", ")}()` : "",
   }));
@@ -198,7 +200,7 @@ const SHOWN = new Set(["project.imported", "graph.updated", "expectation.confirm
   "agent.started", "agent.reported", "message.added", "test.verification_completed", "incident.resolved", "error"]);
 
 const Timeline = memo(function Timeline({ events }: { events: IntegreatEvent[] }) {
-  const shown = events.filter((e) => SHOWN.has(e.type)).slice().reverse();
+  const shown = events.filter((e) => SHOWN.has(e.type)).slice(-500).reverse();
   if (!shown.length) return <EmptyState isCompact title="Nothing yet" />;
   interface TRow extends Record<string, unknown> { id: string; t: string; type: string; what: string }
   const rows: TRow[] = shown.map((e) => ({ id: String(e.seq), t: new Date(e.timestamp_utc).toLocaleTimeString(),
@@ -232,7 +234,7 @@ function summarize(e: IntegreatEvent): string {
 const Audit = memo(function Audit({ calls }: { calls: ToolCall[] }) {
   if (!calls.length) return <EmptyState isCompact title="No tool calls yet" description="Every tool run, approval and denial is listed here." />;
   interface ARow extends Record<string, unknown> { id: string; t: string; tool: string; who: string; decision: string; what: string }
-  const rows: ARow[] = [...calls].reverse().map((c) => ({ id: c.id, t: new Date(c.started_at_utc).toLocaleTimeString(),
+  const rows: ARow[] = calls.slice(-500).reverse().map((c) => ({ id: c.id, t: new Date(c.started_at_utc).toLocaleTimeString(),
     tool: c.tool_name, who: c.caller, decision: c.decision.replace("_", " "), what: c.error ?? c.summary }));
   return (
     <Table<ARow> data={rows} idKey="id" density="compact" textOverflow="truncate"

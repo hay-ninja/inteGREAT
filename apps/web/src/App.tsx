@@ -16,7 +16,6 @@ import {
   type GraphLayer,
   type GraphSnapshot,
   type Highlight,
-  type IntegreatEvent,
   type InvestigationView,
   type PermissionCategory,
   type Project,
@@ -33,6 +32,7 @@ import { SelectionCard } from "./components/flow/SelectionCard";
 import { ProjectReview } from "./components/flow/ProjectReview";
 import { EnvironmentSetupDialog } from "./components/setup/EnvironmentSetupDialog";
 import { parseSource } from "./components/flow/common";
+import { streamEvent, streamFlush, streamReplaceSerial, streamReset } from "./lib/stream";
 import { BottomDrawer, type DrawerTab } from "./components/drawer/BottomDrawer";
 import { TopBar } from "./components/shell/TopBar";
 import { ImportScreen, type ImportArgs } from "./components/shell/ImportScreen";
@@ -62,10 +62,11 @@ export default function App() {
   const [source, setSource] = useState("sim:connected");
   const [expectation, setExpectation] = useState<Expectation | null>(null);
   const [run, setRun] = useState<TestRun | null>(null);
-  const [serial, setSerial] = useState<SerialEvent[]>([]);
+  // Stream data (test.observation/serial + the event timeline) lives in
+  // lib/stream.ts — an external store batched at 200ms so runs don't re-render
+  // this component ~15x/sec and fight scrolling.
   const [incidentId, setIncidentId] = useState<string | null>(null);
   const [view, setView] = useState<InvestigationView | null>(null);
-  const [events, setEvents] = useState<IntegreatEvent[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [focusSub, setFocusSub] = useState("");
   const [focusIds, setFocusIds] = useState<Set<string> | null>(null);
@@ -94,7 +95,6 @@ export default function App() {
   const [evidence, setEvidence] = useState<Evidence | null>(null);
   const [layer, setLayer] = useState<GraphLayer>("combined");
   const [mode, setMode] = useState<CanvasMode>("deps");
-  const [flowSeq, setFlowSeq] = useState(0);
   const [repairOpen, setRepairOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const runRef = useRef<string | null>(null);
@@ -102,29 +102,6 @@ export default function App() {
   const projectRef = useRef<string | null>(null);
   const scopeRef = useRef("");
   const loadVersion = useRef(0);
-  // Runs emit ~15 events/sec; batching UI updates into a short window keeps scrolling
-  // and typing smooth while still feeling live. Lifecycle events stay immediate.
-  const pendingEvents = useRef<IntegreatEvent[]>([]);
-  const pendingSerial = useRef<SerialEvent[]>([]);
-  const flushTimer = useRef(0);
-  const FLUSH_MS = 200;
-  const flushEvents = useCallback(() => {
-    flushTimer.current = 0;
-    const evs = pendingEvents.current.splice(0);
-    const sers = pendingSerial.current.splice(0);
-    if (evs.length) setEvents((prev) => {
-      const seen = new Set(prev.map((x) => x.seq));
-      const add = evs.filter((e) => !seen.has(e.seq));
-      return add.length ? [...prev, ...add] : prev;
-    });
-    if (sers.length) setSerial((prev) => [...prev, ...sers]);
-    setFlowSeq((s) => s + 1);
-  }, []);
-  const queueStreamEvent = useCallback((ev: IntegreatEvent, serialLine?: SerialEvent) => {
-    pendingEvents.current.push(ev);
-    if (serialLine) pendingSerial.current.push(serialLine);
-    if (!flushTimer.current) flushTimer.current = window.setTimeout(flushEvents, FLUSH_MS);
-  }, [flushEvents]);
   incidentRef.current = incidentId;
   scopeRef.current = focusSub;
 
@@ -153,9 +130,7 @@ export default function App() {
     const scoped = preferredScope ? await api.graph(p.id, preferredScope) : null;
     if (version !== loadVersion.current) return;
     projectRef.current = p.id;
-    setProject(p); setGraph(g); setSubsystems(subs); setEvents([]); setRun(null); runRef.current = null; setSerial([]);
-    pendingEvents.current.length = 0; pendingSerial.current.length = 0;
-    if (flushTimer.current) { window.clearTimeout(flushTimer.current); flushTimer.current = 0; }
+    setProject(p); setGraph(g); setSubsystems(subs); streamReset(); setRun(null); runRef.current = null;
     setDrawerOpen(false); setDrawerTab("serial"); setBusy(false); setBusyAction(null); setDiagnosing(false);
     const lastInc = fresh ? null : incs[incs.length - 1] ?? null;
     const open = lastInc;
@@ -194,28 +169,27 @@ export default function App() {
     if (!project) return;
     const pid = project.id;
     return subscribeProject(pid, (ev) => {
-      const stream = ev.type === "test.observation" || ev.type === "test.serial";
-      if (!stream) setEvents((prev) => (prev.some((x) => x.seq === ev.seq) ? prev : [...prev, ev]));
       const p = ev.payload as Record<string, unknown>;
       const mine = ev.investigation_id && ev.investigation_id === incidentRef.current;
+      // Non-run events still land in the drawer timeline (deduped by seq in the store).
+      if (ev.type !== "test.started" && ev.type !== "test.observation" && ev.type !== "test.serial"
+          && ev.type !== "test.completed") streamEvent(ev);
       switch (ev.type) {
         case "test.started":
           runRef.current = ev.test_run_id ?? null;
-          setRun(p as unknown as TestRun); setSerial([]);
-          queueStreamEvent(ev);
+          setRun(p as unknown as TestRun); streamReplaceSerial([]); streamEvent(ev);
           break;
         case "test.observation":
-          queueStreamEvent(ev);
+          streamEvent(ev);
           break;
         case "test.serial":
-          if (ev.test_run_id === runRef.current) queueStreamEvent(ev, p as unknown as SerialEvent);
-          else queueStreamEvent(ev);
+          streamEvent(ev, ev.test_run_id === runRef.current ? p as unknown as SerialEvent : undefined);
           break;
         case "test.completed": {
           const r = p as unknown as TestRun;
           if (r.id === runRef.current) setRun(r);
           if (r.incident_id) { incidentRef.current = r.incident_id; setIncidentId(r.incident_id); refreshView(r.incident_id); }
-          setBusy(false); setFlowSeq((s) => s + 1); flushEvents();
+          setBusy(false); streamEvent(ev); streamFlush();
           break;
         }
         case "graph.updated": reloadGraph(pid).catch(fail); break;
@@ -258,12 +232,12 @@ export default function App() {
     });
   // Graph rescans replace project metadata. Reconnecting for that would replay graph.updated
   // from seq 0, rescan the metadata again, and create an unbounded reconnect/refetch loop.
-  }, [project?.id, refreshView, reloadGraph, fail, queueStreamEvent, flushEvents]);
+  }, [project?.id, refreshView, reloadGraph, fail]);
 
   useEffect(() => {
     let current = true;
     if (run?.state === "completed") api.test(run.id).then((d) => {
-      if (current && runRef.current === run.id) { setSerial(d.serial); }
+      if (current && runRef.current === run.id) { streamReplaceSerial(d.serial); }
     }).catch(() => undefined);
     return () => { current = false; };
   }, [run?.id, run?.state]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -325,7 +299,7 @@ export default function App() {
     try {
       const r = await api.startTest(pid, expectation.id, parseSource(source));
       if (projectRef.current !== pid) return;
-      runRef.current = r.id; setRun(r); setSerial([]);
+      runRef.current = r.id; setRun(r); streamReplaceSerial([]);
     } catch (e) { if (projectRef.current === pid) { fail(e); setBusy(false); } }
   };
 
@@ -506,8 +480,8 @@ export default function App() {
                        onReveal={(ids) => revealNodes(ids, true)}
                        onEvidence={showEvidence} onOpenDevices={() => setEnvSetupOpen(true)}
                        projectReview={<ProjectReview project={project} graph={graph} onConnection={setSelectedEdgeIds} />}
-                       onSelectRun={selectRun} viewRequest={viewRequest} flowSeq={flowSeq}
-                       onNewTest={() => { incidentRef.current = null; runRef.current = null; setIncidentId(null); setView(null); setRun(null); setSerial([]); }}
+                       onSelectRun={selectRun} viewRequest={viewRequest}
+                       onNewTest={() => { incidentRef.current = null; runRef.current = null; setIncidentId(null); setView(null); setRun(null); streamReplaceSerial([]); }}
                        onError={(m) => fail(m)} />
           </VStack>
         </LayoutPanel>
@@ -519,7 +493,7 @@ export default function App() {
             {mode === "flow" ? (
               <EventFlowView runs={runs} runId={run?.id ?? runs[runs.length - 1]?.id ?? null}
                              onRunChange={(id) => { const r = runs.find((x) => x.id === id); if (r) { runRef.current = id; setRun(r); } }}
-                             layer={layer} refreshSeq={flowSeq}
+                             layer={layer}
                              onSelectNode={(id) => { setMode("deps"); revealNodes([id], true); }}
                              onEvidence={showEvidence} />
             ) : (
@@ -546,7 +520,6 @@ export default function App() {
             </GraphInspector>
           </LayoutContent>} footer={<LayoutFooter hasDivider padding={0}>
             <BottomDrawer open={drawerOpen} onOpen={setDrawerOpen} tab={drawerTab} onTab={setDrawerTab} run={run}
-                          serial={serial} events={events}
                           toolCalls={view?.tool_calls ?? []} devices={devices}
                           onEnvSetup={openEnvSetup}
                           onSaveReplay={saveReplay} onError={(m) => fail(m)} />
