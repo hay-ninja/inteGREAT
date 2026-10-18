@@ -87,7 +87,7 @@ export function ProjectSettingsDialog({ project, subsystems, onClose, onSaved, o
     <Dialog isOpen onOpenChange={(o) => !o && onClose()} width={640} purpose="form">
       <DialogHeader title="Project settings" subtitle={`Graph v${project.graph_version} · ${project.file_count} files`}
                     onOpenChange={(o) => !o && onClose()} />
-      <VStack gap={4} padding={4}>
+      <VStack gap={4} padding={4} minHeight={0} isScrollable>
         {hosted && (
           <Banner status="warning" collapsible={false} title="Hosted demo"
                   description="This site replays a recorded session — changes can't be saved. Run inteGREAT locally to edit projects." />

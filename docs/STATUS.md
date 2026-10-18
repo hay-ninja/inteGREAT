@@ -4,6 +4,15 @@
 
 **Last updated:** 2026-10-18 · **Current milestone:** dynamic graph generalization + LED demo on `feature/dsg-agent-arch` (D-036–D-038): pin-mediated actuation, inferred hardware/subsystems, board-keyed ids, `led_state` binary metrics, inverted-logic diagnosis, Devin org auto-derive. **Live hardware (H0/M5/M7) still outstanding.**
 
+## Project settings scrolling — 2026-10-18
+- Project settings form body now uses Astryx `isScrollable` and `minHeight={0}` so it
+  shrinks inside the viewport-capped Dialog instead of being clipped by its inner wrapper.
+- Browser-verified on the existing Halloween project's Edit details modal: body scrolls
+  from top to bottom (431px viewport, 908px content); subsystem fields, Cancel/Save and
+  delete controls are reachable while the header stays visible. No project data changed.
+- Frontend regression: 17 tests pass. Typecheck is blocked by `GraphView.tsx` CSSProperties
+  errors (stroke/strokeDasharray/strokeWidth/opacity), outside the modal change.
+
 ## Sentry standard install/startup — 2026-10-18 (D-050)
 - Supersedes D-047's optional-extra setup: SDK is in normal API dependencies and normal
   startup uses the configured DSN automatically. `INTEGREAT_SENTRY_ENABLED` defaults true;
