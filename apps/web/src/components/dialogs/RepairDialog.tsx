@@ -53,7 +53,7 @@ function JobCard({ job, onRefresh }: { job: RepairJob; onRefresh: () => void }) 
         {r && (
           <VStack gap={1}>
             {r.pull_requests.length > 0 ? r.pull_requests.map((u) => (
-              <Button key={u} label="Review the pull request" size="sm" variant="secondary" href={u} target="_blank" rel="noopener noreferrer" />
+              <Button key={u} label="Review the pull request" size="sm" variant="primary" href={u} target="_blank" rel="noopener noreferrer" />
             )) : (
               <Text type="supporting">No pull request or diff was returned — the proposed change is not available for review.</Text>
             )}
@@ -107,6 +107,7 @@ export function RepairDialog({ investigation, onClose }: {
   }, [jobs]);
 
   const needsAck = (preflight?.snapshot?.dirty_files.length ?? 0) > 0;
+  const reviewPending = jobs.some((j) => j.state === "ready_for_review" && j.result?.pull_requests.length);
   const start = () => {
     setBusy(true);
     api.requestRepair(iid, ack)
@@ -143,7 +144,7 @@ export function RepairDialog({ investigation, onClose }: {
                 <CheckboxInput label={`I understand the ${preflight!.snapshot!.dirty_files.length} uncommitted change(s) are not part of the remote base revision`}
                                value={ack} onChange={setAck} />
               )}
-              <Button label="Start repair session" variant="primary" isLoading={busy}
+              <Button label={reviewPending ? "Start another attempt" : "Start repair session"} variant={reviewPending ? "secondary" : "primary"} isLoading={busy}
                       isDisabled={!preflight.ready || (needsAck && !ack)} onClick={start} />
             </VStack>
           </Card>

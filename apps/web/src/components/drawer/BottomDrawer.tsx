@@ -21,9 +21,9 @@ import {
   type TestRun,
   type ToolCall,
 } from "../../lib/api";
-import { SourceBadge } from "../flow/common";
+import { Eyebrow, SourceBadge } from "../flow/common";
 
-export type DrawerTab = "angle" | "serial" | "timeline" | "devices" | "audit";
+export type DrawerTab = "angle" | "serial" | "devices" | "activity";
 
 interface Props {
   open: boolean;
@@ -37,7 +37,7 @@ interface Props {
   events: IntegreatEvent[];
   toolCalls: ToolCall[];
   devices: DeviceStatus | null;
-  onDevices: (d: DeviceStatus) => void;
+  onRigSetup: () => void;
   onSaveReplay: (runId: string) => void;
   onError: (m: string) => void;
 }
@@ -49,9 +49,8 @@ export function BottomDrawer(p: Props) {
         <TabList value={p.tab} size="sm" onChange={(t) => { p.onTab(t as DrawerTab); p.onOpen(true); }}>
           <Tab value="angle" label="Angle" />
           <Tab value="serial" label="Serial" />
-          <Tab value="timeline" label="Timeline" />
           <Tab value="devices" label="Devices" />
-          <Tab value="audit" label="Tool audit" />
+          <Tab value="activity" label="Activity" />
         </TabList>
         <HStack gap={1} vAlign="center">
           {p.run && <SourceBadge run={p.run} />}
@@ -66,9 +65,19 @@ export function BottomDrawer(p: Props) {
         <VStack gap={0} isScrollable height="100%" paddingInline={3} paddingBlock={2}>
           {p.tab === "angle" && <AnglePlot obs={p.observations} exp={p.expectation} />}
           {p.tab === "serial" && <SerialLog serial={p.serial} />}
-          {p.tab === "timeline" && <Timeline events={p.events} />}
-          {p.tab === "devices" && <DeviceControls status={p.devices} onStatus={p.onDevices} onError={p.onError} />}
-          {p.tab === "audit" && <Audit calls={p.toolCalls} />}
+          {p.tab === "devices" && <DeviceSummary status={p.devices} onOpenSetup={p.onRigSetup} />}
+          {p.tab === "activity" && (
+            <VStack gap={3}>
+              <VStack gap={1}>
+                <Eyebrow>Investigation events</Eyebrow>
+                <Timeline events={p.events} />
+              </VStack>
+              <VStack gap={1}>
+                <Eyebrow>Tool audit — every run, approval, and denial</Eyebrow>
+                <Audit calls={p.toolCalls} />
+              </VStack>
+            </VStack>
+          )}
         </VStack>
       )}
     </VStack>
@@ -165,6 +174,28 @@ function Audit({ calls }: { calls: ToolCall[] }) {
                  columns={[{ key: "t", header: "Time", width: pixel(90) }, { key: "tool", header: "Tool", width: pixel(170) },
                            { key: "who", header: "By", width: pixel(120) }, { key: "decision", header: "Decision", width: pixel(120) },
                            { key: "what", header: "Result" }]} />
+  );
+}
+
+/** Status-only view — actual connect/calibrate actions live in the single Rig setup dialog. */
+function DeviceSummary({ status, onOpenSetup }: { status: DeviceStatus | null; onOpenSetup: () => void }) {
+  const s = status?.serial, c = status?.camera;
+  return (
+    <HStack gap={4} vAlign="center" wrap="wrap">
+      <HStack gap={1.5} vAlign="center">
+        <StatusDot variant={s?.connected ? "success" : "neutral"} label="ESP32 serial" />
+        <Text type="body">ESP32</Text>
+        <Text type="supporting">{s?.connected ? `${s.port} · ${s.baud}` : "not connected"}</Text>
+      </HStack>
+      <HStack gap={1.5} vAlign="center">
+        <StatusDot variant={c?.connected ? (c.calibrated ? "success" : "warning") : "neutral"} label="Camera" />
+        <Text type="body">Camera</Text>
+        <Text type="supporting">
+          {c?.connected ? `${c.source_id} · ${c.calibrated ? "calibrated" : "needs calibration"}` : "not connected"}
+        </Text>
+      </HStack>
+      <Button label="Open rig setup" size="sm" onClick={onOpenSetup} />
+    </HStack>
   );
 }
 

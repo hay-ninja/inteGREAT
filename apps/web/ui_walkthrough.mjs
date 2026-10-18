@@ -73,6 +73,14 @@ if (await runBtn.isVisible().catch(() => false)) {
 }
 await shot("05-after-run");
 
+const closeAnyDialog = async () => {
+  const x = page.locator("dialog[open]").first();
+  if (await x.isVisible().catch(() => false)) {
+    const btn = x.locator("button").first();
+    if (await btn.isVisible().catch(() => false)) { await btn.click(); await page.waitForTimeout(400); }
+  }
+};
+
 // ---- event flow view ---------------------------------------------------------------
 await page.getByText("Event flow", { exact: true }).first().click();
 await page.waitForTimeout(1200);
@@ -89,6 +97,26 @@ if (await nextBtn.isVisible().catch(() => false)) {
 }
 await shot("07-event-step");
 
+// drawer: Activity (merged timeline + tool audit) and Devices (summary → rig setup dialog)
+await page.getByRole("tab", { name: "Activity" }).or(page.getByText("Activity", { exact: true })).first().click();
+await page.waitForTimeout(600);
+const auditVisible = await page.evaluate(() => document.body.innerText.toUpperCase().includes("TOOL AUDIT"));
+log(`activity tab renders merged audit: ${auditVisible}`);
+await shot("07b-activity");
+await page.getByText("Devices", { exact: true }).first().click();
+await page.waitForTimeout(500);
+const openSetup = page.locator("button").filter({ hasText: /Open rig setup|Set up live rig/ }).first();
+if (await openSetup.isVisible().catch(() => false)) {
+  await openSetup.click();
+  await page.waitForTimeout(700);
+  const rigDlg = await page.locator("dialog[open]").count();
+  log(`devices tab routes to rig setup dialog: ${rigDlg > 0}`);
+  await shot("07c-devices-summary");
+  await closeAnyDialog();
+} else {
+  log("devices summary has no rig-setup route!");
+}
+
 // click a graph-related element from the selected event card
 const graphLink = page.getByRole("button", { name: /servo|gpio|MOVE|module|fn/i }).last();
 if (await graphLink.isVisible().catch(() => false)) {
@@ -98,13 +126,6 @@ if (await graphLink.isVisible().catch(() => false)) {
   await shot("08-cross-link");
 }
 
-const closeAnyDialog = async () => {
-  const x = page.locator("dialog[open]").first();
-  if (await x.isVisible().catch(() => false)) {
-    const btn = x.locator("button").first();
-    if (await btn.isVisible().catch(() => false)) { await btn.click(); await page.waitForTimeout(400); }
-  }
-};
 await closeAnyDialog();
 
 // ---- repair dialog -----------------------------------------------------------------

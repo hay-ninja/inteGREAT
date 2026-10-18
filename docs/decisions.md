@@ -244,3 +244,30 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
 - The Stepper is replaced by the chapter strip; step gating is unchanged (forward chapters stay
   locked until reached, completed chapters clickable, debug chapter shows error state bar).
 - Import screen reordered to match intent: demo → reopen → import your own (boxed form).
+
+### D-027 UX consolidation: single Setup destination, merged inspector, keyboard layer — 2026-10-18
+- Implements `docs/ux-blueprint.md` (the principal-designer brief) on top of the D-026 structure.
+- **One Setup destination.** All device entry points (`TopBar` "Rig setup", `More` menu, drawer
+  Devices tab, FlowPanel "Set up the live rig", RepeatTestDialog) open `RigSetupDialog`, which
+  owns `DeviceControls` (connect / calibrate / release). The drawer Devices tab is a read-only
+  status summary with an "Open rig setup" route — no duplicated controls.
+- **Drawer consolidation.** Tabs are now `Angle · Serial · Devices · Activity`; Timeline and
+  Tool audit merged into Activity (eyebrow-separated sections) per the blueprint's
+  feature-consolidation matrix.
+- **Unified inspector chrome.** New `flow/InspectorCard.tsx` — one card pattern (eyebrow +
+  close + content) shared by graph selection (`SelectionCard`) and event-flow detail; the
+  selected event card keeps its inline position inside EventFlowView so it stays adjacent to
+  the scrubber (a modal would block ←/→ scrubbing).
+- **One-primary-action audit.** Primary buttons carry `className="flow-primary"`. Verified each
+  state exposes exactly one primary: step steps, preflight "Start repair session", and — when a
+  repair returns a PR — "Review the pull request" becomes the primary while "Start another
+  attempt" demotes to secondary (retry is not the next action). Devin repair remains a ghost
+  secondary and is only reachable via backend-recommended `prepare_software_fix` (software
+  evidence only) — unchanged.
+- **Keyboard layer.** Window-level handler in `App.tsx`: Space clicks `.flow-primary`, 1–4 click
+  `.chapter[role=tab]` buttons, D/E switch canvas modes, H/S/C switch graph layers; EventFlowView
+  owns ←/→ event scrubbing. Guards: ignored inside inputs/selects/contenteditable and open
+  dialogs; Esc stays with Astryx dialogs. A hint line sits under the chapter strip.
+- Verified: `tsc -b` clean, 17 vitest, 100 pytest, `vite build`, headless-Chromium walkthrough
+  (extended with Activity + Devices→setup coverage) at 1280×720 / 1024×768 / 800×600 — zero
+  console errors, no horizontal overflow.

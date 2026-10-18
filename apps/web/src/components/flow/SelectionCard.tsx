@@ -1,16 +1,14 @@
 /** What you clicked in the graph: facts about it, and — for declared wiring — a way to confirm it physically. */
 import { useEffect, useState } from "react";
-import { Card } from "@astryxdesign/core/Card";
 import { VStack } from "@astryxdesign/core/VStack";
 import { HStack } from "@astryxdesign/core/HStack";
 import { Text } from "@astryxdesign/core/Text";
 import { Button } from "@astryxdesign/core/Button";
-import { IconButton } from "@astryxdesign/core/IconButton";
 import { MetadataList, MetadataListItem } from "@astryxdesign/core/MetadataList";
-import { X } from "lucide-react";
 import { api, type Evidence, type GraphEdge, type GraphLayer, type GraphNode, type GraphSnapshot } from "../../lib/api";
 import { HW_KINDS, layerHiddenReason, nodeRole } from "../graph/visibleGraph";
-import { EvidenceList, Eyebrow } from "./common";
+import { EvidenceList } from "./common";
+import { InspectorCard } from "./InspectorCard";
 
 const CROSS = new Set(["configures", "controls", "reads_from"]);
 
@@ -48,31 +46,28 @@ export function SelectionCard(p: {
   if (!p.node && !p.edges.length) return null;
   const labels = new Map(p.graph.nodes.map((n) => [n.id, n.label]));
   const evById = new Map(evidence.map((e) => [e.id, e]));
-  const close = p.hideClose ? null : <IconButton label="Close" size="sm" variant="ghost" icon={<X size={14} />} onClick={p.onClose} />;
+  const close = p.hideClose ? undefined : p.onClose;
 
   if (p.edges.length) {
     return (
-      <Card padding={3} variant="muted">
-        <VStack gap={2}>
-          <HStack hAlign="between" vAlign="center"><Eyebrow>Connection</Eyebrow>{close}</HStack>
-          {p.edges.map((e) => (
-            <VStack key={e.id} gap={1}>
-              <Text type="body">{labels.get(e.source_id)} {verb(e)} {labels.get(e.target_id)}</Text>
-              <HStack gap={1}>
-                <Text type="supporting">{e.relation.replace(/_/g, " ")} · {e.verification} · {originText(e.origin)}</Text>
-              </HStack>
-              {e.origin === "declared_wiring" ? (
-                e.verification === "verified"
-                  ? <Button label="Mark as unchecked" size="sm" variant="ghost" clickAction={() => p.onVerify(e.id, "unverified")} />
-                  : <Button label="I checked this wire — mark verified" size="sm" variant="primary" clickAction={() => p.onVerify(e.id, "verified")} />
-              ) : (
-                <Text type="supporting">Found by reading the code — not something to check by hand.</Text>
-              )}
-            </VStack>
-          ))}
-          <EvidenceList title="Evidence" ids={evidence.map((e) => e.id)} evById={evById} onInspect={p.onEvidence} />
-        </VStack>
-      </Card>
+      <InspectorCard eyebrow="Connection" onClose={close}>
+        {p.edges.map((e) => (
+          <VStack key={e.id} gap={1}>
+            <Text type="body">{labels.get(e.source_id)} {verb(e)} {labels.get(e.target_id)}</Text>
+            <HStack gap={1}>
+              <Text type="supporting">{e.relation.replace(/_/g, " ")} · {e.verification} · {originText(e.origin)}</Text>
+            </HStack>
+            {e.origin === "declared_wiring" ? (
+              e.verification === "verified"
+                ? <Button label="Mark as unchecked" size="sm" variant="ghost" clickAction={() => p.onVerify(e.id, "unverified")} />
+                : <Button label="I checked this wire — mark verified" size="sm" variant="primary" clickAction={() => p.onVerify(e.id, "verified")} />
+            ) : (
+              <Text type="supporting">Found by reading the code — not something to check by hand.</Text>
+            )}
+          </VStack>
+        ))}
+        <EvidenceList title="Evidence" ids={evidence.map((e) => e.id)} evById={evById} onInspect={p.onEvidence} />
+      </InspectorCard>
     );
   }
   const n = p.node!;
@@ -86,16 +81,12 @@ export function SelectionCard(p: {
   const hwIds = !HW_KINDS.has(n.kind) ? cross.map((e) => HW_KINDS.has(p.graph.nodes.find((x) => x.id === e.target_id)?.kind ?? "") ? e.target_id : e.source_id)
     : cross.map((e) => e.target_id);
   return (
-    <Card padding={3} variant="muted">
-      <VStack gap={2}>
-        <HStack hAlign="between" vAlign="center">
-          <HStack gap={1} vAlign="center" wrap="wrap">
-            <Text type="body" weight="semibold">{n.label}</Text>
-            <Text type="supporting">{n.kind.replace("_", " ")} · {n.verification}</Text>
-          </HStack>
-          {close}
-        </HStack>
-        {role && <Text type="supporting">{role}</Text>}
+    <InspectorCard eyebrow={n.kind.replace(/_/g, " ")} onClose={close}>
+      <HStack gap={1} vAlign="center" wrap="wrap">
+        <Text type="body" weight="semibold">{n.label}</Text>
+        <Text type="supporting">{n.verification}</Text>
+      </HStack>
+      {role && <Text type="supporting">{role}</Text>}
         {hidden && p.onLayer && (
           <HStack gap={2} vAlign="center" wrap="wrap">
             <Text type="supporting">{hidden}</Text>
@@ -117,7 +108,6 @@ export function SelectionCard(p: {
         )}
         <EvidenceList ids={evidence.map((e) => e.id)} evById={evById} onInspect={p.onEvidence} />
         {!evidence.length && <Text type="supporting">No direct evidence attached.</Text>}
-      </VStack>
-    </Card>
+    </InspectorCard>
   );
 }

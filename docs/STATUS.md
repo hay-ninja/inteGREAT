@@ -48,7 +48,7 @@ this adds context without changing P0 scope.
   "I fixed it — verify" once the suggested check is done. Alternatives + "More tools" (agents, read-only
   tools, permissions, notes) are collapsed by default.
 - Hybrid graph: dots for code, pills for hardware; colour only for conflict/failed/suspect/observed.
-- Bottom drawer (Angle, Serial, Timeline, Devices, Tool audit) collapsed until a test runs.
+- Bottom drawer (Angle, Serial, Devices, Activity) collapsed until a test runs.
 - Browser-verified: start screen → Fault A demo → suggest/confirm → sim run → Debug (allow dialog, inspect
   dialog, hypothesis supported) → verify with replay `good` → "Fixed — verified" (labelled synthetic).
 - Frontend conventions for agents: `apps/web/ASTRYX.md` (Astryx rules) + D-021. Graph CSS only in
@@ -71,8 +71,7 @@ this adds context without changing P0 scope.
   → connected simulation → pass; occluded marker → unknown motion → valid repeat → Verify → pass;
   source-change warning, live readiness gating, evidence records, graph expansion, rescans and reload.
 - [UX proposal](ux-investigation-proposal.md) retains the design exploration. StepFun orchestration and
-  the Devin repair workflow are now implemented (D-025) with per-stage fallbacks; live provider calls
-  remain unvalidated (no API keys on this machine).
+  the Devin repair workflow are implemented (D-025) and live-verified — see below.
 - Astryx doctor: no failures; it warns that CLI-managed theme wiring is absent. The custom D-021 theme
   is wired through `src/theme/index.ts` and confirmed in the rendered app. Vite's large-chunk advisory remains.
 
@@ -88,6 +87,20 @@ this adds context without changing P0 scope.
 - Re-verified in headless Chromium at 1280×720 / 1024×768 / 800×600 after the restyle: all three
   graph layers, Event Flow (lanes + step scrubber), repair dialog with honest preflight, zero
   console errors, no horizontal overflow. `tsc -b` clean, `vitest` 17/17, `vite build` passes.
+
+## UX consolidation (D-027) — done 2026-10-18
+- Implements [ux-blueprint.md](ux-blueprint.md): **one Setup destination** — every device entry point
+  (top bar, More menu, drawer Devices tab, flow steps, repeat dialog) opens `RigSetupDialog`, which
+  owns connect/calibrate/release. The drawer Devices tab is now a status summary that routes there.
+- Drawer tabs: `Angle · Serial · Devices · Activity`; Timeline + Tool audit merged into Activity.
+- New `flow/InspectorCard.tsx` — one inspector chrome shared by graph selections and event details.
+- One-primary-action audit: primaries carry `flow-primary`; when a repair returns a PR, "Review the
+  pull request" becomes the primary and "Start another attempt" demotes to secondary.
+- Keyboard layer: Space = primary action, 1–4 chapters, D/E canvas modes, H/S/C graph layers,
+  ←/→ event scrubbing, Esc on dialogs; input/dialog guards. Hint line under the chapter strip.
+- Re-verified: `tsc -b` clean, `vitest` 17/17, `pytest` 100/100, `vite build`, headless-Chromium
+  walkthrough (now covering Activity tab + Devices→setup routing) at 1280×720 / 1024×768 / 800×600 —
+  zero console errors, no horizontal overflow.
 
 ## Live provider validation (2026-10-18) — verified
 - `stepfun_smoke.py`: step-5-preview triage OK (~8s). `gemini_smoke.py`: OK after model update —
@@ -105,12 +118,12 @@ this adds context without changing P0 scope.
   output budget raised to 8192 and the orchestrator got `INTEGREAT_ORCHESTRATOR_TIMEOUT_S` (120).
 
 ## Next (in order)
-UX consolidation planning: [product outline and feature inventory](ux-product-outline.md) maps the current
-features to the guided journey and proposes reducing duplicate entry points. **Design proposal only;
-no controls removed or workflow changes adopted by this document.**
+Portable handoff: [AI context brief](ai-context-brief.md) summarizes features, architecture, UX goals,
+and the later live-provider validation status separately from outstanding hardware checks.
 
-The requested expansion is **implemented** (D-023 layers, D-024 Event Flow, D-025 StepFun + Devin)
-and all three providers are live-verified. What remains is hardware validation.
+The requested expansion is **implemented** (D-023 layers, D-024 Event Flow, D-025 StepFun + Devin),
+the UX blueprint is implemented (D-027), and all three providers are live-verified.
+What remains is hardware validation.
 
 1. **Review the Devin session** — session a5f20c0b68ec4fa6b59dc062915fed0a on the fault_a incident;
    inspect its branch/PR in Devin Cloud, then decide whether to apply (engineer-controlled).

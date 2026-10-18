@@ -212,6 +212,36 @@ export default function App() {
     setSource(restored.source.kind === "live" ? "live" : `${restored.source.kind}:${restored.source.scenario}`);
   }, [view]);
 
+  // Keyboard layer (ux-blueprint Part 4). Space triggers the single primary action,
+  // 1–4 jump to chapters, D/E switch canvas modes, H/S/C switch graph layers.
+  // ←/→ event scrubbing lives in EventFlowView; Esc is handled by Astryx dialogs.
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (!project || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+      const el = ev.target as HTMLElement;
+      if (el.closest?.("input, textarea, select, [contenteditable]") || el.closest?.("[role='dialog'], dialog")) return;
+      if (ev.key === " ") {
+        const btn = document.querySelector<HTMLButtonElement>(".flow-primary:not(:disabled)");
+        if (btn) { ev.preventDefault(); btn.click(); }
+      } else if (/^[1-4]$/.test(ev.key)) {
+        const tabs = document.querySelectorAll<HTMLButtonElement>(".chapter[role='tab']");
+        tabs[Number(ev.key) - 1]?.click();
+      } else if (ev.key === "d" || ev.key === "D") {
+        setMode("deps");
+      } else if (ev.key === "e" || ev.key === "E") {
+        setMode("flow");
+      } else if (ev.key === "h" || ev.key === "H") {
+        setLayer("hardware");
+      } else if (ev.key === "s" || ev.key === "S") {
+        setLayer("software");
+      } else if (ev.key === "c" || ev.key === "C") {
+        setLayer("combined");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [project]);
+
   // ------------------------------------------------------------------ actions
 
   const doImport = async (args: ImportArgs) => {
@@ -408,7 +438,8 @@ export default function App() {
           </LayoutContent>} footer={<LayoutFooter hasDivider padding={0}>
             <BottomDrawer open={drawerOpen} onOpen={setDrawerOpen} tab={drawerTab} onTab={setDrawerTab} run={run}
                           observations={observations} serial={serial} expectation={expectation} events={events}
-                          toolCalls={view?.tool_calls ?? []} devices={devices} onDevices={setDevices}
+                          toolCalls={view?.tool_calls ?? []} devices={devices}
+                          onRigSetup={() => setRigSetupOpen(true)}
                           onSaveReplay={saveReplay} onError={(m) => fail(m)} />
           </LayoutFooter>} />
         </LayoutContent>

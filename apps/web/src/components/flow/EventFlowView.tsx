@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@astryxdesign/core/Button";
-import { Card } from "@astryxdesign/core/Card";
+
 import { HStack } from "@astryxdesign/core/HStack";
 import { VStack } from "@astryxdesign/core/VStack";
 import { Text } from "@astryxdesign/core/Text";
@@ -14,6 +14,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Evidence, EventFlow, FlowEvent, FlowLane, GraphLayer, TestRun } from "../../lib/api";
 import { api } from "../../lib/api";
 import { Eyebrow, SourceBadge } from "./common";
+import { InspectorCard } from "./InspectorCard";
 import { CanvasToggles, type CanvasMode } from "../graph/GraphView";
 
 const LANE_LABEL: Record<FlowLane, string> = {
@@ -86,6 +87,18 @@ export function EventFlowView(p: Props) {
   const selectedRun = p.runs.find((r) => r.id === p.runId) ?? null;
   const events = useMemo(() => flow?.events ?? [], [flow]);
   const sel = events[idx] ?? null;
+
+  // ←/→ scrubs the event flow while this view is up (blueprint keyboard layer).
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+      const el = ev.target as HTMLElement;
+      if (el.closest?.("input, textarea, select, [contenteditable]") || el.closest?.("[role='dialog'], dialog")) return;
+      setIdx((i) => Math.max(0, Math.min(events.length - 1, i + (ev.key === "ArrowLeft" ? -1 : 1))));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [events.length]);
 
   // X scale: elapsed ms → % of lane width. Events with unknown timing stack at the start.
   const maxMs = useMemo(() => {
@@ -178,10 +191,10 @@ export function EventFlowView(p: Props) {
           </HStack>
 
           {sel && (
-            <Card padding={3} elevation="low">
+            <InspectorCard eyebrow={`Event — ${LANE_LABEL[sel.lane]}`}>
               <VStack gap={1}>
                 <HStack gap={2} vAlign="center" wrap="wrap">
-                  <Text type="label">{sel.label}</Text>
+                  <Text type="body" weight="semibold">{sel.label}</Text>
                   <StatusDot variant={sel.state === "observed" ? "accent" : sel.state === "expected" ? "neutral" : "warning"}
                              label={sel.state} />
                   <Text type="supporting">{sel.state}{isInvalid(sel) ? " · invalid sample — excluded from evaluation" : ""}</Text>
@@ -211,7 +224,7 @@ export function EventFlowView(p: Props) {
                   </HStack>
                 )}
               </VStack>
-            </Card>
+            </InspectorCard>
           )}
 
           {flow.gaps.length > 0 && (

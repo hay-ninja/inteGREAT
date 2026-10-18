@@ -16,7 +16,7 @@ export function TopBar(p: {
   agents: AgentStatus | null;
   onRescan: () => void;
   onRigSetup: () => void;
-  onOpenDrawer: (tab: "devices" | "audit" | "timeline") => void;
+  onOpenDrawer: (tab: "activity") => void;
   onProjects: () => void;
 }) {
   const serial = p.devices?.serial.connected;
@@ -52,9 +52,8 @@ export function TopBar(p: {
         </HStack>
         <MoreMenu label="More" alignment="end" items={[
           { label: "Rescan repository", description: "After you change the firmware", onClick: p.onRescan },
-          { label: "Devices", description: "Connect ESP32 and camera", onClick: () => p.onOpenDrawer("devices") },
-          { label: "Tool audit", description: "Every tool call and approval", onClick: () => p.onOpenDrawer("audit") },
-          { label: "Timeline", onClick: () => p.onOpenDrawer("timeline") },
+          { label: "Rig setup", description: "Connect ESP32 and camera", onClick: p.onRigSetup },
+          { label: "Activity & tool audit", description: "Every event, tool call and approval", onClick: () => p.onOpenDrawer("activity") },
           { type: "divider" },
           { label: "Switch project", onClick: p.onProjects },
         ]} />

@@ -97,6 +97,7 @@ export function FlowPanel(p: FlowProps) {
       {step === 1 && <RunStep {...p} />}
       {step === 2 && p.view && <InvestigateStep {...p} view={p.view} />}
       {step === 3 && p.view && <VerifyStep {...p} view={p.view} />}
+      <Text type="supporting">Space — next action · 1–4 chapters · D graph · E event flow</Text>
     </VStack>
   );
 }
@@ -142,7 +143,7 @@ function SetupStep(p: FlowProps) {
           inteGREAT reads the firmware and suggests a test. You confirm it before it decides pass or fail.
         </Text>
         {p.conflictNote && <Notice tone="warning" title="Already spotted a problem" body={p.conflictNote} />}
-        <Button label="Suggest a test from the code" variant="primary"
+        <Button label="Suggest a test from the code" variant="primary" className="flow-primary"
                 clickAction={() => api.proposeExpectation(p.projectId).then(p.onExpectation).catch((e) => p.onError(e.message))} />
       </VStack>
     );
@@ -171,7 +172,7 @@ function SetupStep(p: FlowProps) {
           <EvidenceList ids={cites.map((c) => c.id)} evById={evById} onInspect={p.onEvidence} />
         </VStack>
       </Collapsible>
-      <Button label="Confirm test" variant="primary"
+      <Button label="Confirm test" variant="primary" className="flow-primary"
               clickAction={() => api.confirmExpectation(p.projectId, exp.id, {
                 target: draft.target, tolerance: draft.tolerance, deadline_ms: draft.deadline_ms, trigger_value: draft.trigger,
               }).then(p.onExpectation).catch((e) => p.onError(e.message))} />
@@ -200,8 +201,8 @@ function RunStep(p: FlowProps) {
         <Notice tone="success" title="Passed" body={p.run.result.reason} end={<SourceBadge run={p.run} />} />
       )}
       <SourcePicker value={p.source} onChange={p.onSource} sources={p.sources} liveReady={p.liveReady} />
-      {p.source === "live" && !p.liveReady ? <Button label="Set up the live rig" variant="primary" onClick={p.onOpenDevices} /> :
-        <Button label={p.running ? "Running…" : passed ? "Run again" : "Run test"} variant="primary"
+      {p.source === "live" && !p.liveReady ? <Button label="Set up the live rig" variant="primary" className="flow-primary" onClick={p.onOpenDevices} /> :
+        <Button label={p.running ? "Running…" : passed ? "Run again" : "Run test"} variant="primary" className="flow-primary"
                 isLoading={p.running} onClick={p.onRun} />}
     </VStack>
   );
@@ -280,7 +281,8 @@ function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
               : top.title}</Heading>
             {primary && (
               <Button label={checkDone ? `${primary.label} again` : primary.label}
-                      variant={checkDone ? "ghost" : "primary"} isLoading={p.busyActionId === primary.id}
+                      variant={checkDone ? "ghost" : "primary"} className={checkDone ? undefined : "flow-primary"}
+                      isLoading={p.busyActionId === primary.id}
                       tooltip={primary.rationale} onClick={() => p.onAction(primary)} />
             )}
             {checkDone && <VerifyLauncher {...p} label="I made a repair — verify it" emphasis="primary" />}
@@ -367,7 +369,8 @@ function VerifyLauncher(p: FlowProps & { view: InvestigationView; label: string;
   if (!verify) return null;
   return (
     <>
-      <Button label={p.label} variant={p.emphasis} onClick={() => setOpen(true)} />
+      <Button label={p.label} variant={p.emphasis} className={p.emphasis === "primary" ? "flow-primary" : undefined}
+              onClick={() => setOpen(true)} />
       <Dialog isOpen={open} onOpenChange={setOpen} width={500} purpose="form">
         <DialogHeader title="Verify the repair" subtitle="The same command and acceptance criteria will be used." onOpenChange={setOpen} />
       <VStack gap={3} padding={4}>
@@ -496,7 +499,7 @@ function VerifyStep(p: FlowProps & { view: InvestigationView }) {
       {v?.synthetic && <Text type="supporting">Verified on synthetic data, not live hardware.</Text>}
       {v?.result && <Facts result={v.result} />}
       <Text type="body" color="secondary">Was: {view.hypotheses[0]?.title ?? inc.title}</Text>
-      <Button label="Start a new test" variant="primary" onClick={p.onNewTest} />
+      <Button label="Start a new test" variant="primary" className="flow-primary" onClick={p.onNewTest} />
     </VStack>
   );
 }
