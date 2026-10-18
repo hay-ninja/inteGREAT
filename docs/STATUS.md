@@ -4,6 +4,72 @@
 
 **Last updated:** 2026-10-18 · **Current milestone:** dynamic graph generalization + LED demo on `feature/dsg-agent-arch` (D-036–D-038): pin-mediated actuation, inferred hardware/subsystems, board-keyed ids, `led_state` binary metrics, inverted-logic diagnosis, Devin org auto-derive. **Live hardware (H0/M5/M7) still outstanding.**
 
+## Sentry standard install/startup — 2026-10-18 (D-050)
+- Supersedes D-047's optional-extra setup: SDK is in normal API dependencies and normal
+  startup uses the configured DSN automatically. `INTEGREAT_SENTRY_ENABLED` defaults true;
+  false disables all telemetry, including explicit simulation upload. Missing DSN sends
+  nothing. No owner's DSN is hardcoded into source or public examples.
+- Local startup logs report observer state without credentials. History/log/timing-only
+  boundaries, fail-open behavior, 10% trace sampling and per-operation logs are preserved.
+- Standard editable installation succeeded; synthetic off/on replay comparison passed,
+  without hardware, AI calls or upload. Full backend regression: **197 passed**,
+  including the explicit off switch and blocked simulation upload when disabled.
+- Refreshed the idle local API to load default observer startup; DSN remains in ignored
+  `.env`. No frontend or firmware behavior changed.
+
+## Optional Sentry Tracing + Logs — 2026-10-18 (D-047)
+- Implemented as optional `sentry` Python extra + `INTEGREAT_SENTRY_DSN`; disabled by default.
+  Explicit SDK client/scopes, no automatic integrations or frontend changes. Invalid DSN,
+  absent SDK and emission failures leave core workflows usable.
+- Manual traces/logs cover HTTP requests, imports/builds, test runs/collection, diagnosis,
+  StepFun/Gemini structured calls and visual LED observation. Closed metadata vocabulary
+  excludes request contents, prompts/responses, frames, serial text, paths and project IDs.
+  Health/camera/WebSocket traffic and automatic error capture are excluded.
+- Verification: full backend suite **185 passed**; final focused Sentry suite **14 passed**
+  after metadata-filter/sampling refinements. In-memory SDK envelopes prove both products,
+  timing/timeout visibility, content exclusion and enabled/disabled behavior. Only the
+  existing Starlette/httpx deprecation warning. No real Sentry ingestion tested.
+- Next: configure a Sentry project DSN, restart API, capture a genuine issue and its fix
+  with trace/log evidence before claiming sponsor impact. See [setup and demo guide](sentry.md).
+  HTTP transaction duration includes background tasks, not just browser response time.
+
+## Sentry history-only boundary + isolated simulation — 2026-10-18 (D-048)
+- After saved lifecycle events are published, an outbound projection mirrors only fixed
+  event types, source kind and outcome. No raw history content, command channel, Sentry
+  diagnostic agent, automatic Seer repair, or hardware control is added.
+- `scripts/sentry_simulation.py` compares actual synthetic fail/pass replay outcomes and
+  lifecycle history with telemetry off/on using an in-memory database and device stub.
+  Passed locally; real SDK Tracing + Logs envelopes saved to ignored
+  `apps/api/.data/sentry-simulation.json`. No hardware/tool/AI provider access or upload.
+- Focused Sentry regression: **16 passed**, including history privacy and observer-failure
+  isolation. Full backend regression after this slice: **189 passed**. Optional
+  `--send-live` sends that same synthetic workflow after DSN setup;
+  dashboard acceptance must be checked separately, never inferred from queueing.
+- Official Sentry Codex plugin 1.4.5 installed using its documented native CLI fallback
+  after the npm runner's Windows launcher failed. OAuth login succeeded (requested read
+  scopes); CLI reports authenticated. Provisioning/ingestion completed after restart,
+  as recorded below.
+
+## Sentry account + ingestion verified — 2026-10-18 (D-049)
+- Created Python/FastAPI project `ryder-ys/integreat-api` (ID `4512278385655808`), team
+  `ryder`, following the owner's explicit project-setup request. DSN saved only to the
+  ignored `.env`; no repository integration, Seer fixes or hardware commands enabled.
+- Ran `scripts/sentry_simulation.py --send-live`: identical synthetic failure/pass
+  outcomes and lifecycle histories with Sentry off/on; isolated storage, no hardware,
+  tools or AI-provider calls. Confirmed indexed **Tracing + Logs** through Sentry MCP,
+  including `test.completed` outcomes `fail` and `pass` with `source_kind=replay`.
+- Evidence: [synthetic fail trace](https://ryder-ys.sentry.io/explore/traces/trace/12da3ef9a5474cb3a46925fbafa288db),
+  [synthetic pass trace](https://ryder-ys.sentry.io/explore/traces/trace/b5028b8a3a644013b793785fe8fedcf7),
+  [history logs](https://ryder-ys.sentry.io/explore/logs/?project=4512278385655808&logsQuery=operation%3Ahistory.event).
+  Local ignored simulation report records independent ingestion verification.
+- Restarted idle loopback API (serial/camera both disconnected) to load the DSN. Health
+  and read-only fixture endpoint return 200; its new HTTP log was confirmed in Sentry.
+- Saved a Codex plugin tool allowlist for inspection only, excluding generic execution,
+  Seer and issue writes. It applies on the next Codex reload; it is a client-side tool
+  restriction, not a claim that the account's OAuth grants were revoked.
+- Runtime remains outbound-only. This proves integration with synthetic data, not live
+  hardware validation or a measured observability-driven performance improvement.
+
 **Hackathon:** LA Hacks AI Hackathon (Oct 17–18), targeting **Beyond the Digital** and relevant company
 challenges. See [hackathon context](hackathon-context.md) for supplied requirements and candidate fit;
 this adds context without changing P0 scope.

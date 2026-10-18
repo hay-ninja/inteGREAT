@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +15,7 @@ from .api.visual import router as visual_router
 from .api.ws import Hub
 from .config import Settings, load_settings
 from .observations.devices import DeviceManager
+from .observability import TelemetryMiddleware
 from .repair import DevinClientProtocol
 from .service import Service, ServiceError
 from .storage.db import Store
@@ -31,11 +33,19 @@ def create_app(settings: Settings | None = None, llm: LLMProvider | None = None,
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        yield
-        service.devices.shutdown()  # free the COM port and camera on exit
+        logging.getLogger("uvicorn.error").info("Sentry observer: %s", service.telemetry.status)
+        try:
+            yield
+        finally:
+            try:
+                service.devices.shutdown()  # free the COM port and camera on exit
+            finally:
+                service.telemetry.close()
 
     app = FastAPI(title="inteGREAT API", version="0.2.0", lifespan=lifespan)
     app.state.service = service
+    if service.telemetry.client is not None:
+        app.add_middleware(TelemetryMiddleware, telemetry=service.telemetry)
     app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
                        allow_methods=["*"], allow_headers=["*"])
 

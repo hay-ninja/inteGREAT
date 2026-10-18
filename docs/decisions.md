@@ -623,3 +623,52 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   GPIO34/35 lack internal pull resistors, and GPIO12 is a strapping pin.
 - Superseding the previous GPIO32 choice within D-046: owner narrowed available pins
   to 0/2/4/15; use GPIO4, the non-strapping option supporting INPUT_PULLUP.
+
+### D-047 Opt-in backend Sentry Tracing + Logs — 2026-10-18
+- Owner requested a low-risk Sentry integration for the sponsor challenge. Use an optional
+  Python extra and app-specific DSN, disabled by default, with no frontend changes.
+- Explicit SDK client/scopes and manual workflow spans avoid global initialization and
+  automatic FastAPI, HTTP, logging or generative-AI instrumentation. Do not upload prompts,
+  frames, request bodies, tokens, raw logs, paths, exception messages or source context.
+- Closed metadata vocabulary and envelope export filters protect both Tracing and Logs;
+  SDK failures must not change workflow results. No automatic error capture or replay.
+- Instrument imports/builds, tests/collection, diagnosis/provider calls and LED observation.
+  HTTP spans exclude health, camera and WebSocket traffic. HTTP timing includes background
+  tasks and must not be represented as browser response latency.
+- The challenge also requires a real observability-driven improvement story. An SDK envelope
+  regression test with a delayed fake provider proves instrumentation only, not live ingestion,
+  a production bug, or performance improvements. Keep that distinction in the submission.
+
+### D-048 Sentry observes history without control authority — 2026-10-18
+- Owner explicitly limits Sentry to history/log observation, with simulation before live
+  export. Mirror a sanitized lifecycle projection after authoritative event persistence
+  and fan-out. Observer failure/return values cannot change diagnostics or the timeline.
+- Add a standalone synthetic replay comparison with in-memory storage and a device stub
+  that has no hardware interfaces; no user AI credentials or diagnostic tools are used.
+  Default export stays local; `--send-live` explicitly uses the configured Sentry DSN.
+- Sentry's Codex plugin is a development-time connection, separate from app runtime.
+  Request inspection-only MCP consent; no Seer/triage/project management permission is
+  needed for ongoing observation. Initial project provisioning can happen in the web UI.
+
+### D-049 Provision once, then limit ongoing Sentry tools to inspection — 2026-10-18
+- Owner explicitly requested project creation and end-to-end verification. After the
+  plugin reload, no Sentry project existed. Provisioned only `integreat-api` under the
+  existing `ryder` team, without repository linkage; private DSN stays in ignored `.env`.
+- Verified actual Sentry ingestion of synthetic fail/pass replay traces and history logs,
+  then refreshed the idle local backend and verified its read-only request log. No raw
+  source/history, hardware commands, AI-provider calls or Sentry-driven decisions added.
+- After provisioning, use the documented plugin-specific `enabled_tools` config to expose
+  only direct inspection tools. Exclude Seer, issue mutations and the generic executor
+  that could otherwise invoke write tools. New config takes effect on Codex reload.
+  This is a local capability boundary; existing OAuth grants have not been revoked.
+
+### D-050 Standard Sentry install and startup, with explicit opt-out — 2026-10-18
+- Owner requested Sentry as the default workflow. Move the SDK from an optional extra
+  into the normal API dependency list. A configured DSN automatically starts the observer;
+  no simulation command or separate integration install is needed for normal use.
+- `INTEGREAT_SENTRY_ENABLED` defaults true and provides an explicit false/off switch.
+  Without a deployment-specific DSN, send nothing and start normally. Do not hardcode
+  the owner's ingestion key into public source or ship it as a default for every clone.
+- Report observer state locally at startup. Preserve sanitization, fail-open behavior,
+  10% default trace sampling, per-operation Logs and the outbound-only control boundary.
+  Explicit simulation export also respects the off switch.

@@ -18,6 +18,9 @@ import repo + hardware manifest → dependency graph → run a test → evidence
 - **Bounded agents:** one initial fan-out + one follow-up per incident. No open-ended loops.
 - **Core works without AI:** rules + graph + tests must function if Gemini is down.
 - **Existing firmware only:** inteGREAT never requires its own instrumentation in user firmware.
+- **Sentry is an observer:** export sanitized history/log/timing metadata only. Never use
+  Sentry/Seer output to change diagnostics, execute tools, patch firmware or control devices.
+  Keep the account connection inspection-only and validate changes with synthetic replay first.
 
 ## Layout
 - `apps/api/integreat/` — FastAPI modular monolith (package `integreat`). `models/` is the single source

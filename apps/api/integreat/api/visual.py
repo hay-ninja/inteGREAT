@@ -141,6 +141,12 @@ async def start(pid: str, body: VisualRunRequest, request: Request, bg: Backgrou
 
 
 async def observe(s, config, run, camera):
+    with s.telemetry.operation("visual.observe") as state:
+        await _observe(s, config, run, camera)
+        state["outcome"] = run.outcome
+
+
+async def _observe(s, config, run, camera):
     ids = list(dict.fromkeys(r.component_id for r in config.references))
     pairs = {cid: {r.state: r for r in config.references if r.component_id == cid} for cid in ids}
     t0, seq = time.monotonic_ns(), -1

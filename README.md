@@ -13,6 +13,11 @@ next steps — then verify the fix with the same test. No firmware instrumentati
 
 ## Quick start (Windows)
 
+Backend [Sentry Tracing + Logs](docs/sentry.md) is included in the standard install and
+starts automatically when `INTEGREAT_SENTRY_DSN` is configured in `.env`. It observes
+sanitized history and timing only. Set `INTEGREAT_SENTRY_ENABLED=false` to opt out;
+without a DSN, the app starts normally and sends nothing.
+
 ```powershell
 cd apps/api; py -3.13 -m venv .venv; .venv/Scripts/python -m pip install -e ".[dev]"; cd ../..
 cd apps/web; npm install; cd ../..

@@ -47,6 +47,12 @@ class Settings:
     # Gemini specialists' ~10s calls (reasoning tokens alone can exceed 30s of generation).
     orchestrator_timeout_s: float = 120.0
     max_context_tokens: int = 6000
+    # Standard observer; an empty DSN sends nothing, and the explicit switch can disable it.
+    sentry_enabled: bool = True
+    sentry_dsn: str | None = None
+    sentry_environment: str = "development"
+    sentry_release: str = "integreat@0.1.0"
+    sentry_traces_sample_rate: float = 0.1
 
     @property
     def replay_dir(self) -> Path:
@@ -72,4 +78,18 @@ def load_settings() -> Settings:
         agent_timeout_s=float(os.environ.get("INTEGREAT_AGENT_TIMEOUT_S", "30")),
         orchestrator_timeout_s=float(os.environ.get("INTEGREAT_ORCHESTRATOR_TIMEOUT_S", "120")),
         max_context_tokens=int(os.environ.get("INTEGREAT_MAX_CONTEXT_TOKENS", "6000")),
+        sentry_enabled=os.environ.get("INTEGREAT_SENTRY_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"},
+        sentry_dsn=os.environ.get("INTEGREAT_SENTRY_DSN") or None,
+        sentry_environment=os.environ.get("INTEGREAT_SENTRY_ENVIRONMENT", "development"),
+        sentry_release=os.environ.get("INTEGREAT_SENTRY_RELEASE", "integreat@0.1.0"),
+        sentry_traces_sample_rate=_telemetry_rate(),
     )
+
+
+def _telemetry_rate() -> float:
+    """Bad optional telemetry config must not prevent the application starting."""
+    try:
+        rate = float(os.environ.get("INTEGREAT_SENTRY_TRACES_SAMPLE_RATE", "0.1"))
+        return rate if 0 <= rate <= 1 else 0.1
+    except ValueError:
+        return 0.1

@@ -94,6 +94,7 @@ from .observations.live import LiveStream
 from .observations.replay import ReplayError, ReplayEvent, list_replays, load_replay
 from .observations.sim import SIM_SCENARIOS, SimCamera, SimRig, SimSerial, conditions_for
 from .storage.db import Store
+from .observability import ObservedProvider, Telemetry, observed
 from .tools.executor import ToolDenied, ToolExecutor, ToolFailed
 from .tools.registry import tool_args
 
@@ -149,17 +150,26 @@ class Service:
                  specialist_llm: LLMProvider | None = None,
                  devin: DevinClientProtocol | None = None):
         self.store, self.settings, self.hub = store, settings, hub
+        self.telemetry = Telemetry(settings)
         self.devices = devices or DeviceManager()
         self.tools = ToolExecutor(self)
         # `llm` fills BOTH roles (test fakes); explicit role providers win (D-023).
         self.specialist_llm = specialist_llm or llm or make_specialist_provider(settings)
         self.orchestrator_llm = orchestrator_llm or llm or make_orchestrator_provider(settings)
+        if self.telemetry.client is not None:
+            self.specialist_llm = ObservedProvider(self.specialist_llm, self.telemetry)
+            self.orchestrator_llm = ObservedProvider(self.orchestrator_llm, self.telemetry)
         self.llm = self.specialist_llm  # compat for older callers
         self.devin = devin or make_devin(settings)
         self.orchestrator = Orchestrator(self)
 
     def _emit(self, type: str, project_id: str, payload: dict | None = None, **kw) -> None:
         self.hub.publish(IntegreatEvent(type=type, project_id=project_id, payload=payload or {}, **kw))
+        # Outbound-only projection after persistence/fan-out. No observer result is applied.
+        try:
+            self.telemetry.history_event(type, payload or {})
+        except Exception:
+            pass  # An observer must never change the authoritative event stream.
 
     def transition(self, inc: Incident, new: IncidentState) -> IncidentState:
         try:
@@ -169,6 +179,7 @@ class Service:
 
     # ------------------------------------------------------------------ projects & graph
 
+    @observed("project.import")
     def import_project(self, req: ImportRequest) -> Project:
         project = self._build(_id("project"), req, version=1, overrides={})
         self._emit("project.imported", project.id, {"name": project.name, "issues": len(project.issues)})
@@ -216,6 +227,7 @@ class Service:
                 issues.append(ImportIssue(level="error", code="MANIFEST_INVALID", message=str(e)))
         return None, {}, None, "none"
 
+    @observed("project.build")
     def _build(self, pid: str, req: ImportRequest, version: int, overrides: dict, created_at=None) -> Project:
         try:
             scan = scan_repository(req.repo_path)
@@ -499,6 +511,7 @@ class Service:
         return (self.store.list(K_OBS, Observation, parent_id=run_id),
                 self.store.list(K_SERIAL, SerialEvent, parent_id=run_id))
 
+    @observed("test.run")
     async def execute_test_run(self, run_id: str) -> TestRun:
         run = self.test_run(run_id)
         pid = run.project_id
@@ -582,6 +595,7 @@ class Service:
                            estimator=d.camera.estimator(), window_ms=exp.deadline_ms),
                 "opencv", d.camera.source.source_id)
 
+    @observed("test.collect")
     async def _collect(self, run: TestRun, exp: Expectation):
         stream, cv_type, src = self._stream(run, exp)
         analysis = self.store.get(K_ANALYSIS, run.project_id, ProjectAnalysis)
@@ -930,6 +944,7 @@ class Service:
         except DiagnosisRefused as e:
             raise ServiceError(e.status, e.code, e.message) from e
 
+    @observed("diagnosis.run")
     async def run_diagnosis(self, iid: str) -> list[AgentRun]:
         return await self.orchestrator.run_round(iid)
 
