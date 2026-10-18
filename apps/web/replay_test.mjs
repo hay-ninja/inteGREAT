@@ -8,14 +8,14 @@ page.on("response", (r) => { if (r.status() >= 400) errors.push(`${r.status()} $
 const log = (...a) => console.log("•", ...a);
 const shots = "C:/Users/hayre/AppData/Local/Temp/integreat-shots";
 
-/** Pick a scenario in a SourcePicker inside `scope`: segment → Selector → option. */
+/** Pick a scenario in a SourcePicker inside `scope`: segment → combobox → option. */
 async function pickScenario(scope, segment, optionName) {
   await scope.getByText(segment, { exact: true }).click();
   await page.waitForTimeout(300);
-  const combo = scope.locator("button, [role=combobox]").filter({ hasText: /wired as declared|condition|Recording|replay|sim|halloween|good|disconnected|connected|marker/i }).last();
-  await combo.click().catch(() => undefined);
-  await page.waitForTimeout(300);
-  await page.getByRole("option", { name: new RegExp(optionName, "i") }).or(page.getByText(optionName, { exact: false })).last().click();
+  await scope.locator("[role=combobox]").last().click();
+  const opt = page.getByRole("option", { name: new RegExp(optionName, "i") }).last();
+  await opt.waitFor({ state: "visible", timeout: 5000 });
+  await opt.click();
   await page.waitForTimeout(200);
 }
 
@@ -45,19 +45,22 @@ for (const layer of ["Hardware", "Software", "All"]) {
 }
 log("layer switching ok");
 
-// Ghost incident is open on load; the recorded repeat runs under any source pick.
+// The ghost expectation is the default (last confirmed); the recorded run fires
+// under any source pick via the expectation match.
 const runBtn = page.locator("button").filter({ hasText: /Run the test again|Run test|Run again/ }).first();
+await runBtn.waitFor({ state: "visible", timeout: 10000 }).catch(() => log("NO run button"));
 if (await runBtn.isVisible().catch(() => false)) {
   await runBtn.click();
   await page.waitForSelector("text=In short", { timeout: 15000 }).catch(() => log("NO run result"));
 }
 await page.locator(".chapter").nth(1).click(); // Debug
 await page.waitForTimeout(600);
+await page.getByText("Potential causes").first().click().catch(() => undefined);
+await page.waitForTimeout(400);
 log("inverted hypothesis:", await page.getByText("Inverted drive logic").first().isVisible().catch(() => false));
 await page.screenshot({ path: `${shots}/r03-inverted.png` });
 
 // Verify with the recorded good replay.
-await page.getByText("Potential causes").first().click().catch(() => undefined);
 await page.waitForTimeout(400);
 await page.locator("button").filter({ hasText: /verify it|verify this/i }).first().click();
 await page.waitForTimeout(500);
@@ -69,14 +72,17 @@ await page.screenshot({ path: `${shots}/r04-verified.png` });
 
 // ---- Arc B: the pumpkin flicker incident, reached via History ----
 await page.locator(".chapter").nth(3).click(); // History
-await page.waitForTimeout(900);
-const flickerRow = page.getByText("FLICKER", { exact: true }).first();
+await page.waitForTimeout(1200);
+const flickerRow = page.locator(".history-row").filter({ hasText: "FLICKER" }).filter({ hasText: "investigation" }).first();
 if (await flickerRow.isVisible().catch(() => false)) {
   await flickerRow.click();
-  await page.waitForTimeout(900);
+  await page.waitForTimeout(1200);
   await page.locator(".chapter").nth(1).click();
-  await page.waitForTimeout(600);
-  log("pumpkin incident:", await page.getByText(/signal lead disconnected|Power or ground/).first().isVisible().catch(() => false));
+  await page.waitForTimeout(700);
+  await page.getByText("Potential causes").first().click().catch(() => undefined);
+  const ok = await page.locator("button").filter({ hasText: /Check signal connection|Prepare software fix/ }).first()
+    .waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false);
+  log("pumpkin incident:", ok);
   await page.screenshot({ path: `${shots}/r05-pumpkin.png` });
 } else log("NO flicker run in history");
 
@@ -90,12 +96,18 @@ await page.getByText("Simulated · ~5 minutes").nth(1).click();
 await page.locator("dialog").getByText("Load demo").click();
 await page.waitForSelector(".graph-canvas", { timeout: 15000 }).catch(() => page.screenshot({ path: `${shots}/r06b-stuck.png` }));
 log("fault A canvas:", await page.locator(".graph-canvas").isVisible().catch(() => false));
+await page.locator(".chapter").nth(0).click(); // Test
+await page.waitForTimeout(500);
 const runBtn2 = page.locator("button").filter({ hasText: /Run the test again|Run test|Run again/ }).first();
+await runBtn2.waitFor({ state: "visible", timeout: 10000 }).catch(() => log("no fault-A run button"));
 if (await runBtn2.isVisible().catch(() => false)) {
   await runBtn2.click();
   await page.waitForSelector("text=In short", { timeout: 15000 }).catch(() => log("no fault-A result"));
 }
-log("gpio mismatch:", await page.getByText("Incorrect GPIO mapping").isVisible().catch(() => false));
+await page.locator(".chapter").nth(1).click(); // Debug
+await page.waitForTimeout(700);
+await page.getByText("Potential causes").first().click().catch(() => undefined);
+log("gpio mismatch:", await page.waitForSelector("text=Incorrect GPIO mapping", { timeout: 10000 }).then(() => true).catch(() => false));
 await page.screenshot({ path: `${shots}/r06-faulta.png` });
 const inspect = page.locator("button").filter({ hasText: "Inspect GPIO mapping" }).first();
 if (await inspect.isVisible().catch(() => false)) {
@@ -118,16 +130,18 @@ await page.waitForTimeout(1500);
 await page.getByRole("button", { name: "Map", exact: true }).first().click().catch(() => undefined);
 await page.waitForSelector(".graph-canvas", { timeout: 15000 }).catch(() => page.screenshot({ path: `${shots}/r08b-stuck.png` }));
 log("fault B canvas:", await page.locator(".graph-canvas").isVisible().catch(() => false));
+await page.locator(".chapter").nth(0).click(); // Test
+await page.waitForTimeout(500);
 const runBtn3 = page.locator("button").filter({ hasText: /Run the test again|Run test|Run again/ }).first();
+await runBtn3.waitFor({ state: "visible", timeout: 10000 }).catch(() => log("no fault-B run button"));
 if (await runBtn3.isVisible().catch(() => false)) {
   await runBtn3.click();
   await page.waitForSelector("text=In short", { timeout: 15000 }).catch(() => log("no fault-B incident"));
-  log("fault B tied hypotheses:", await page.getByText(/signal lead disconnected|Power or ground/).first().isVisible().catch(() => false));
-  await page.screenshot({ path: `${shots}/r08-faultb.png` });
-  await page.locator(".chapter").nth(1).click();
-  await page.waitForTimeout(300);
+  await page.locator(".chapter").nth(1).click(); // Debug
+  await page.waitForTimeout(700);
   await page.getByText("Potential causes").first().click().catch(() => undefined);
-  await page.waitForTimeout(300);
+  log("fault B tied hypotheses:", await page.waitForSelector("text=/Signal or power|signal lead|power or ground/i", { timeout: 10000 }).then(() => true).catch(() => false));
+  await page.screenshot({ path: `${shots}/r08-faultb.png` });
   const check = page.locator("button").filter({ hasText: /Check signal|Check servo/i }).first();
   if (await check.isVisible().catch(() => false)) {
     await check.click();
@@ -156,5 +170,8 @@ const overflow = await page.evaluate(() => document.documentElement.scrollWidth 
 log("800px horizontal overflow:", overflow);
 await page.screenshot({ path: `${shots}/r10-800.png` });
 
-console.log("\nconsole errors:", errors.length ? errors.slice(0, 8) : "none");
+// /api/v1/health 404 is what switches the app into replay mode; stream.mjpg 404s are
+// the camera preview probing a backend that isn't there — both expected in hosted demo.
+const real = errors.filter((e) => !/api\/v1\/health|stream\.mjpg/.test(e));
+console.log("\nconsole errors:", real.length ? real.slice(0, 8) : "none (expected hosted 404s ignored)");
 await browser.close();

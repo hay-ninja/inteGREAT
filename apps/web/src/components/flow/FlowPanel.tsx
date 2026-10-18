@@ -89,6 +89,7 @@ export function FlowPanel(p: FlowProps) {
   const auto = autoView(p);
   const [viewing, setViewing] = useState<FlowView | null>(null);
   useEffect(() => setViewing(null), [auto]);
+  useEffect(() => setViewing(null), [p.projectId]); // don't leak a view pick across projects
   const requestSeq = p.viewRequest?.seq;
   useEffect(() => { if (p.viewRequest) setViewing(p.viewRequest.view); }, [requestSeq]); // eslint-disable-line react-hooks/exhaustive-deps
   const view = viewing ?? auto;

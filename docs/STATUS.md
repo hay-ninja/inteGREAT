@@ -2,7 +2,7 @@
 
 > Update this at the end of every verifiable slice. Keep it short; history lives in git, intent in `decisions.md`.
 
-**Last updated:** 2026-10-18 · **Current milestone:** dynamic graph generalization + LED demo on `feature/dsg-agent-arch` (D-036–D-038): pin-mediated actuation, inferred hardware/subsystems, board-keyed ids, `led_state` binary metrics, inverted-logic diagnosis, Devin org auto-derive. **Live hardware (H0/M5/M7) still outstanding.**
+**Last updated:** 2026-10-18 · **Current milestone:** halloween demo rig + hosted replay verified end-to-end (D-050–D-052): two LEDs, two fault arcs, Devin repair reachable past verified physical checks, replay bundle re-recorded. **Live hardware (H0/M5/M7) still outstanding.**
 
 **Hackathon:** LA Hacks AI Hackathon (Oct 17–18), targeting **Beyond the Digital** and relevant company
 challenges. See [hackathon context](hackathon-context.md) for supplied requirements and candidate fit;
@@ -294,6 +294,9 @@ What remains is hardware validation.
 - Backend tests: `cd apps/api && .venv/Scripts/python -m pytest -q` · Frontend: `cd apps/web && npx tsc -b && npm test`
 - After changing backend models: `apps/api/.venv/Scripts/python scripts/gen_api_types.py && (cd apps/web && npm run gen:types)`
 - Synthetic replays: `scripts/gen_synthetic_replays.py` · Markers: `scripts/make_aruco_markers.py` · Gemini check: `scripts/gemini_smoke.py`
+- Hosted replay bundle: `apps/api/.venv/Scripts/python scripts/capture_demo_replay.py` (API on :8000) →
+  `apps/web/public/replay/demo.json`; then `cd apps/web && npm run build` and serve `dist/` statically.
+  Verify with `node apps/web/replay_test.mjs` against `http://localhost:8080`.
 
 ## IDE panels + landing page (D-033) — done 2026-10-18
 - Resizable side panels: rail via SideNav `resizable`, guided steps panel via
@@ -446,3 +449,36 @@ What remains is hardware validation.
 - Drawer tables capped (serial 800 / timeline+audit 500 rows).
 - Verified: tsc clean, 17/17 vitest, build clean, drawer_test all gestures,
   scroll_test 579px on 8 wheel ticks, zero console errors.
+
+## Halloween demo rig + hosted replay (D-050–D-052) — done 2026-10-18
+- **Fixture:** `fixtures/esp32_halloween/` + `fixtures/manifests/esp32_halloween.yaml` —
+  two LEDs, two fault stories. Ghost LED: `active_low` wiring but firmware drives
+  HIGH for "on" → `INVERTED_LOGIC` ("LED responded but ended wrong"). Pumpkin
+  candle LED: `FLICKER` acknowledged (`ACK FLICKER`/`DONE FLICKER`) yet LED stays
+  dark → `POSSIBLE_POWER_OR_SIGNAL_FAULT` branch.
+- **Targeted proposals (D-050):** `/expectations/propose` takes optional
+  `component_id`/`command`; multi-component rigs get a component picker, and an
+  expectation picker appears when a project holds >1 expectation. Confirming an
+  edited `trigger_value` re-resolves `ack_pattern` (ACK-prefixed literals win
+  over suffix matches like `DONE FLICKER` — stale `ACK GHOST ON` can no longer
+  cause a false `MISSING_SERIAL_ACK`).
+- **Repair gating (D-051):** "Prepare software fix with Devin" is also offered on
+  the signal/power branch, and verified-clean manual checks count as software
+  evidence — an *unverified* physical fault still can't launch a remote fix.
+  Capture drove a real Devin session (`repair:6ed9621d75` → `needs_input`,
+  surfaced honestly as waiting-for-engineer, not success).
+- **Replay robustness (D-052):** request-key canonicalization (`90.0` vs `90`)
+  and `expectation_id` fallback matching for recorded runs.
+- **Capture:** `scripts/capture_demo_replay.py` now records the halloween project
+  (both incidents, manual checks, repair preflight/jobs) alongside the legacy
+  LED fault-A/fault-B projects — 187 routes, 84 evidence records, ~1.5 MB bundle
+  at `apps/web/public/replay/demo.json`. Scoped-graph requests are derived from
+  the imported project (no hardcoded `subsystem:motor_control`).
+- **Verified:** 178 pytest, 17/17 vitest, `tsc -b` clean, `vite build` clean.
+  `apps/web/replay_test.mjs` against static `dist/` on :8080 — ALL PASS:
+  hosted banner, graph + layer switching, inverted hypothesis, ghost resolved,
+  pumpkin incident w/ signal-power causes + Devin action, GPIO mismatch,
+  tied hypotheses + manual check, 4-lane event flow, no 800px overflow, only
+  expected hosted-mode 404s (health probe, MJPEG camera).
+- `viewing` (chapter pick) now resets on project switch — a stale Debug pick no
+  longer hides the Test view of the next project.

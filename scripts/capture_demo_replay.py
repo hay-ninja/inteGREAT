@@ -250,6 +250,20 @@ def capture_halloween(fx: dict) -> dict:
     proj = import_project(fx)
     pid = proj["id"]
 
+    # Pumpkin's expectation is created FIRST so the ghost ends up "last confirmed" —
+    # that is the expectation a judge lands on, so arc A is the first test run.
+    pumpkin = call("POST", f"/projects/{enc(pid)}/expectations/propose",
+                   {"component_id": "component:pumpkin_led"})
+    # The proposal prefers the ON literal; the engineer retypes the flicker command
+    # in the confirm card — the backend re-resolves the ACK pattern. Record the
+    # unedited confirm too, in case a judge confirms the proposal as-suggested.
+    base = {"target": pumpkin["target"], "tolerance": pumpkin["tolerance"],
+            "deadline_ms": pumpkin["deadline_ms"]}
+    call("POST", f"/projects/{enc(pid)}/expectations/{enc(pumpkin['id'])}/confirm",
+         {**base, "trigger_value": pumpkin["trigger"]["value"]})
+    call("POST", f"/projects/{enc(pid)}/expectations/{enc(pumpkin['id'])}/confirm",
+         {**base, "trigger_value": "FLICKER"})
+
     # --- Arc A: ghost LED, GHOST ON — command ACKed, LED responds, ends wrong ---
     ghost = call("POST", f"/projects/{enc(pid)}/expectations/propose",
                  {"component_id": "component:ghost_led"})
@@ -275,17 +289,6 @@ def capture_halloween(fx: dict) -> dict:
 
     # --- Arc B: pumpkin candle, FLICKER — ACKed but dark. Bench checks clear the
     # physical path, then Devin prepares a firmware fix on an isolated branch ---
-    pumpkin = call("POST", f"/projects/{enc(pid)}/expectations/propose",
-                   {"component_id": "component:pumpkin_led"})
-    # The proposal prefers the ON literal; the engineer retypes the flicker command
-    # in the confirm card — the backend re-resolves the ACK pattern. Record the
-    # unedited confirm too, in case a judge confirms the proposal as-suggested.
-    base = {"target": pumpkin["target"], "tolerance": pumpkin["tolerance"],
-            "deadline_ms": pumpkin["deadline_ms"]}
-    call("POST", f"/projects/{enc(pid)}/expectations/{enc(pumpkin['id'])}/confirm",
-         {**base, "trigger_value": pumpkin["trigger"]["value"]})
-    call("POST", f"/projects/{enc(pid)}/expectations/{enc(pumpkin['id'])}/confirm",
-         {**base, "trigger_value": "FLICKER"})
     run = call("POST", f"/projects/{enc(pid)}/tests",
                {"expectation_id": pumpkin["id"],
                 "source": {"kind": "replay", "scenario": "halloween_flicker_dark"}})

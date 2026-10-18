@@ -696,3 +696,49 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   their refresh trigger. App state now only changes on lifecycle events, so
   stream traffic produces zero App-tree renders. Drawer tables capped at
   800/500 rows to bound rebuild cost per flush.
+
+### D-050 Targeted expectations + ack re-resolution — 2026-10-18
+- **Problem:** a two-LED rig (halloween fixture) could only get one proposed
+  expectation — the proposer walked the first actuation path it found, and the
+  UI kept a single expectation per project. Worse, editing `trigger_value`
+  (e.g. `GHOST ON` → `FLICKER`) left the proposed `ack_pattern` (`ACK GHOST
+  ON`) behind → a false `MISSING_SERIAL_ACK` even though serial showed
+  `ACK FLICKER`.
+- **Choice:** `POST /expectations/propose` accepts optional `component_id` +
+  `command`; an explicit engineer command is used verbatim (no auto-appended
+  ` ON`). The Test view gets a component picker before "Suggest a test" on
+  multi-component rigs and an expectation picker when >1 expectation exists;
+  the selected expectation drives confirm/run. On confirm, a changed
+  `trigger_value` re-resolves `ack_pattern` from parsed log literals,
+  preferring literals that *start with* `ACK ` over incidental suffix matches
+  (`DONE FLICKER` also ends with `FLICKER` — it must never win).
+- Multi-expectation ordering matters for the demo: the last-confirmed
+  expectation is the workspace default on fresh open, so capture confirms the
+  primary arc's expectation last.
+
+### D-051 Devin repair reachable only past verified physical checks — 2026-10-18
+- **Problem:** `prepare_software_fix` was offered on `GPIO_CONFIG_MISMATCH` /
+  `INVERTED_LOGIC` but never on the signal/power branch — so a pure firmware
+  bug (e.g. the halloween `uint8_t` flicker-loop wrap) could never reach the
+  repair arc, even after the engineer had *verified* the wiring healthy.
+- **Choice:** the power/signal hypothesis actions now include "Prepare software
+  fix with Devin", and `_software_evidence` counts verified-clean manual checks
+  (signal connected AND power present → suspicion shifts to code) alongside
+  not-ruled-out `GPIO_CONFIG_MISMATCH`/`INVERTED_LOGIC`. An *unverified*
+  power/signal incident still cannot launch a remote fix — the preflight gate
+  is unchanged. `needs_input` (Devin suspended/waiting) is surfaced as-is;
+  nothing claims the session finished.
+
+### D-052 Replay request keys canonicalized + expectation fallback — 2026-10-18
+- **Problem:** hosted-demo POST routes are keyed by SHA-1 of the serialized
+  body. Python's `json.dumps` emits `90.0` where JS `JSON.stringify` emits
+  `90` — a confirm recorded through the API 404'd when the hosted frontend
+  replayed the same logical request. A judge picking a different replay source
+  also produced a different run-request body → honest `hosted_demo` error even
+  though the right run was recorded.
+- **Choice:** `key_for` (capture) and the hosted `replayReq` normalize
+  integral floats before hashing (`90.0` → `90`), and `replayReq` falls back
+  to matching recorded `POST /tests` responses by `expectation_id` when no
+  exact body key matches — the recorded run *for that expectation* is served
+  regardless of which source variant the judge picked. Matching stays
+  expectation-scoped so the wrong run can't leak across expectations.
