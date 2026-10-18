@@ -23,7 +23,7 @@ this adds context without changing P0 scope.
 | M8 | Expansion: graph layers (D-023), Event Flow (D-024), StepFun orchestration + Devin repair (D-025) | **done in software** — real adapters + deterministic fallbacks tested; **live StepFun/Gemini/Devin calls blocked: no API keys** |
 
 ## What works now (verified 2026-10-18, `feature/dsg-agent-arch`)
-- **Tests:** 136 backend (pytest) + 17 frontend (vitest) passing; `tsc -b` clean; production build passing.
+- **Tests:** 174 backend (pytest) + 17 frontend (vitest) passing; `tsc -b` clean; production build passing.
 - **LED demo end-to-end (all replay + sim, no hardware):** import `esp32_led_demo*` fixtures →
   `led_state` expectation (`LED ON`, `on_level: HIGH` resolved from source) → three faults
   diagnosed distinctly — wrong-pin `GPIO_CONFIG_MISMATCH`, dead-lead `POSSIBLE_POWER_OR_SIGNAL_FAULT`,
@@ -337,8 +337,7 @@ What remains is hardware validation.
 - Frontend typecheck, 17 frontend tests, and production build pass. Backend regression:
   126 passed; two subsequently added API connect/preview/release tests also pass
   (19 phone-camera tests total). Only the dependency's Starlette/httpx deprecation warning.
-- No real phone camera tested. LED brightness evaluation remains unimplemented; live test
-  readiness/calibration still follows the servo-marker contract.
+- No real phone camera tested. LED brightness evaluation landed later (D-047).
 
 ## iPhone browser camera — 2026-10-18 (D-043; upstream called it D-036)
 - Rig setup adds iPhone / Safari (no app) pairing, copyable revocable link, and polling
@@ -353,7 +352,7 @@ What remains is hardware validation.
 - Validation: 135 backend tests, 17 frontend tests, frontend typecheck and production build
   pass; certificate generation and CLI checked. Chromium synthetic-camera walkthrough
   verifies capture/upload/stop and token removal; real Safari/certificate trust/LAN still
-  need owner-device validation. LED brightness evaluation remains unimplemented.
+  need owner-device validation. LED brightness evaluation landed later (D-047).
 
 ## History view + provenance labels (D-044) — done 2026-10-18
 - Fourth flow view **History**: scrollable timeline of every project run (passes
@@ -397,3 +396,24 @@ What remains is hardware validation.
 - Verified: `tsc -b` clean, 17/17 vitest, build clean; drawer_test (all gestures,
   zero console errors); scroll_test wheels over the drawer — 579px on 8 ticks,
   no dead zones, no pageerrors.
+
+## Live LED computer vision (D-047) — done 2026-10-18
+- Live CV path is metric-aware: `CameraManager` keys estimators per
+  `source_id` × `metric:component_id`; an `led_state` live run picks the LED
+  estimator for that component, and the run gate requires *its* baseline — a servo
+  angle calibration no longer satisfies an LED expectation (and vice versa).
+- `LedStateEstimator` accepts a fixed pixel ROI (locator-provided) with the
+  ArUco-anchored offset as fallback; `calibrate()` records the off-baseline only.
+- **Blink-to-find** (`POST /devices/camera/locate-led`): engineer-confirmed fixed
+  serial commands toggle the LED; averaged off/on frames are diffed → candidate
+  ROIs. One candidate → auto-set; many → engineer picks; zero → honest empty.
+- **Manual ROI** (`POST /devices/camera/led-roi`) + `mode: "led_baseline"` on the
+  existing calibrate route (angle mode unchanged). Environment setup dialog shows
+  the LED section only for `led_state` expectations: blink button, candidate
+  region buttons, manual x,y,w,h box, re-baseline.
+- Calibration is **in-memory** — re-setup after backend restart is deliberate.
+- Preview: `frame.jpg`/`stream.mjpg` accept `?metric=`/`?component=`; without them
+  the overlay draws every configured LED ROI plus the angle readout.
+- Verified: 174/174 pytest (11 new LED-CV tests incl. locator units, keyed
+  estimators, both gating directions), 17/17 vitest, `tsc -b`, `vite build`.
+  **Not run on real hardware** — all verification is synthetic frames/loop serial.

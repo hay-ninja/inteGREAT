@@ -57,6 +57,9 @@ from .models import (
     IncidentState,
     IntegreatEvent,
     InvestigationView,
+    LedLocateResult,
+    LedRoiRequest,
+    LocateLedRequest,
     LogLiteral,
     ManualResultRequest,
     NetlistPreview,
@@ -88,7 +91,7 @@ from .repair import (REPAIR_OUTPUT_SCHEMA, DevinClientProtocol, DevinUnavailable
                      build_brief,
                      make_devin, map_remote_state, repo_snapshot)
 from .observations.cv_angle import ArucoAngleEstimator, render_scene
-from .observations.cv_led import render_led_scene
+from .observations.cv_led import locate_candidates, render_led_scene
 from .observations.devices import DeviceManager
 from .observations.live import LiveStream
 from .observations.replay import ReplayError, ReplayEvent, list_replays, load_replay
@@ -475,9 +478,10 @@ class Service:
                 raise ServiceError(409, "serial_unavailable", "Connect the ESP32 serial port before a live test")
             if not d.camera.connected:
                 raise ServiceError(409, "camera_unavailable", "Connect a camera before a live test")
-            if not d.camera.estimator().calibrated:
+            if not d.camera.estimator(exp.metric, exp.component_id).calibrated:
+                what = "the LED baseline" if exp.metric == "led_state" else "the camera (servo at a known angle)"
                 raise ServiceError(409, "camera_uncalibrated",
-                                   "Calibrate the camera (servo at a known angle) before a live test")
+                                   f"Calibrate {what} before a live test")
         run = TestRun(id=_id("test"), project_id=pid, expectation_id=exp.id, attempt_kind=attempt_kind,
                       verifies_test_run_id=verifies, source=src, synthetic=synthetic, incident_id=incident_id)
         self.store.put(K_RUN, run)
@@ -586,7 +590,8 @@ class Service:
         d = self.devices
         return (LiveStream(scenario="live", synthetic=False, description="live devices", command=command,
                            serial=d.serial if command else None, camera=d.camera.source,
-                           estimator=d.camera.estimator(), window_ms=exp.deadline_ms),
+                           estimator=d.camera.estimator(exp.metric, exp.component_id),
+                           window_ms=exp.deadline_ms),
                 "opencv", d.camera.source.source_id)
 
     async def _collect(self, run: TestRun, exp: Expectation):
@@ -664,6 +669,75 @@ class Service:
                           "recorded_at_utc": (run.started_at_utc or utcnow()).isoformat()}}
         out.write_text("\n".join(json.dumps(x) for x in [meta, *rec.events]) + "\n", encoding="utf-8")
         return ReplayInfo(id=name, description=meta["_meta"]["description"], synthetic=run.synthetic)
+
+    # ---------------------------------------------------------- LED locator (D-045)
+
+    LOCATE_SETTLE_MS = 350
+
+    async def locate_led(self, req: LocateLedRequest) -> LedLocateResult:
+        """Blink-to-find (D-045): engineer-initiated, fixed-string serial commands toggle the
+        LED while the camera diffs off vs on frames — the changed blob IS the component.
+        One candidate → ROI + baseline set automatically. Many → returned for the engineer
+        to pick (multi-LED). None → honest not-found; the UI offers the manual pick."""
+        from .observations.camera_adapter import CameraError
+
+        d = self.devices
+        if not d.serial.connected:
+            raise ServiceError(409, "serial_unavailable",
+                               "Connect the ESP32 serial port — blink-to-find drives the LED")
+        if not d.camera.connected or d.camera.source is None:
+            raise ServiceError(409, "camera_unavailable", "Connect a camera first")
+        cam, ser = d.camera.source, d.serial
+        est = d.camera.estimator("led_state", req.component_id)
+
+        async def shot():
+            await asyncio.sleep(self.LOCATE_SETTLE_MS / 1000)
+            f = await asyncio.to_thread(cam.latest)
+            if f is None:
+                raise CameraError("no frame yet")
+            return f.image
+
+        try:
+            off_frames: list = []
+            on_frames: list = []
+            await asyncio.to_thread(ser.write_line, req.off_command)
+            off_frames.append(await shot())
+            for _ in range(req.cycles):
+                await asyncio.to_thread(ser.write_line, req.on_command)
+                on_frames.append(await shot())
+                await asyncio.to_thread(ser.write_line, req.off_command)
+                off_frames.append(await shot())
+        except CameraError as e:
+            raise ServiceError(409, "camera_unavailable", str(e)) from e
+
+        cands = locate_candidates(off_frames, on_frames)
+        if len(cands) == 1:
+            est.roi = cands[0]
+            est.calibrate(off_frames[-1])
+            return LedLocateResult(found=True, roi=cands[0],
+                                   message="LED found — baseline recorded")
+        if not cands:
+            return LedLocateResult(found=False,
+                                   message="Nothing changed between ON and OFF — check the LED "
+                                           "responds, or draw the region manually")
+        return LedLocateResult(found=False, candidates=cands,
+                               message=f"{len(cands)} regions changed — pick the one that is this LED")
+
+    def set_led_roi(self, req: LedRoiRequest):
+        """Manual or picked-candidate ROI for one component's LED (D-045). With
+        calibrate_baseline the engineer asserts the LED is OFF and the current frame
+        becomes the off-baseline."""
+        d = self.devices
+        if not d.camera.connected or d.camera.source is None:
+            raise ServiceError(409, "camera_unavailable", "Connect a camera first")
+        est = d.camera.estimator("led_state", req.component_id)
+        est.roi = [int(v) for v in req.roi]
+        if req.calibrate_baseline:
+            f = d.camera.source.latest()
+            if f is None:
+                raise ServiceError(409, "camera_unavailable", "no frame yet")
+            est.calibrate(f.image)
+        return d.status()
 
     # ------------------------------------------------------------------ incidents
 

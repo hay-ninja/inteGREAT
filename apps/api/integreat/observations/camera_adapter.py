@@ -17,6 +17,7 @@ import cv2
 import numpy as np
 
 from .cv_angle import ArucoAngleEstimator
+from .cv_led import LedEstimate, LedStateEstimator
 
 
 @dataclass
@@ -111,11 +112,12 @@ class OpenCVCamera:
 
 
 class CameraManager:
-    """The one active camera plus its calibrated estimator (calibration is per camera source)."""
+    """The one active camera plus its calibrated estimators. Estimators are keyed per
+    camera source AND per "metric:component" — one camera can watch several LEDs (D-045)."""
 
     def __init__(self):
         self.source: CameraSource | None = None
-        self.estimators: dict[str, ArucoAngleEstimator] = {}
+        self.estimators: dict[str, dict[str, object]] = {}
 
     @property
     def connected(self) -> bool:
@@ -136,14 +138,62 @@ class CameraManager:
             self.source.release()
         self.source = None
 
-    def estimator(self, source_id: str | None = None) -> ArucoAngleEstimator:
-        sid = source_id or (self.source.source_id if self.source else "none")
-        return self.estimators.setdefault(sid, ArucoAngleEstimator())
+    @staticmethod
+    def _key(metric: str = "servo_angle_deg", component_id: str | None = None) -> str:
+        return f"{metric}:{component_id}" if component_id else metric
 
-    def calibrate(self, known_angle_deg: float) -> float:
+    def estimator(self, metric: str = "servo_angle_deg", component_id: str | None = None,
+                  source_id: str | None = None):
+        sid = source_id or (self.source.source_id if self.source else "none")
+        key = self._key(metric, component_id)
+        per = self.estimators.setdefault(sid, {})
+        if key not in per:
+            per[key] = LedStateEstimator() if metric == "led_state" else ArucoAngleEstimator()
+        return per[key]
+
+    def calibrated_keys(self, source_id: str | None = None) -> list[str]:
+        sid = source_id or (self.source.source_id if self.source else "none")
+        return [k for k, e in self.estimators.get(sid, {}).items() if getattr(e, "calibrated", False)]
+
+    def calibrate(self, mode: str = "angle", component_id: str | None = None,
+                  known_angle_deg: float | None = None) -> float:
         if not self.connected:
             raise CameraError("no camera connected")
         f = self.source.latest()
         if f is None:
             raise CameraError("no frame yet")
-        return self.estimator().calibrate(f.image, known_angle_deg)
+        if mode == "led_baseline":
+            est = self.estimator("led_state", component_id)
+            if getattr(est, "roi", None) is None:
+                raise CameraError("no LED region yet — run blink-to-find or draw the LED region first")
+            return est.calibrate(f.image)
+        if known_angle_deg is None:
+            raise CameraError("known_angle_deg is required for angle calibration")
+        return self.estimator("servo_angle_deg", component_id).calibrate(f.image, known_angle_deg)
+
+    def annotate(self, image: np.ndarray, metric: str | None = None,
+                 component_id: str | None = None) -> np.ndarray:
+        """Preview overlay. With metric/component_id → just that estimator's annotation;
+        without → every configured LED ROI plus the angle readout."""
+        from .cv_angle import annotate as annotate_angle
+        from .cv_led import annotate as annotate_led
+        sid = self.source.source_id if self.source else "none"
+        per = self.estimators.get(sid, {})
+        if metric == "led_state":
+            est = per.get(self._key("led_state", component_id))
+            if not isinstance(est, LedStateEstimator):
+                return annotate_led(image, LedEstimate("calibration_invalid", None, None, None))
+            led_est = est.estimate(image) if est.calibrated else \
+                LedEstimate("calibration_invalid", None, None, est.roi)
+            return annotate_led(image, led_est, est.roi)
+        if metric == "servo_angle_deg":
+            est = per.get(self._key(metric, component_id))
+            return annotate_angle(image, est.estimate(image) if est else None)
+        angle = next((e for e in per.values() if not isinstance(e, LedStateEstimator)), None)
+        out = annotate_angle(image, angle.estimate(image) if angle else None)
+        for est in per.values():
+            if isinstance(est, LedStateEstimator):
+                led_est = est.estimate(image) if est.calibrated else \
+                    LedEstimate("calibration_invalid", None, None, est.roi)
+                out = annotate_led(out, led_est, est.roi)
+        return out

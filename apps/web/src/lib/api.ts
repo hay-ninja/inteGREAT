@@ -236,6 +236,12 @@ export const api = {
   cameraPairBrowser: () => req<S["BrowserCameraPairing"]>("POST", "/devices/camera/browser/pair"),
   cameraRelease: () => req<DeviceStatus>("POST", "/devices/camera/release"),
   cameraCalibrate: (known_angle_deg: number) => req<DeviceStatus>("POST", "/devices/camera/calibrate", { known_angle_deg }),
+  cameraCalibrateLed: (component_id: string) =>
+    req<DeviceStatus>("POST", "/devices/camera/calibrate", { mode: "led_baseline", component_id }),
+  cameraLocateLed: (component_id: string, on_command: string, off_command: string, cycles = 2) =>
+    req<S["LedLocateResult"]>("POST", "/devices/camera/locate-led", { component_id, on_command, off_command, cycles }),
+  cameraSetLedRoi: (component_id: string, roi: number[], calibrate_baseline = true) =>
+    req<DeviceStatus>("POST", "/devices/camera/led-roi", { component_id, roi, calibrate_baseline }),
   graph: (pid: string, scope?: string) =>
     req<GraphSnapshot>("GET", `/projects/${enc(pid)}/graph${scope ? `?scope_node_id=${enc(scope)}` : ""}`),
   subsystems: (pid: string) => req<Subsystem[]>("GET", `/projects/${enc(pid)}/subsystems`),

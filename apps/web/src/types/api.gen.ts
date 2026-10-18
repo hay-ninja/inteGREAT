@@ -775,6 +775,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/devices/camera/locate-led": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Locate Led
+         * @description Blink-to-find (D-045): engineer-initiated fixed serial commands toggle the LED;
+         *     frame differencing finds the component. Candidates returned for the engineer to pick.
+         */
+        post: operations["locate_led_api_v1_devices_camera_locate_led_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/camera/led-roi": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Led Roi
+         * @description Confirm/set the ROI for one component's LED (manual pick or located candidate, D-045).
+         */
+        post: operations["led_roi_api_v1_devices_camera_led_roi_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/devices/camera/frame.jpg": {
         parameters: {
             query?: never;
@@ -943,8 +984,16 @@ export interface components {
         };
         /** CalibrateRequest */
         CalibrateRequest: {
+            /**
+             * Mode
+             * @default angle
+             * @enum {string}
+             */
+            mode: "angle" | "led_baseline";
+            /** Component Id */
+            component_id?: string | null;
             /** Known Angle Deg */
-            known_angle_deg: number;
+            known_angle_deg?: number | null;
         };
         /** CameraConnectRequest */
         CameraConnectRequest: {
@@ -966,6 +1015,8 @@ export interface components {
             fps: number;
             /** Calibrated */
             calibrated: boolean;
+            /** Calibrations */
+            calibrations: string[];
             /** Offset Deg */
             offset_deg: number | null;
             /** Last Error */
@@ -1609,6 +1660,56 @@ export interface components {
             repair_jobs: components["schemas"]["RepairJob"][];
             /** Causal Chain */
             causal_chain: components["schemas"]["CausalStep"][];
+        };
+        /** LedLocateResult */
+        LedLocateResult: {
+            /** Found */
+            found: boolean;
+            /** Roi */
+            roi: number[] | null;
+            /**
+             * Candidates
+             * @default []
+             */
+            candidates: number[][];
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+        };
+        /**
+         * LedRoiRequest
+         * @description Manual or pick-a-candidate LED region for one component (D-045).
+         */
+        LedRoiRequest: {
+            /** Component Id */
+            component_id: string;
+            /** Roi */
+            roi: number[];
+            /**
+             * Calibrate Baseline
+             * @default true
+             */
+            calibrate_baseline: boolean;
+        };
+        /**
+         * LocateLedRequest
+         * @description Blink-to-find (D-045): engineer-initiated serial toggles; the camera diffs on vs off
+         *     frames and the changed blob is the LED. Commands are engineer-confirmed fixed strings.
+         */
+        LocateLedRequest: {
+            /** Component Id */
+            component_id: string;
+            /** On Command */
+            on_command: string;
+            /** Off Command */
+            off_command: string;
+            /**
+             * Cycles
+             * @default 2
+             */
+            cycles: number;
         };
         /** ManualResultRequest */
         ManualResultRequest: {
@@ -3703,9 +3804,78 @@ export interface operations {
             };
         };
     };
-    camera_frame_api_v1_devices_camera_frame_jpg_get: {
+    locate_led_api_v1_devices_camera_locate_led_post: {
         parameters: {
             query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocateLedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedLocateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    led_roi_api_v1_devices_camera_led_roi_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LedRoiRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    camera_frame_api_v1_devices_camera_frame_jpg_get: {
+        parameters: {
+            query?: {
+                metric?: string | null;
+                component?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3721,11 +3891,23 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     camera_stream_api_v1_devices_camera_stream_mjpg_get: {
         parameters: {
-            query?: never;
+            query?: {
+                metric?: string | null;
+                component?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3739,6 +3921,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -7,7 +7,8 @@ FastAPI modular monolith  (apps/api/integreat)
    ├─ ingestion/     repository scan · tree-sitter Arduino parser · YAML manifest · KiCad XML netlist
    ├─ graph/         builder (nodes/edges with provenance) · scoped query · GPIO consistency check
    ├─ observations/  replay · sim rig · live stream · serial adapter · OpenCV camera ·
-   │                 ArUco angle (cv_angle) · ArUco-anchored LED state (cv_led) —
+   │                 ArUco angle (cv_angle) · LED state (cv_led: fixed-ROI or ArUco-anchored;
+                 blink-to-find/manual locator in cv_led, keyed estimators in camera_adapter, D-047) —
    │                 (the sim rig doubles as the digital shadow — queried, not just replayed)
    ├─ diagnostics/   expectation evaluator · fault rules · hypotheses + action cards · state machines
    │                 graph_state (metric-keyed run-state write-back, D-028) · shadow (nominal

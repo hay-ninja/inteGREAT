@@ -515,7 +515,7 @@ export default function App() {
       }
       content={
         <LayoutContent padding={0} isScrollable={false}>
-          <Layout content={<LayoutContent padding={0} isScrollable={false}>
+          <Layout content={<LayoutContent padding={0} isScrollable={false} style={{ position: "relative" }}>
             {mode === "flow" ? (
               <EventFlowView runs={runs} runId={run?.id ?? runs[runs.length - 1]?.id ?? null}
                              onRunChange={(id) => { const r = runs.find((x) => x.id === id); if (r) { runRef.current = id; setRun(r); } }}
@@ -533,6 +533,17 @@ export default function App() {
                        onClearFocus={focusIds ? () => { scopeRef.current = ""; setFocusIds(null); setFocusSub(""); setFitKey(`all-${Date.now()}`); } : null}
                        fitKey={`${fitKey}-${expanded.size}`} />
             )}
+            <GraphInspector open={!!selectedNode || !!selectedEdges.length} onClose={() => { setSelectedId(null); setSelectedEdgeIds([]); }}>
+            <SelectionCard projectId={project.id} graph={graph} node={selectedNode} edges={selectedEdges}
+                           onClose={() => { setSelectedId(null); setSelectedEdgeIds([]); }} hideClose onEvidence={showEvidence}
+                           layer={layer} onLayer={setLayer} onReveal={(ids) => { revealNodes(ids, true); setSelectedId(ids[0] ?? null); }}
+                           onVerify={async (id, v) => {
+                             try { await api.verifyWiring(project.id, id, v, v === "verified" ? "Engineer confirmed on the bench" : undefined); await reloadGraph(project.id); }
+                             catch (e) { fail(e); }
+                           }} />
+            {selectedNode && graph.nodes.some((n) => n.parent_id === selectedNode.id) &&
+              <Button label={expanded.has(selectedNode.id) ? "Collapse in graph" : "Expand in graph"} onClick={() => { toggle(selectedNode.id); setSelectedId(null); }} />}
+            </GraphInspector>
           </LayoutContent>} footer={<LayoutFooter hasDivider padding={0}>
             <BottomDrawer open={drawerOpen} onOpen={setDrawerOpen} tab={drawerTab} onTab={setDrawerTab} run={run}
                           serial={serial} events={events}
@@ -543,17 +554,6 @@ export default function App() {
         </LayoutContent>
       }
     />
-      <GraphInspector open={!!selectedNode || !!selectedEdges.length} onClose={() => { setSelectedId(null); setSelectedEdgeIds([]); }}>
-        <SelectionCard projectId={project.id} graph={graph} node={selectedNode} edges={selectedEdges}
-                       onClose={() => { setSelectedId(null); setSelectedEdgeIds([]); }} hideClose onEvidence={showEvidence}
-                       layer={layer} onLayer={setLayer} onReveal={(ids) => { revealNodes(ids, true); setSelectedId(ids[0] ?? null); }}
-                       onVerify={async (id, v) => {
-                         try { await api.verifyWiring(project.id, id, v, v === "verified" ? "Engineer confirmed on the bench" : undefined); await reloadGraph(project.id); }
-                         catch (e) { fail(e); }
-                       }} />
-        {selectedNode && graph.nodes.some((n) => n.parent_id === selectedNode.id) &&
-          <Button label={expanded.has(selectedNode.id) ? "Collapse in graph" : "Expand in graph"} onClick={() => { toggle(selectedNode.id); setSelectedId(null); }} />}
-      </GraphInspector>
       <EvidenceDialog evidence={evidence} onClose={() => setEvidence(null)} />
       <EnvironmentSetupDialog open={envSetupOpen} onClose={() => setEnvSetupOpen(false)} devices={devices} onDevices={setDevices}
                       onError={(m) => fail(m)} expectation={expectation}

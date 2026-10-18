@@ -631,3 +631,30 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   poll doesn't rebuild them. Serial still feels live (5 updates/sec) but renders and
   fetches dropped ~3-15x. Trade-off accepted: serial lines appear up to 200ms later
   than the wire — imperceptible next to human scroll/reading speed.
+
+### D-047 LED computer vision: locator ≠ measurement, keyed estimators — 2026-10-18
+- **Problem:** live CV was still servo-shaped — `CameraManager` hardcoded one
+  `ArucoAngleEstimator` per source and `/devices/camera/calibrate` only accepted
+  `known_angle_deg`, so a live `led_state` run could never be calibrated. And for LEDs the
+  locator question is harder than the measurement question: how does the camera *find* the LED?
+- **Choice:** separate *locating* from *measuring*. `LedStateEstimator` accepts a fixed pixel
+  ROI; when unset it still falls back to the ArUco-anchored offset. The artifact every locator
+  produces is the same — ROI + off-baseline — so the measurement stays deterministic.
+- **Blink-to-find** (`POST /devices/camera/locate-led`): engineer-initiated serial toggles
+  (`on_command`/`off_command`, fixed strings in the request — never agent-authored), frames
+  averaged per state, `absdiff` → threshold → `connectedComponents` → padded ROIs. Exactly one
+  candidate → ROI + baseline auto-set. Multiple → returned as `candidates` for the engineer to
+  pick (multi-LED scenes never guess). Zero → honest not-found; the UI offers the manual box.
+- **Manual ROI** (`POST /devices/camera/led-roi`): `[x,y,w,h]` in preview pixels;
+  `calibrate_baseline` asserts the LED is OFF and records the baseline in the same call.
+- **Keyed estimators:** `CameraManager.estimators[source_id]["metric:component_id"]` — one
+  camera can watch several components; calibration is in-memory only (re-setup after restart is
+  a deliberate trade-off). `CameraStatus.calibrations` lists ready keys; the legacy `calibrated`
+  flag now means "any angle estimator calibrated" so servo behavior is unchanged.
+- **Run gate is metric-aware:** a live `led_state` expectation requires `led_state:{component}`
+  calibration — a servo baseline does not satisfy it, and vice versa.
+- **Serial safety boundary:** locate uses the existing engineer-owned serial connection with
+  fixed command strings and runs only inside environment setup — it never enters the tool
+  registry, so agents can't reach it.
+- Not done: persistent calibration storage, marker-board multi-LED coordinate maps, and any
+  ML/LLM locator (PRD §5 keeps CV deterministic).

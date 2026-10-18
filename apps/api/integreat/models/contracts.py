@@ -858,6 +858,7 @@ class CameraStatus(Model):
     source_id: str | None
     fps: float
     calibrated: bool
+    calibrations: list[str] = Field(default_factory=list)  # "metric:component_id" keys ready to measure
     offset_deg: float | None
     last_error: str | None
 
@@ -883,7 +884,32 @@ class BrowserCameraPairing(Model):
 
 
 class CalibrateRequest(Model):
-    known_angle_deg: float = Field(ge=-90, le=270)
+    mode: Literal["angle", "led_baseline"] = "angle"
+    component_id: str | None = None
+    known_angle_deg: float | None = Field(default=None, ge=-90, le=270)
+
+
+class LocateLedRequest(Model):
+    """Blink-to-find (D-045): engineer-initiated serial toggles; the camera diffs on vs off
+    frames and the changed blob is the LED. Commands are engineer-confirmed fixed strings."""
+    component_id: str
+    on_command: str = Field(min_length=1, max_length=64)
+    off_command: str = Field(min_length=1, max_length=64)
+    cycles: int = Field(default=2, ge=1, le=5)
+
+
+class LedLocateResult(Model):
+    found: bool
+    roi: list[int] | None = None          # accepted ROI when exactly one candidate
+    candidates: list[list[int]] = []      # all candidate ROIs when ambiguous, largest first
+    message: str = ""
+
+
+class LedRoiRequest(Model):
+    """Manual or pick-a-candidate LED region for one component (D-045)."""
+    component_id: str
+    roi: list[int] = Field(min_length=4, max_length=4)  # [x, y, w, h] in frame pixels
+    calibrate_baseline: bool = True  # assert the LED is currently OFF and record baseline
 
 
 class SaveReplayRequest(Model):
