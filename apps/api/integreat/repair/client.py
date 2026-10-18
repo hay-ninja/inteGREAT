@@ -87,7 +87,8 @@ class DevinHTTPClient(DevinClientProtocol):
 
     async def _request(self, method: str, path: str, timeout_s: float, **kw) -> dict[str, Any]:
         try:
-            resp = await asyncio.wait_for(getattr(self._client, method)(path, **kw), timeout=timeout_s)
+            resp = await asyncio.wait_for(
+                getattr(self._client, method)(path, timeout=timeout_s, **kw), timeout=timeout_s + 5)
         except asyncio.TimeoutError:
             raise
         except httpx.HTTPError as e:

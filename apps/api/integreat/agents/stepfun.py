@@ -59,7 +59,7 @@ class StepFunProvider:
     name = "stepfun"
 
     def __init__(self, api_key: str, model: str, base_url: str = "https://api.stepfun.ai/v1",
-                 temperature: float = 0.2, max_output_tokens: int = 2048):
+                 temperature: float = 0.2, max_output_tokens: int = 8192):
         self._client = httpx.AsyncClient(
             base_url=base_url.rstrip("/"),
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
@@ -82,7 +82,7 @@ class StepFunProvider:
         }
         try:
             resp = await asyncio.wait_for(
-                self._client.post("/chat/completions", json=payload), timeout=timeout_s)
+                self._client.post("/chat/completions", json=payload, timeout=timeout_s), timeout=timeout_s + 5)
         except asyncio.TimeoutError:
             raise
         except httpx.HTTPError as e:

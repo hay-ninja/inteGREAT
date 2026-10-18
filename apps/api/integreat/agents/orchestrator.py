@@ -185,7 +185,7 @@ class Orchestrator:
                            "state the question each should resolve. " + RULES,
                     prompt=f"<data>\nIncident: {inc.title}\nFault codes: {[c.value for c in inc.fault_codes]}\n"
                            f"Default plan: {[a.value for a in dispatch]}\n</data>\nChoose agents and questions.",
-                    schema=TriageOut, timeout_s=s.agent_timeout_s)
+                    schema=TriageOut, timeout_s=s.orchestrator_timeout_s)
                 dispatch = [AgentName(a) for a in dict.fromkeys(t.agents)]
                 questions = {AgentName(q.agent): q.question for q in t.questions if AgentName(q.agent) in dispatch}
                 triage_run.summary = t.rationale
@@ -298,7 +298,7 @@ class Orchestrator:
                        "a single root cause. " + RULES,
                 prompt="<data>\n" + packet.text + "\n\nSPECIALIST REPORTS:\n" + "\n".join(lines)
                        + f"\nACTION IDS: {actions}\n</data>",
-                schema=SynthesisOut, timeout_s=s.agent_timeout_s)
+                schema=SynthesisOut, timeout_s=s.orchestrator_timeout_s)
             if out.recommended_action_id not in actions:
                 run.validation_errors.append(f"recommended unknown action {out.recommended_action_id}; ignored")
                 out.recommended_action_id = ""

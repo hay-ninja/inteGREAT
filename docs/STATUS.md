@@ -89,16 +89,31 @@ this adds context without changing P0 scope.
   graph layers, Event Flow (lanes + step scrubber), repair dialog with honest preflight, zero
   console errors, no horizontal overflow. `tsc -b` clean, `vitest` 17/17, `vite build` passes.
 
-## Next (in order)
-The requested expansion is **implemented** (D-023 layers, D-024 Event Flow, D-025 StepFun + Devin).
-What remains is live credential/hardware validation — everything else is tested or browser-verified.
+## Live provider validation (2026-10-18) — verified
+- `stepfun_smoke.py`: step-5-preview triage OK (~8s). `gemini_smoke.py`: OK after model update —
+  `gemini-2.5-flash` is retired for new keys; `.env` uses `gemini-3.8-flash`.
+- `devin_smoke.py`: org-scoped auth OK (`inteGREAT` service user); smoke is read-only by design.
+- Live end-to-end diagnose on real incidents: StepFun triage → Gemini specialists (code/hardware/
+  runtime_vision — real findings citing real evidence ids) → StepFun synthesis (~28s) → incident
+  summary with a recommended action id that resolves. Triage picks fewer specialists when the
+  fault doesn't need them (e.g. hardware+code on a GPIO mismatch, no vision).
+- Live Devin session created via the repair flow (`repair:e329572198` on a fault-a incident):
+  preflight ready → session working at base `610f259`. Review its PR in Devin Cloud before applying.
+- **Bugs found and fixed by live testing:** httpx's hidden 5s default beat the app timeout in the
+  StepFun + Devin clients (per-request timeout now passed explicitly); step-5-preview spends
+  reasoning tokens inside `max_tokens`, so 2048 returned empty `content` (`finish_reason=length`) —
+  output budget raised to 8192 and the orchestrator got `INTEGREAT_ORCHESTRATOR_TIMEOUT_S` (120).
 
-1. **Live providers:** put `STEP_API_KEY`, `GEMINI_API_KEY` + `INTEGREAT_GEMINI_MODEL` in `.env`; run
-   `scripts/stepfun_smoke.py` then `scripts/gemini_smoke.py`; click *Ask AI to review evidence* on a
-   Fault A incident and check per-stage attribution in "Provider per stage".
-2. **Devin:** put `DEVIN_API_KEY` + `INTEGREAT_DEVIN_ORG_ID` in `.env`; commit the fixture firmware on a
-   disposable branch (uncommitted files are excluded by design); run `scripts/devin_smoke.py`, then
-   "Prepare software fix with Devin" on a Fault A incident and review the session/PR it returns.
+## Next (in order)
+UX consolidation planning: [product outline and feature inventory](ux-product-outline.md) maps the current
+features to the guided journey and proposes reducing duplicate entry points. **Design proposal only;
+no controls removed or workflow changes adopted by this document.**
+
+The requested expansion is **implemented** (D-023 layers, D-024 Event Flow, D-025 StepFun + Devin)
+and all three providers are live-verified. What remains is hardware validation.
+
+1. **Review the Devin session** — session a5f20c0b68ec4fa6b59dc062915fed0a on the fault_a incident;
+   inspect its branch/PR in Devin Cloud, then decide whether to apply (engineer-controlled).
 2. **H0 on the rig:** follow `docs/hardware-setup.md`; record board variant, COM port, camera index;
    confirm opening the port does not reset the board (D-005). Update the manifest's board label.
 3. **M5:** both faults live; save real recordings ("Save as replay") for good / Fault A / Fault B.

@@ -43,6 +43,9 @@ class Settings:
     devin_api_base: str = "https://api.devin.ai"
     devin_max_acu: float = 10.0    # resource cap sent as max_acu_limit per repair session
     agent_timeout_s: float = 30.0
+    # StepFun step-5 is a reasoning model: triage/synthesis need a larger budget than the
+    # Gemini specialists' ~10s calls (reasoning tokens alone can exceed 30s of generation).
+    orchestrator_timeout_s: float = 120.0
     max_context_tokens: int = 6000
 
     @property
@@ -67,5 +70,6 @@ def load_settings() -> Settings:
         devin_api_base=os.environ.get("INTEGREAT_DEVIN_API_BASE", "https://api.devin.ai"),
         devin_max_acu=float(os.environ.get("INTEGREAT_DEVIN_MAX_ACU", "10")),
         agent_timeout_s=float(os.environ.get("INTEGREAT_AGENT_TIMEOUT_S", "30")),
+        orchestrator_timeout_s=float(os.environ.get("INTEGREAT_ORCHESTRATOR_TIMEOUT_S", "120")),
         max_context_tokens=int(os.environ.get("INTEGREAT_MAX_CONTEXT_TOKENS", "6000")),
     )

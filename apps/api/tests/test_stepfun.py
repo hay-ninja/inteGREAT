@@ -29,7 +29,7 @@ class _FakeHTTP:
         self.responses = list(responses)
         self.payloads = []
 
-    async def post(self, path, json):
+    async def post(self, path, json, **_kw):
         self.payloads.append((path, json))
         status, body = self.responses.pop(0) if len(self.responses) > 1 else self.responses[0]
         req = httpx.Request("POST", "https://api.stepfun.ai/v1/chat/completions")
