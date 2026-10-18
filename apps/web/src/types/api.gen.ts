@@ -1146,15 +1146,13 @@ export interface components {
             /**
              * Metric
              * @default servo_angle_deg
-             * @constant
              */
-            metric: "servo_angle_deg";
+            metric: string;
             /**
              * Unit
              * @default deg
-             * @constant
              */
-            unit: "deg";
+            unit: string;
             /** Target */
             target: number;
             /** Tolerance */
@@ -1168,6 +1166,8 @@ export interface components {
             measurement_source: string;
             /** Ack Pattern */
             ack_pattern: string | null;
+            /** On Level */
+            on_level: string | null;
             /**
              * Min Motion Deg
              * @default 5
@@ -1241,14 +1241,16 @@ export interface components {
         };
         /**
          * Fact
-         * @description The three distinct facts PRD §5.3 says must never be conflated.
+         * @description The three distinct facts PRD §5.3 says must never be conflated. `physical_motion` is the
+         *     analog form (displacement), `physical_state` the binary form (state reached) — same slot,
+         *     different metric family.
          */
         Fact: {
             /**
              * Key
              * @enum {string}
              */
-            key: "command_sent" | "command_acknowledged" | "physical_motion";
+            key: "command_sent" | "command_acknowledged" | "physical_motion" | "physical_state";
             /** Label */
             label: string;
             /**
@@ -1265,7 +1267,7 @@ export interface components {
          * FaultCode
          * @enum {string}
          */
-        FaultCode: "GPIO_CONFIG_MISMATCH" | "NO_PHYSICAL_MOTION" | "MISSING_SERIAL_ACK" | "CAMERA_MEASUREMENT_UNAVAILABLE" | "POSSIBLE_POWER_OR_SIGNAL_FAULT" | "AGENT_PROPOSED";
+        FaultCode: "GPIO_CONFIG_MISMATCH" | "NO_PHYSICAL_MOTION" | "MISSING_SERIAL_ACK" | "CAMERA_MEASUREMENT_UNAVAILABLE" | "POSSIBLE_POWER_OR_SIGNAL_FAULT" | "INVERTED_LOGIC" | "AGENT_PROPOSED";
         /**
          * FlowEvent
          * @description One item on the persisted chronological Event flow. Derived deterministically from
@@ -1645,7 +1647,7 @@ export interface components {
              * Measurement Quality
              * @enum {string}
              */
-            measurement_quality: "valid" | "marker_not_found" | "calibration_invalid" | "dropped";
+            measurement_quality: "valid" | "marker_not_found" | "led_not_found" | "calibration_invalid" | "dropped";
             /** Evidence Ref */
             evidence_ref: string;
             /** Evidence Id */

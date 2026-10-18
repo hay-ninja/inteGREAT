@@ -18,6 +18,14 @@ from .repository import RepoFile
 _LANG = Language(tree_sitter_cpp.language())
 
 SERVO_TYPES = {"Servo", "ESP32Servo"}
+# Component-producing object types → guessed component type. Objects of these types become
+# (inferred) hardware components when no manifest/netlist declares them.
+OBJECT_TYPE_HINTS: dict[str, str] = {
+    "Servo": "servo", "ESP32Servo": "servo",
+    "Adafruit_NeoPixel": "led_strip", "WS2812": "led_strip", "FastLED": "led_strip",
+    "DHT": "temp_sensor", "DHT11": "temp_sensor", "DHT22": "temp_sensor",
+    "Bounce2": "button", "Button2": "button",
+}
 # function name -> index of the pin argument
 PIN_FUNCS = {
     "pinMode": 0,
@@ -28,6 +36,9 @@ PIN_FUNCS = {
     "ledcAttachPin": 0,
     "ledcAttach": 0,
 }
+# pin-writing apis -> index of the *value* argument (the level/duty being driven).
+# Capturing it lets rules compare code logic to declared wiring polarity.
+WRITE_VALUE_ARG = {"digitalWrite": 1, "analogWrite": 1, "ledcWrite": 1}
 SERVO_PIN_METHODS = {"attach": 0}
 SERVO_ACTUATE_METHODS = {"write", "writeMicroseconds"}
 SERIAL_PRINT = {"print", "println", "printf"}
@@ -66,6 +77,7 @@ class PinUse:
     gpio: int | None
     resolution: str  # "literal" | "define" | "const" | "unresolved"
     symbol: Symbol | None = None
+    level: str | None = None  # value arg of digitalWrite/analogWrite/ledcWrite ("HIGH", "255", ...)
 
 
 @dataclass
@@ -158,7 +170,7 @@ def parse_project(files: list[RepoFile]) -> ParsedProject:
                 tname = _text(typ) if typ is not None else ""
                 is_const = any(c.type == "type_qualifier" and _text(c) in ("const", "constexpr") for c in child.children)
                 for d in child.children_by_field_name("declarator"):
-                    if d.type == "identifier" and tname in SERVO_TYPES:
+                    if d.type == "identifier" and tname in OBJECT_TYPE_HINTS:
                         out.objects[_text(d)] = (tname, f.rel, _line(child))
                     elif d.type == "init_declarator" and is_const:
                         ident, val = d.child_by_field_name("declarator"), d.child_by_field_name("value")
@@ -197,7 +209,10 @@ def parse_project(files: list[RepoFile]) -> ParsedProject:
             if fn_node is not None and fn_node.type == "identifier":
                 name = _text(fn_node)
                 if name in PIN_FUNCS and len(args) > PIN_FUNCS[name]:
-                    out.pin_uses.append(_pin_use(out, fid, f.rel, line, name, call_text, None, None, args[PIN_FUNCS[name]]))
+                    val = args[WRITE_VALUE_ARG[name]] if (name in WRITE_VALUE_ARG
+                                                         and len(args) > WRITE_VALUE_ARG[name]) else None
+                    out.pin_uses.append(_pin_use(out, fid, f.rel, line, name, call_text, None, None,
+                                                 args[PIN_FUNCS[name]], val))
                 elif name in known_functions and fid is not None:
                     out.calls.append(Call(fid, name, f.rel, line))
 
@@ -225,12 +240,14 @@ def parse_project(files: list[RepoFile]) -> ParsedProject:
     return out
 
 
-def _pin_use(out: ParsedProject, fid, file, line, api, call_text, obj_name, obj_type, arg: Node) -> PinUse:
+def _pin_use(out: ParsedProject, fid, file, line, api, call_text, obj_name, obj_type, arg: Node,
+             value_arg: Node | None = None) -> PinUse:
     raw = _text(arg).strip()
     gpio, resolution, sym = _resolve(out, raw)
     if gpio is None:
         out.warnings.append((f"could not statically resolve pin argument '{raw}' in {api}", file, line))
-    return PinUse(fid, file, line, api, call_text, obj_name, obj_type, raw, gpio, resolution, sym)
+    level = _text(value_arg).strip() if value_arg is not None else None
+    return PinUse(fid, file, line, api, call_text, obj_name, obj_type, raw, gpio, resolution, sym, level)
 
 
 def _resolve(out: ParsedProject, raw: str, depth: int = 0) -> tuple[int | None, str, Symbol | None]:

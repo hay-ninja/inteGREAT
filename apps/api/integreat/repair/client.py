@@ -26,6 +26,11 @@ class DevinUnavailable(RuntimeError):
     pass
 
 
+class SessionGone(DevinUnavailable):
+    """GET on a session id returned 404 — the remote session expired or was deleted.
+    Distinct from a create-time 404, which means the organization id is wrong."""
+
+
 @dataclass
 class DevinSessionInfo:
     session_id: str
@@ -79,13 +84,32 @@ class DevinHTTPClient(DevinClientProtocol):
     available = True
     reason = None
 
-    def __init__(self, api_key: str, org_id: str, base_url: str = "https://api.devin.ai"):
-        self.org_id = org_id
+    def __init__(self, api_key: str, org_id: str | None = None, base_url: str = "https://api.devin.ai"):
+        self._org_override = org_id
+        self._org: str | None = None
         self._base = base_url.rstrip("/")
         self._client = httpx.AsyncClient(base_url=self._base, headers={
             "Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
 
-    async def _request(self, method: str, path: str, timeout_s: float, **kw) -> dict[str, Any]:
+    async def org_id(self) -> str:
+        """The organization the API key belongs to. `GET /v3/self` returns it, so a pasted
+        org id is never trusted over the key itself — an env override is validated, a typo
+        becomes a clear config error instead of a 404."""
+        if self._org:
+            return self._org
+        me = await self.whoami()
+        actual = str(me.get("org_id") or "")
+        if not actual:
+            raise DevinUnavailable("Devin /v3/self did not report an org_id — cannot scope sessions")
+        if self._org_override and self._org_override != actual:
+            raise DevinUnavailable(
+                f"INTEGREAT_DEVIN_ORG_ID is {self._org_override} but this key belongs to {actual} "
+                "— fix the override or remove it (the org is derived from the key)")
+        self._org = actual
+        return actual
+
+    async def _request(self, method: str, path: str, timeout_s: float,
+                       not_found: str = "request", **kw) -> dict[str, Any]:
         try:
             resp = await asyncio.wait_for(
                 getattr(self._client, method)(path, timeout=timeout_s, **kw), timeout=timeout_s + 5)
@@ -98,7 +122,10 @@ class DevinHTTPClient(DevinClientProtocol):
         if resp.status_code == 403:
             raise DevinUnavailable("Devin rejected the request (403) — check org permissions")
         if resp.status_code == 404:
-            raise DevinUnavailable("Devin session not found (404)")
+            if not_found == "session":
+                raise SessionGone("Devin session not found (404) — it may have expired or been deleted")
+            raise DevinUnavailable(
+                "Devin organization not found (404) — check INTEGREAT_DEVIN_ORG_ID")
         if resp.status_code == 429:
             raise DevinUnavailable("Devin rate limit (429) — try again later")
         if resp.status_code >= 400:
@@ -131,11 +158,13 @@ class DevinHTTPClient(DevinClientProtocol):
                                 "structured_output_schema": structured_output_schema}
         if repos:
             body["repos"] = repos
-        data = await self._request("post", f"/v3/organizations/{self.org_id}/sessions", timeout_s, json=body)
+        data = await self._request("post", f"/v3/organizations/{await self.org_id()}/sessions",
+                                   timeout_s, not_found="organization", json=body)
         return self._session(data)
 
     async def get_session(self, devin_id: str, timeout_s: float = 30.0) -> DevinSessionInfo:
-        data = await self._request("get", f"/v3/organizations/{self.org_id}/sessions/{devin_id}", timeout_s)
+        data = await self._request("get", f"/v3/organizations/{await self.org_id()}/sessions/{devin_id}",
+                                   timeout_s, not_found="session")
         return self._session(data)
 
 
@@ -143,11 +172,13 @@ class FakeDevin(DevinClientProtocol):
     """Scripted client for tests. `script`: list of (status, detail, prs?, structured?) dicts served
     in order for get_session; create_error raises on create_session (e.g. asyncio.TimeoutError)."""
 
-    def __init__(self, script: list[dict[str, Any]] | None = None, create_error: Exception | None = None):
+    def __init__(self, script: list[dict[str, Any]] | None = None, create_error: Exception | None = None,
+                 get_error: Exception | None = None):
         self.available = True
         self.reason = None
         self.script = list(script or [{"status": "running", "status_detail": "working"}])
         self.create_error = create_error
+        self.get_error = get_error
         self.calls: list[str] = []
         self.prompts: list[str] = []
         self._counter = 0
@@ -168,6 +199,8 @@ class FakeDevin(DevinClientProtocol):
 
     async def get_session(self, devin_id: str, timeout_s: float = 30.0) -> DevinSessionInfo:
         self.calls.append("get")
+        if self.get_error is not None:
+            raise self.get_error
         s = self.script.pop(0) if len(self.script) > 1 else self.script[0]
         prs = s.get("pull_requests", [])
         prs = [str(p.get("pr_url")) if isinstance(p, dict) else str(p) for p in prs]
@@ -181,9 +214,10 @@ class FakeDevin(DevinClientProtocol):
 def make_devin(settings: Settings) -> DevinClientProtocol:
     if not settings.devin_api_key:
         return UnavailableDevin("DEVIN_API_KEY not set")
-    if not settings.devin_org_id:
-        return UnavailableDevin("INTEGREAT_DEVIN_ORG_ID not set (Settings → Devin API)")
     try:
-        return DevinHTTPClient(settings.devin_api_key, settings.devin_org_id, settings.devin_api_base)
+        # Org is derived from the key via /v3/self; devin_org_id is an optional override that
+        # gets validated against the key's actual org (a typo previously caused a 404 on create).
+        return DevinHTTPClient(settings.devin_api_key, settings.devin_org_id or None,
+                               settings.devin_api_base)
     except Exception as e:  # noqa: BLE001
         return UnavailableDevin(f"Devin client failed to start: {e}")

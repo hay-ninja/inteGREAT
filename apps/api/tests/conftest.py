@@ -11,6 +11,10 @@ FIX = ROOT / "fixtures"
 GOOD_REPO = FIX / "esp32_servo_demo"
 FAULT_A_REPO = FIX / "esp32_servo_demo_fault_a"
 MANIFEST = FIX / "manifests" / "esp32_servo_demo.yaml"
+LED_REPO = FIX / "esp32_led_demo"
+LED_FAULT_A_REPO = FIX / "esp32_led_demo_fault_a"
+LED_MANIFEST = FIX / "manifests" / "esp32_led_demo.yaml"
+LED_MANIFEST_LOW = FIX / "manifests" / "esp32_led_demo_active_low.yaml"
 
 
 @pytest.fixture
@@ -20,15 +24,16 @@ def client():
         yield c
 
 
-def import_and_confirm(client, repo=FAULT_A_REPO):
-    p = client.post("/api/v1/projects/import", json={"repo_path": str(repo), "manifest_path": str(MANIFEST)}).json()
+def import_and_confirm(client, repo=FAULT_A_REPO, manifest=MANIFEST):
+    p = client.post("/api/v1/projects/import",
+                    json={"repo_path": str(repo), "manifest_path": str(manifest)}).json()
     exp = client.post(f"/api/v1/projects/{p['id']}/expectations/propose").json()
     exp = client.post(f"/api/v1/projects/{p['id']}/expectations/{exp['id']}/confirm", json={}).json()
     return p, exp
 
 
-def run_test(client, pid, exp_id, scenario):
+def run_test(client, pid, exp_id, scenario, kind="replay"):
     run = client.post(f"/api/v1/projects/{pid}/tests",
-                      json={"expectation_id": exp_id, "source": {"kind": "replay", "scenario": scenario}})
+                      json={"expectation_id": exp_id, "source": {"kind": kind, "scenario": scenario}})
     assert run.status_code == 200, run.text
     return client.get(f"/api/v1/tests/{run.json()['id']}").json()["run"]

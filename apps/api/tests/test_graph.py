@@ -56,3 +56,75 @@ def test_scope_excludes_unrelated_subsystem():
     assert "component:servo_1" in ids and "power_source:psu_5v" in ids and "pin:esp32_gpio18" in ids
     assert not any("wifi_status" in i for i in ids)
     assert "component:status_led" not in ids
+
+
+# ---- dynamic graph inference (D-034) ----------------------------------------------
+
+from integreat.ingestion.repository import RepoFile
+from integreat.models import NodeKind
+
+LED_SRC = """\
+#include "led_control.h"
+#define LED_PIN 4
+void ledOn() { digitalWrite(LED_PIN, HIGH); }
+void setup() { pinMode(LED_PIN, OUTPUT); }
+"""
+
+
+def build_mem(files: list[tuple[str, str]], manifest=None):
+    rf = [RepoFile(rel=r, text=t) for r, t in files]
+    return build_graph("p", [f.rel for f in rf], parse_project(rf), manifest)
+
+
+def test_no_manifest_groups_by_filename_stem():
+    r = build_mem([("led_demo.ino", LED_SRC), ("led_control.cpp", "// impl"), ("led_control.h", "// hdr"),
+                   ("wifi_check.cpp", "// w"), ("wifi_check.h", "// wh")])
+    subs = {n.id: n for n in r.nodes if n.kind == NodeKind.subsystem}
+    assert "subsystem:inferred:led_control" in subs and "subsystem:inferred:wifi_check" in subs
+    assert subs["subsystem:inferred:led_control"].verification == Verification.inferred
+    assert any(i.code == "SUBSYSTEM_INFERRED" for i in r.issues)
+
+
+def test_no_manifest_infers_component_from_name_hint():
+    r = build_mem([("led_demo.ino", LED_SRC)])
+    comp = next((n for n in r.nodes if n.id == "component:led_pin"), None)
+    assert comp is not None and comp.attributes["inferred"] is True and comp.attributes["type"] == "led"
+    assert comp.verification == Verification.unverified
+    # inferred wiring: component pin -> mcu pin, so downstream rules/shadow can use it
+    assert any(e.relation == EdgeRelation.connected_to and "led_pin" in (e.source_id + e.target_id)
+               for e in r.edges)
+
+
+def test_pin_mediated_controls_for_digitalwrite():
+    # declared LED wired to GPIO4; code writes that pin -> controls edge resolves through the pin
+    from integreat.ingestion.manifest import Manifest
+    m = Manifest.model_validate({
+        "schema": "integreat-manifest/v1",
+        "board": {"id": "esp32", "label": "ESP32", "mcu": "esp32"},
+        "subsystems": [], "components": [
+            {"id": "led_1", "type": "led", "label": "Status LED", "pins": ["anode"]}],
+        "connections": [
+            {"id": "led_sig", "from": "mcu.GPIO4", "to": "led_1.anode", "kind": "signal",
+             "verification": "verified"}]})
+    r = build_mem([("led_demo.ino", LED_SRC)], manifest=m)
+    fn = "function:led_demo.ino::ledOn"
+    assert any(e.relation == EdgeRelation.controls and e.source_id == fn
+               and e.target_id == "component:led_1" for e in r.edges)
+    cfg = next(e for e in r.edges if e.relation == EdgeRelation.configures
+               and e.target_id == "pin:esp32_gpio4")
+    assert cfg.attributes["for_component"] == "component:led_1"
+    assert cfg.attributes["level"] == "HIGH"
+
+
+def test_declared_component_wins_over_object_inference():
+    # `Servo myservo` + declared servo_1 → evidence folds into servo_1, no component:myservo
+    src = "#include <Servo.h>\nServo myservo;\nvoid s() { myservo.attach(18); }\n"
+    r = build_mem([("x.ino", src)], manifest=load_manifest(MANIFEST)[0])
+    assert "component:myservo" not in {n.id for n in r.nodes}
+    assert "component:servo_1" in {n.id for n in r.nodes}
+
+
+def test_inferred_mcu_when_no_manifest_but_pins_used():
+    r = build_mem([("led_demo.ino", LED_SRC)])
+    mcu = next(n for n in r.nodes if n.kind == NodeKind.mcu)
+    assert mcu.id == "mcu:esp32" and mcu.verification == Verification.inferred

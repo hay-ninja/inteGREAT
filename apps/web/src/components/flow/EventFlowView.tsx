@@ -27,7 +27,7 @@ const LANE_LABEL: Record<FlowLane, string> = {
 const LANE_HINT: Record<FlowLane, string> = {
   command: "The command inteGREAT sent to run the test",
   software: "Messages the board printed back over the serial link",
-  hardware: "Angle measurements the camera took of the servo arm",
+  hardware: "Measurements the camera took of the component",
   result: "Whether the test passed, and why it didn't",
 };
 

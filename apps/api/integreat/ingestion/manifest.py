@@ -46,8 +46,10 @@ def normalize_mcu_pin(label: str) -> tuple[str, int | None]:
     return f"GPIO{n}", n
 
 
-def mcu_pin_node_id(canonical: str) -> str:
-    return f"pin:esp32_{canonical.lower()}"
+def mcu_pin_node_id(board: str, canonical: str) -> str:
+    """Pin node ids are keyed by the declared board id, so `pin:esp32_gpio18` stays stable
+    for esp32 manifests while other boards get their own namespace."""
+    return f"pin:{board}_{canonical.lower()}"
 
 
 class _M(BaseModel):

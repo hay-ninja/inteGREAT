@@ -36,16 +36,21 @@ export function EvidenceList({ ids, evById, title, onInspect }: { ids: string[];
   );
 }
 
-/** The three facts PRD §5.3 says must never be conflated — in words a non-hardware reader can follow. */
+/** The facts PRD §5.3 says must never be conflated — in words a non-hardware reader can follow. */
 export function Facts({ result }: { result: ExpectationResult }) {
-  const labels = { command_sent: "The command went out", command_acknowledged: "The board said it got it", physical_motion: "The camera saw the arm move" };
+  const labels: Record<string, string> = {
+    command_sent: "The command went out",
+    command_acknowledged: "The board said it got it",
+    physical_motion: "The camera saw the component respond",
+    physical_state: "It ended in the expected state",
+  };
   return (
     <VStack gap={1}>
       {result.facts.map((f) => (
         <HStack key={f.key} gap={1.5} vAlign="center">
           <StatusDot variant={f.value === "yes" ? "success" : f.value === "no" ? "error" : "neutral"}
                      label={`${f.label}: ${f.value}`} tooltip={f.note ?? undefined} />
-          <Text type="body" color={f.value === "unknown" ? "secondary" : "primary"}>{labels[f.key]}</Text>
+          <Text type="body" color={f.value === "unknown" ? "secondary" : "primary"}>{labels[f.key] ?? f.label}</Text>
           <Text type="supporting">{f.value === "yes" ? "yes" : f.value === "no" ? "no" : "unknown"}</Text>
         </HStack>
       ))}
@@ -106,7 +111,7 @@ export function SourceBadge({ run }: { run: TestRun }) {
 const SOURCE_PLAIN: Record<string, string> = {
   sim: "Pretend hardware — safe to explore. Nothing physical is connected.",
   replay: "A saved recording of an earlier run. Nothing happens on the device.",
-  live: "The real board, servo, and camera on the bench.",
+  live: "The real board, component, and camera on the bench.",
 };
 
 export function SourcePicker({ value, onChange, sources, liveReady }: {

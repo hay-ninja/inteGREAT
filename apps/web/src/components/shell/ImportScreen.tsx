@@ -47,6 +47,18 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
   const [importOpen, setImportOpen] = useState(false);
   const previewRequest = useRef(0);
 
+  // Card copy from the fixture label — demo fixtures come from the backend; nothing is hardcoded per index.
+  const blurbFor = (label: string): string => {
+    const l = label.toLowerCase();
+    if (l.includes("wrong pin"))
+      return "A light project where the code drives one pin but the wiring notes connect a different one — caught before a test even runs.";
+    if (l.includes("active-low"))
+      return "The same firmware on an LED wired active-low: commanding it on turns it off. The state changes — just backwards.";
+    if (l.includes("correct firmware"))
+      return "The board acknowledges the command but the light never changes — is it the signal wire, or power?";
+    return "A hardware project with a seeded fault and pretend observations — safe to click through.";
+  };
+
   useEffect(() => {
     api.demo().then((d) => { setFixtures(d.fixtures); setDemoNetlist(d.netlist_path); }).catch(() => undefined);
     // One card per folder — re-importing the same repo updates the entry, not duplicates it.
@@ -83,25 +95,21 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
             <VStack gap={1}>
               <Eyebrow>Demos</Eyebrow>
               <Heading level={2}>Try it on pretend hardware</Heading>
-              <Text type="body" color="secondary">Two failure stories with pretend observations — safe to click through.</Text>
+              <Text type="body" color="secondary">Ready-made failure stories with pretend observations — safe to click through.</Text>
             </VStack>
-            {fixtures.map((f, i) => (
-              <ClickableCard key={f.repo_path} padding={4} isDisabled={p.busy}
-                label={i === 0 ? "Wrong pin in the code" : "Disconnected servo signal"}
+            {fixtures.map((f) => (
+              <ClickableCard key={`${f.repo_path}|${f.manifest_path}`} padding={4} isDisabled={p.busy}
+                label={f.label}
                 onClick={() => setPending({
-                  title: i === 0 ? "Demo — Wrong pin in the code" : "Demo — Disconnected servo signal",
-                  lines: [i === 0
-                    ? "A servo project where the code drives one pin but the wiring notes connect a different one — a classic silent failure."
-                    : "A servo project where the board acknowledges the command but the arm never moves — is it the signal wire, or power?",
+                  title: `Demo — ${f.label}`,
+                  lines: [blurbFor(f.label),
                     "inteGREAT maps code to wiring, runs a simulated test, and walks you through the failure. Nothing runs on real hardware."],
                   action: "Load demo",
                   onConfirm: () => p.onImport({ repo_path: f.repo_path, manifest_path: f.manifest_path }),
                 })}>
                 <VStack gap={2}>
-                  <Text type="body" weight="semibold">{i === 0 ? "Wrong pin in the code" : "Disconnected servo signal"}</Text>
-                  <Text type="supporting" color="secondary">{i === 0
-                    ? "Inspect a GPIO mismatch, then verify a repair."
-                    : "Separate signal and power hypotheses with a manual check."}</Text>
+                  <Text type="body" weight="semibold">{f.label}</Text>
+                  <Text type="supporting" color="secondary">{blurbFor(f.label)}</Text>
                   <Text type="supporting" color="secondary">Simulated · ~5 minutes</Text>
                 </VStack>
               </ClickableCard>

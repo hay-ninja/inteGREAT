@@ -49,12 +49,12 @@ class ThetaVerdict:
     predicted: str = ""
 
 
-def theta_space(declared: SimConditions) -> list[Theta]:
+def theta_space(declared: SimConditions, binary: bool = False) -> list[Theta]:
     """The declared configuration plus single-knob interventions."""
-    return [
+    out = [
         Theta("declared", "system as declared (config + wiring + leads as imported)"),
-        Theta("signal_disconnected", "servo signal lead disconnected", {"signal_connected": False}),
-        Theta("power_disconnected", "servo power/ground disconnected", {"power_connected": False}),
+        Theta("signal_disconnected", "signal lead disconnected", {"signal_connected": False}),
+        Theta("power_disconnected", "power/ground disconnected", {"power_connected": False}),
         Theta("marker_occluded", "camera marker occluded", {"marker_visible": False}),
         Theta("no_firmware_ack", "firmware does not acknowledge", {"firmware_acks": False}),
         Theta("pins_matched", "counterfactual: configured pin equals wired pin",
@@ -63,6 +63,12 @@ def theta_space(declared: SimConditions) -> list[Theta]:
               {"configured_gpio": declared.wired_gpio, "signal_connected": True,
                "power_connected": True, "marker_visible": True, "firmware_acks": True}),
     ]
+    if binary:
+        # do(code drives the active level) — the intervention that fixes an inverted drive
+        out.insert(-1, Theta("polarity_matched",
+                             "counterfactual: code drives the wiring's active level for 'on'",
+                             {"code_on_high": not declared.active_low}))
+    return out
 
 
 def _apply(cond: SimConditions, patch: dict) -> SimConditions:
@@ -78,38 +84,44 @@ def observed_signature(exp: Expectation, result: ExpectationResult) -> dict[str,
         "moves": tri(facts.get("physical_motion")),
         "acks": tri(facts.get("command_acknowledged")),
         "measurable": result.valid_samples >= exp.min_valid_samples,
+        "final_ok": tri(facts.get("physical_state")),
     }
 
 
 def compare(pred: ShadowSignature, obs: dict[str, bool | None]) -> list[str]:
     mism = []
     if obs["moves"] is not None and obs["moves"] != pred.moves:
-        mism.append(f"predicted {'motion' if pred.moves else 'no motion'}, "
-                    f"observed {'motion' if obs['moves'] else 'none'}")
+        mism.append(f"predicted {'a response' if pred.moves else 'no response'}, "
+                    f"observed {'a response' if obs['moves'] else 'none'}")
     if obs["acks"] is not None and obs["acks"] != pred.acks:
         mism.append(f"predicted {'ack' if pred.acks else 'no ack'}, "
                     f"observed {'ack' if obs['acks'] else 'none'}")
     if obs["measurable"] != pred.measurable:
         mism.append(f"predicted {'valid measurements' if pred.measurable else 'no valid measurements'}, "
                     f"observed {'valid measurements' if obs['measurable'] else 'insufficient'}")
+    if obs.get("final_ok") is not None and pred.final_ok is not None and obs["final_ok"] != pred.final_ok:
+        mism.append(f"predicted final state {'reached' if pred.final_ok else 'not reached'}, "
+                    f"observed {'reached' if obs['final_ok'] else 'not reached'}")
     return mism
 
 
 def assess(exp: Expectation, nodes: list[GraphNode], edges: list[GraphEdge],
            result: ExpectationResult, run_id: str) -> tuple[list[ThetaVerdict], Evidence]:
     """Run the sweep. Returns per-θ verdicts and one persisted shadow_residual evidence record."""
+    binary = exp.unit == "state"
     declared = nominal_conditions(exp, nodes, edges)
     obs = observed_signature(exp, result)
     verdicts: list[ThetaVerdict] = []
-    for t in theta_space(declared):
-        pred = predict_signature(_apply(declared, t.patch))
+    for t in theta_space(declared, binary):
+        pred = predict_signature(_apply(declared, t.patch), binary)
         mism = compare(pred, obs)
         verdicts.append(ThetaVerdict(
             theta=t.id, label=t.label, consistent=not mism, mismatches=mism,
-            predicted=f"moves={pred.moves} acks={pred.acks} measurable={pred.measurable}"))
+            predicted=f"moves={pred.moves} acks={pred.acks} measurable={pred.measurable}"
+                      + (f" final_ok={pred.final_ok}" if binary else "")))
     consistent = [v.label for v in verdicts if v.consistent]
     refuted = [f"{v.label} ({'; '.join(v.mismatches)})" for v in verdicts if not v.consistent]
-    summary = (f"Shadow sweep on declared system ({describe(declared)}): "
+    summary = (f"Shadow sweep on declared system ({describe(declared, binary)}): "
                f"consistent scenarios — {', '.join(consistent) or 'none'}."
                + (f" Ruled inconsistent — {' | '.join(refuted)}." if refuted else ""))
     ev = Evidence(
@@ -132,6 +144,7 @@ def _theta_for(h: Hypothesis) -> str | None:
         return "power_disconnected"
     return {
         FaultCode.GPIO_CONFIG_MISMATCH: "declared",
+        FaultCode.INVERTED_LOGIC: "declared",  # the declared system already carries the polarity mismatch
         FaultCode.MISSING_SERIAL_ACK: "no_firmware_ack",
         FaultCode.CAMERA_MEASUREMENT_UNAVAILABLE: "marker_occluded",
     }.get(h.fault_code)
@@ -139,10 +152,13 @@ def _theta_for(h: Hypothesis) -> str | None:
 
 # Hypothesis → the counterfactual θ where its fault knob is forced back to nominal
 # (do(knob=ok)). For lead faults the declared system already has the knob nominal; for a
-# GPIO mismatch, nominal means "configured pin equals wired pin".
+# GPIO mismatch, nominal means "configured pin equals wired pin"; for inverted logic it
+# means "code drives the wiring's active level".
 def _counterfactual_theta(h: Hypothesis) -> str | None:
     if h.fault_code == FaultCode.GPIO_CONFIG_MISMATCH:
         return "pins_matched"
+    if h.fault_code == FaultCode.INVERTED_LOGIC:
+        return "polarity_matched"
     return "declared"
 
 

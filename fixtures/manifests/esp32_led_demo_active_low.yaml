@@ -1,0 +1,49 @@
+# inteGREAT hardware manifest — same LED demo, wired ACTIVE-LOW (Fault C).
+# Anode goes to 3V3 through the resistor; GPIO5 sinks the cathode.
+# The stock firmware still drives HIGH for "on" — the mismatch the demo diagnoses.
+schema: integreat-manifest/v1
+board:
+  id: esp32
+  label: ESP32 DevKitC
+  mcu: esp32
+
+subsystems:
+  - id: lighting
+    label: Lighting
+    source_globs: ["led_control.*"]
+    components: [status_led]
+  - id: app
+    label: Application
+    source_globs: ["*.ino"]
+    components: []
+  - id: connectivity
+    label: Connectivity
+    source_globs: ["wifi_status.*"]
+    components: []
+
+components:
+  - id: status_led
+    type: led
+    label: Status LED
+    pins: [anode, cathode]
+    attributes:
+      active_low: true
+
+power_sources:
+  - id: board_3v3
+    label: ESP32 3V3 rail
+    terminals: [3V3]
+
+connections:
+  - id: led_power
+    from: board_3v3.3V3
+    to: status_led.anode
+    kind: power
+    verification: verified
+    note: Anode tied to 3V3 rail through 220Ω resistor
+  - id: led_signal
+    from: mcu.GPIO5
+    to: status_led.cathode
+    kind: signal
+    verification: verified
+    note: GPIO5 sinks the cathode — LOW lights the LED

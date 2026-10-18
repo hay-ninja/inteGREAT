@@ -11,7 +11,6 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
-from .cv_angle import ArucoAngleEstimator
 from .replay import ReplayEvent
 
 SAMPLE_INTERVAL_S = 1 / 15
@@ -25,7 +24,7 @@ class LiveStream:
     command: str | None
     serial: object  # SerialDevice | SimSerial
     camera: object  # CameraSource
-    estimator: ArucoAngleEstimator
+    estimator: object  # ArucoAngleEstimator | LedStateEstimator — .estimate().value/.quality
     window_ms: int
     camera_id: str = "camera"
     recorded: list[ReplayEvent] = field(default_factory=list)
@@ -39,8 +38,8 @@ class LiveStream:
         def cv_event(frame) -> ReplayEvent:
             est = self.estimator.estimate(frame.image)
             return ReplayEvent(t_ms=max(0, (frame.monotonic_ns - t0) // 1_000_000), source="cv",
-                               data={"frame": frame.seq, "angle_deg": est.angle_deg, "quality": est.quality,
-                                     "raw_deg": est.raw_deg})
+                               data={"frame": frame.seq, "value": est.value, "quality": est.quality,
+                                     "raw": getattr(est, "raw_deg", None) or getattr(est, "brightness", None)})
 
         first = self.camera.latest() if self.camera is not None else None
         if first is not None:

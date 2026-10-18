@@ -111,6 +111,16 @@ Embedded systems engineers working on existing embedded projects. Initial implem
 
 ## 6. Primary demo and fault cases
 
+> **Updated by D-036/D-037 (2026-10-18):** the demo is switching from servo motion to LEDs.
+> The graph is now content-derived rather than servo-shaped — pin writes actuate whatever
+> the declared wiring connects (`digitalWrite` → `controls` through `pin:{board}_*`), and a
+> binary `led_state` metric family (ArUco-anchored ROI brightness) sits beside the analog
+> `servo_angle_deg` path. The servo fixtures remain as legacy demos. A third fault joins
+> the roster: **Fault C — inverted drive logic** (active-low wiring + active-high code),
+> discriminable because a lit-at-boot LED visibly turns *off* on an ON command.
+> Live-hardware bring-up still follows this section's servo rig guidance until an LED rig
+> exists; all LED demo paths are replay/sim-verified only.
+
 ### Physical setup [CONFIRMED + ASSUMPTIONS]
 
 - ESP32 development board running an Arduino C/C++ servo example.

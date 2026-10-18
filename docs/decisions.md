@@ -411,3 +411,59 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   "(Hardware CAD · XML)".
 - Recents are deduped by `repo_root` (re-imports update the entry instead of
   stacking identical cards) and capped at 8.
+
+### D-036 Dynamic graph: actuation resolves through the pin, not the object type — 2026-10-18
+- Problem: importing a folder with no manifest produced a flat "Unassigned" dump of raw
+  filenames, and hardware semantics were servo-shaped — `controls` edges only existed for
+  `Servo`/`ESP32Servo` objects, and node ids were hardcoded `mcu:esp32`.
+- Actuation is now **pin-mediated**: any pin-writing API (`digitalWrite`, `analogWrite`,
+  `ledcWrite`) gets a `configures` edge to `pin:{board}_gpioN` and a `controls` edge to
+  whatever component is wired to that pin — resolved structurally, not by type registry.
+- Component attribution precedence: (1) declared wiring on the pin; (2) sole declared
+  component matching a source object's type (`Servo armServo` → servo); (3) sole declared
+  component of the source file's subsystem (`led_control.cpp` in `lighting` → status_led);
+  (4) inferred wiring. #3 is what exposes a wrong-pin bug: a write to GPIO18 attributes to
+  the component its module was declared for, so `configures` turns `conflicting` against
+  the GPIO5 wiring. Deduped to one `GPIO_CONFIG_MISMATCH` issue per (pin, component).
+- Inferred hardware: object declarations (`Adafruit_NeoPixel strip` → `led_strip`) and
+  name-hinted pin symbols (`LED_PIN` → led) create `unverified`/`inferred` component nodes
+  only when no declared component already covers the pin or subsystem — a guess never
+  outranks a manifest. Files a manifest doesn't claim cluster by filename stem into
+  `subsystem:inferred:<stem>` instead of all landing under "Unassigned".
+- Board identity is keyed by `manifest.board.id` (`mcu:{board}`, `pin:{board}_*`); esp32
+  manifests produce identical ids, so persisted graphs and the pin model are unchanged.
+  ESP32 pin validation stays a manifest-time check, not a global assumption.
+- LangGraph/Redis explicitly rejected: the hardcoding was a data-model gap, not an
+  orchestration or storage gap. The canonical graph + evidence store stay authoritative.
+
+### D-037 Binary metric family + LED demo (led_state) — 2026-10-18
+- `Expectation.metric`/`unit` are free-form; `unit == "state"` marks the binary family.
+  Analog: displacement ≥ min_motion_deg = "moved", final within tolerance = pass.
+  Binary: any state change = "responded" (`physical_motion`), final == target =
+  `physical_state` fact — kept separate because the *interesting* failure is "responded
+  but ended wrong".
+- New `LedStateEstimator` (`cv_led.py`): ArUco anchor marker locates a fixed-offset ROI;
+  calibration records the LED-off baseline brightness; state = ROI mean vs baseline+delta.
+  Never guesses: missing anchor → `marker_not_found`; an *off* LED is a valid 0.
+- Polarity: manifest `attributes.active_low` declares wiring polarity; `Expectation.on_level`
+  records the level the code drives for "on", resolved at proposal via source structure
+  (command literal → handler function → callee named for the literal's tail → its write
+  level). `INVERTED_LOGIC` fires only when state changed + ended wrong + (polarity provably
+  mismatched or on-level unresolved); a *consistent* polarity never emits the finding.
+- Sim rig models it honestly: `lit()` = leads connected AND level-on-wired-pin == active
+  level; GPIOs idle LOW so an active-low LED is lit at boot. Commanding ON writes HIGH →
+  the light visibly turns off: `effect=yes, final_ok=no`, which the shadow sweep
+  discriminates from a dead lead (`effect=no`). `do(code drives the active level)` is the
+  counterfactual. `SimCamera` renders `render_led_scene` when `exp.unit == "state"`.
+- Demo fixtures: `esp32_led_demo` (LED_PIN 5, wired GPIO5), `esp32_led_demo_fault_a`
+  (LED_PIN 18), `esp32_led_demo_active_low.yaml` manifest (same repo, Fault C wiring).
+  Five `led_*.jsonl` synthetic replays; servo fixtures stay importable as legacy demos.
+
+### D-038 Devin org id derived from /v3/self — 2026-10-18
+- Root cause of the create-session 404: `INTEGREAT_DEVIN_ORG_ID` in `.env` carried a stray
+  character. The key already knows its org, so `INTEGREAT_DEVIN_ORG_ID` is now optional —
+  the client derives `org_id` from `GET /v3/self` and validates an explicit override
+  against it instead of trusting pasted config.
+- 404 semantics split: a 404 on *create* = org/config error (`DevinUnavailable` with the
+  response body surfaced, secrets redacted); a 404 on *poll* = `SessionGone` → the job
+  fails cleanly so the engineer can retry instead of hanging on a dead session.

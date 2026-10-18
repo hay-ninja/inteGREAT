@@ -83,9 +83,11 @@ from .models import (
     WiringVerificationRequest,
     utcnow,
 )
-from .repair import (REPAIR_OUTPUT_SCHEMA, DevinClientProtocol, DevinUnavailable, build_brief,
+from .repair import (REPAIR_OUTPUT_SCHEMA, DevinClientProtocol, DevinUnavailable, SessionGone,
+                     build_brief,
                      make_devin, map_remote_state, repo_snapshot)
 from .observations.cv_angle import ArucoAngleEstimator, render_scene
+from .observations.cv_led import render_led_scene
 from .observations.devices import DeviceManager
 from .observations.live import LiveStream
 from .observations.replay import ReplayError, ReplayEvent, list_replays, load_replay
@@ -336,11 +338,19 @@ class Service:
 
     def demo_fixtures(self) -> list[DemoFixture]:
         f = self.settings.fixtures_dir
-        manifest = str(f / "manifests" / "esp32_servo_demo.yaml")
-        return [DemoFixture(label="Fault A firmware (servo pin set to GPIO19)",
-                            repo_path=str(f / "esp32_servo_demo_fault_a"), manifest_path=manifest),
-                DemoFixture(label="Correct firmware (GPIO18) — use for Fault B",
-                            repo_path=str(f / "esp32_servo_demo"), manifest_path=manifest)]
+        led = str(f / "manifests" / "esp32_led_demo.yaml")
+        led_low = str(f / "manifests" / "esp32_led_demo_active_low.yaml")
+        servo = str(f / "manifests" / "esp32_servo_demo.yaml")
+        return [DemoFixture(label="LED demo — code drives the wrong pin",
+                            repo_path=str(f / "esp32_led_demo_fault_a"), manifest_path=led),
+                DemoFixture(label="LED demo — correct firmware (pairs with signal/power faults)",
+                            repo_path=str(f / "esp32_led_demo"), manifest_path=led),
+                DemoFixture(label="LED demo — active-low wiring, active-high code",
+                            repo_path=str(f / "esp32_led_demo"), manifest_path=led_low),
+                DemoFixture(label="Servo — wrong pin (legacy demo)",
+                            repo_path=str(f / "esp32_servo_demo_fault_a"), manifest_path=servo),
+                DemoFixture(label="Servo — correct firmware (legacy demo)",
+                            repo_path=str(f / "esp32_servo_demo"), manifest_path=servo)]
 
     def demo_netlist(self) -> str:
         return str(self.settings.fixtures_dir / "kicad" / "esp32_servo_demo.xml")
@@ -357,9 +367,11 @@ class Service:
         g = self.graph(pid)
         analysis = self.store.get(K_ANALYSIS, pid, ProjectAnalysis)
         evs = self.store.list(K_EVIDENCE, Evidence, project_id=pid)
-        exp = expmod.propose_expectation(pid, g.nodes, evs, [lit.text for lit in analysis.log_literals])
+        exp = expmod.propose_expectation(pid, g.nodes, g.edges, evs,
+                                         [lit.text for lit in analysis.log_literals])
         if exp is None:
-            raise ServiceError(422, "no_testable_component", "No servo component in the hardware graph to test")
+            raise ServiceError(422, "no_testable_component",
+                               "No testable component (servo, led) in the hardware graph")
         self.store.put(K_EXPECT, exp)
         return exp
 
@@ -494,11 +506,21 @@ class Service:
             cfg, _, wired = config_vs_wiring(exp.component_id, g.nodes, g.edges)
             gpio = {n.id: n.attributes.get("gpio") for n in g.nodes}
             configured = gpio.get(cfg[0].target_id) if cfg else None
-            rig = SimRig(conditions_for(src.scenario or "connected", configured, gpio.get(wired) if wired else None))
-            cam = SimCamera(rig)
-            est = ArucoAngleEstimator()
-            # Calibrate like an engineer would before the run: marker visible at a known angle.
-            est.calibrate(render_scene(rig.angle()), rig.angle())
+            comp_node = next((n for n in g.nodes if n.id == exp.component_id), None)
+            active_low = bool(comp_node and comp_node.attributes.get("active_low"))
+            rig = SimRig(conditions_for(src.scenario or "connected", configured,
+                                        gpio.get(wired) if wired else None,
+                                        active_low=active_low,
+                                        code_on_high=exp.on_level != "LOW"))
+            cam = SimCamera(rig, metric=exp.metric)
+            if exp.unit == "state":
+                from .observations.cv_led import LedStateEstimator
+                est = LedStateEstimator()
+                est.calibrate(render_led_scene(False))  # engineer records the LED-off baseline
+            else:
+                est = ArucoAngleEstimator()
+                # Calibrate like an engineer would before the run: marker visible at a known angle.
+                est.calibrate(render_scene(rig.angle()), rig.angle())
             return (LiveStream(scenario=src.scenario or "connected", synthetic=True,
                                description=SIM_SCENARIOS[src.scenario or "connected"], command=command,
                                serial=SimSerial(rig), camera=cam, estimator=est, window_ms=exp.deadline_ms),
@@ -543,18 +565,19 @@ class Service:
                 self._emit("test.serial", run.project_id, se.model_dump(mode="json"), test_run_id=run.id)
             elif ev.source == "cv":
                 q = ev.data.get("quality", "valid")
-                val = ev.data.get("angle_deg")
+                val = ev.data.get("value", ev.data.get("angle_deg"))  # old replays used angle_deg
                 eid = f"evidence:cv:{run.id}:{n}"
                 evs.append(Evidence(
                     id=eid, project_id=run.project_id, kind=EvidenceKind.cv_measurement,
                     epistemic=Epistemic.observed if q == "valid" else Epistemic.unknown, test_run_id=run.id,
                     provenance=prov, raw_ref=f"{src}#frame{ev.data.get('frame')}",
-                    summary=(f"Servo angle {val}° at {ev.t_ms} ms" if q == "valid" else f"No valid angle at {ev.t_ms} ms ({q})"),
-                    payload={"value": val, "quality": q, "elapsed_ms": ev.t_ms}))
+                    summary=(f"{exp.metric} {val}{exp.unit if exp.unit != 'state' else ''} at {ev.t_ms} ms"
+                             if q == "valid" else f"No valid measurement at {ev.t_ms} ms ({q})"),
+                    payload={"value": val, "quality": q, "elapsed_ms": ev.t_ms, "metric": exp.metric}))
                 o = Observation(id=f"obs:{run.id}:{n}", project_id=run.project_id, test_run_id=run.id,
                                 source_type=cv_type, source_id=src, component_id=exp.component_id,
-                                timestamp_utc=ts, elapsed_ms=ev.t_ms, metric="servo_angle_deg",
-                                value=val if q == "valid" else None, unit="deg", measurement_quality=q,
+                                timestamp_utc=ts, elapsed_ms=ev.t_ms, metric=exp.metric,
+                                value=val if q == "valid" else None, unit=exp.unit, measurement_quality=q,
                                 evidence_ref=f"frame:{ev.data.get('frame')}", evidence_id=eid)
                 obs.append(o)
                 self.store.put(K_OBS, o, parent_id=run.id)
@@ -604,8 +627,13 @@ class Service:
                             f"motion={obs.get('physical_motion')} valid={run.result.valid_samples}")
             self.store.put(K_EVIDENCE, shev)
         codes = [f.code for f in findings]
-        title = ("Measurement unavailable" if FaultCode.CAMERA_MEASUREMENT_UNAVAILABLE in codes
-                 else f"Servo did not reach {exp.target:g}°")
+        comp_label = next((n.label for n in g.nodes if n.id == exp.component_id), "component")
+        if FaultCode.CAMERA_MEASUREMENT_UNAVAILABLE in codes:
+            title = "Measurement unavailable"
+        elif exp.unit == "state":
+            title = f"{comp_label} did not reach expected state {exp.target:g}"
+        else:
+            title = f"{comp_label} did not reach {exp.target:g}°"
         inc = Incident(id=iid, project_id=run.project_id, test_run_id=run.id, expectation_id=exp.id,
                        state=IncidentState.open, title=title, fault_codes=codes,
                        hypothesis_ids=[h.id for h in hyps], action_ids=[a.id for a in actions])
@@ -1012,6 +1040,15 @@ class Service:
             job.error = "status check timed out; will retry on next refresh"
             job.updated_at_utc = utcnow()
             self.store.put(K_REPAIR, job, parent_id=job.incident_id)
+            return job
+        except SessionGone as e:
+            job.state = RepairState.failed
+            job.error = (f"{e} — the session is gone in Devin Cloud, so this attempt is "
+                         "closed; request a new attempt if still needed")
+            job.updated_at_utc = utcnow()
+            self.store.put(K_REPAIR, job, parent_id=job.incident_id)
+            self._emit("repair.updated", job.project_id,
+                       {"job_id": job.id, "state": job.state.value}, investigation_id=job.incident_id)
             return job
         except DevinUnavailable as e:
             job.error = str(e)

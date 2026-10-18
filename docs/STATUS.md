@@ -2,7 +2,7 @@
 
 > Update this at the end of every verifiable slice. Keep it short; history lives in git, intent in `decisions.md`.
 
-**Last updated:** 2026-10-18 · **Current milestone:** DSG/agent architecture implemented on `feature/dsg-agent-arch` (D-028–D-031): angle plot removed, metric-keyed graph write-back, SimRig digital shadow + fault estimation, 4-agent roster + deterministic refutation, causal chain. **Live hardware (H0/M5/M7) still outstanding.**
+**Last updated:** 2026-10-18 · **Current milestone:** dynamic graph generalization + LED demo on `feature/dsg-agent-arch` (D-036–D-038): pin-mediated actuation, inferred hardware/subsystems, board-keyed ids, `led_state` binary metrics, inverted-logic diagnosis, Devin org auto-derive. **Live hardware (H0/M5/M7) still outstanding.**
 
 **Hackathon:** LA Hacks AI Hackathon (Oct 17–18), targeting **Beyond the Digital** and relevant company
 challenges. See [hackathon context](hackathon-context.md) for supplied requirements and candidate fit;
@@ -23,7 +23,18 @@ this adds context without changing P0 scope.
 | M8 | Expansion: graph layers (D-023), Event Flow (D-024), StepFun orchestration + Devin repair (D-025) | **done in software** — real adapters + deterministic fallbacks tested; **live StepFun/Gemini/Devin calls blocked: no API keys** |
 
 ## What works now (verified 2026-10-18, `feature/dsg-agent-arch`)
-- **Tests:** 109 backend (pytest) + 17 frontend (vitest) passing; `tsc -b` clean; production build passing.
+- **Tests:** 131 backend (pytest) + 17 frontend (vitest) passing; `tsc -b` clean; production build passing.
+- **LED demo end-to-end (all replay + sim, no hardware):** import `esp32_led_demo*` fixtures →
+  `led_state` expectation (`LED ON`, `on_level: HIGH` resolved from source) → three faults
+  diagnosed distinctly — wrong-pin `GPIO_CONFIG_MISMATCH`, dead-lead `POSSIBLE_POWER_OR_SIGNAL_FAULT`,
+  and active-low/active-high `INVERTED_LOGIC` (state changes but ends wrong). `marker_lost` stays
+  `CAMERA_MEASUREMENT_UNAVAILABLE`, never a fault. Sim path runs the real LiveStream with
+  `LedStateEstimator` on rendered frames.
+- **Graph is content-derived, not servo-shaped:** `digitalWrite(LED_PIN, HIGH)` gets a `controls`
+  edge to whichever component the pin is wired to; `Servo myservo`/`Adafruit_NeoPixel strip` objects
+  and `LED_PIN`-style symbols become `unverified` inferred components only when the manifest doesn't
+  cover them; same-stem files cluster into inferred subsystems; board keying comes from
+  `manifest.board.id`.
 - **Browser-verified via headless Chromium walkthrough** (`apps/web/ui_walkthrough.mjs`, simulated data):
   Fault A demo import → combined graph with Software/Hardware regions, verb edge labels
   ("configures pin", "connected to · verified"), conflict highlights → Hardware layer (6 hw nodes,

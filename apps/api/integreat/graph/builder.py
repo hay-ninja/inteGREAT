@@ -8,10 +8,11 @@ causal claim.
 from __future__ import annotations
 
 import fnmatch
+import re
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
-from ..ingestion.arduino_parser import ParsedProject
+from ..ingestion.arduino_parser import OBJECT_TYPE_HINTS, WRITE_VALUE_ARG, ParsedProject
 from ..ingestion.manifest import Endpoint, Manifest, mcu_pin_node_id, resolve_endpoint
 from ..ingestion.manifest import ESP32_INPUT_ONLY
 from ..models import (
@@ -49,12 +50,23 @@ def manifest_evidence_id(item_id: str) -> str:
     return f"evidence:manifest:{item_id}"
 
 
-def endpoint_node_id(ep: Endpoint) -> str:
+def endpoint_node_id(ep: Endpoint, board: str) -> str:
     if ep.part_kind == "mcu":
-        return mcu_pin_node_id(ep.pin)
+        return mcu_pin_node_id(board, ep.pin)
     if ep.part_kind == "component":
         return f"pin:{ep.part_id}.{ep.pin}"
     return f"power_source:{ep.part_id}"
+
+
+# Pin apis that drive a physical state (vs. pinMode which only configures).
+WRITE_APIS = set(WRITE_VALUE_ARG)
+
+# Symbol-name hints for guessing the kind of an otherwise-unknown output component.
+# Matched case-insensitively against the pin symbol/object name. Guesses stay unverified.
+_NAME_TYPE_HINTS: list[tuple[str, str]] = [
+    ("led", "led"), ("servo", "servo"), ("motor", "motor"), ("fan", "fan"),
+    ("relay", "relay"), ("buzz", "buzzer"), ("pump", "pump"), ("heat", "heater"),
+]
 
 
 class _Builder:
@@ -74,6 +86,8 @@ class _Builder:
         self._nodes: dict[str, GraphNode] = {}
         self._edges: dict[str, GraphEdge] = {}
         self._evidence: dict[str, Evidence] = {}
+        self.board = manifest.board.id if manifest else "esp32"
+        self.mcu_id = f"mcu:{self.board}"
 
     # ---- primitives
     def node(self, id: str, kind: NodeKind, label: str, verification: Verification, **kw) -> GraphNode:
@@ -118,8 +132,9 @@ class _Builder:
     def build(self) -> BuildResult:
         module_sub = self._subsystems()
         self._source(module_sub)
-        servo_components = self._hardware()
-        self._source_hardware_links(servo_components)
+        self._hardware()          # declared components first — they're authoritative
+        self._hardware_inferred() # code-derived components fill gaps, never override
+        self._source_hardware_links()
         self._static_consistency()
         for msg, file, line in self.p.warnings:
             self.issue("warning", "PARSER_UNCERTAIN", msg, file=file, line=line)
@@ -131,16 +146,38 @@ class _Builder:
     def _subsystems(self) -> dict[str, str]:
         subs = self.m.subsystems if self.m else []
         module_sub: dict[str, str] = {}
+        unassigned: list[str] = []
         for rel in self.files:
             name = PurePosixPath(rel).name
-            sid = next((f"subsystem:{s.id}" for s in subs if any(fnmatch.fnmatch(name, g) for g in s.source_globs)), UNASSIGNED)
-            module_sub[rel] = sid
+            sid = next((f"subsystem:{s.id}" for s in subs
+                        if any(fnmatch.fnmatch(name, g) for g in s.source_globs)), None)
+            if sid is None:
+                unassigned.append(rel)
+            module_sub[rel] = sid or UNASSIGNED
         for s in subs:
             ev = manifest_evidence_id(f"subsystem_{s.id}")
             self.evidence(ev, self.hw_kind, Epistemic.verified, f"{self.hw_word} declares subsystem '{s.label}'",
                           Provenance(source_id=self.hw_src, file=self.mrel, line_start=self.mlines.get(s.id)))
             self.node(f"subsystem:{s.id}", NodeKind.subsystem, s.label, Verification.verified, evidence_ids=[ev],
                       subsystem_id=f"subsystem:{s.id}")
+        # Files a manifest didn't claim get grouped by filename stem: header+impl pairs and
+        # related same-stem files cluster into an inferred subsystem instead of all landing
+        # under "Unassigned". Inferred, evidence-cited; declared globs always win.
+        by_stem: dict[str, list[str]] = {}
+        for rel in unassigned:
+            by_stem.setdefault(PurePosixPath(rel).stem.lower(), []).append(rel)
+        sketch = [r for r in unassigned if r.endswith(".ino")]
+        for stem, members in sorted(by_stem.items()):
+            single = len(members) == 1
+            if single and members[0] not in sketch:
+                continue  # a lone non-sketch file stays Unassigned rather than a 1-file group
+            label = "Sketch" if members[0] in sketch and single else stem.replace("_", " ").title()
+            sid = f"subsystem:inferred:{stem}"
+            self.node(sid, NodeKind.subsystem, label, Verification.inferred, subsystem_id=sid)
+            for rel in members:
+                module_sub[rel] = sid
+            self.issue("info", "SUBSYSTEM_INFERRED",
+                       f"'{label}' grouped from filename stem '{stem}' — no manifest declaration")
         if UNASSIGNED in module_sub.values() or not subs:
             self.node(UNASSIGNED, NodeKind.subsystem, "Unassigned", Verification.inferred, subsystem_id=UNASSIGNED)
         return module_sub
@@ -177,7 +214,8 @@ class _Builder:
             return []
         m = self.m
         sub_of = {cid: f"subsystem:{s.id}" for s in m.subsystems for cid in s.components}
-        self.node("mcu:esp32", NodeKind.mcu, m.board.label, Verification.verified, attributes={"board": m.board.id})
+        self.node(self.mcu_id, NodeKind.mcu, m.board.label, Verification.verified,
+                  attributes={"board": m.board.id})
         for c in m.components:
             ev = self.evidence(manifest_evidence_id(c.id), self.hw_kind, Epistemic.verified,
                                f"{self.hw_word} declares {c.type} '{c.label}' with pins {', '.join(c.pins)}",
@@ -214,34 +252,163 @@ class _Builder:
                 self.edge(f"component:{b.part_id}", f"power_source:{a.part_id}", EdgeRelation.powered_by,
                           EdgeOrigin.declared_wiring, ver, evidence_ids=[ev], label=f"{a.pin}→{b.pin}", attributes=attrs)
             else:
-                self.edge(endpoint_node_id(a), endpoint_node_id(b), EdgeRelation.connected_to,
+                self.edge(endpoint_node_id(a, self.board), endpoint_node_id(b, self.board),
+                          EdgeRelation.connected_to,
                           EdgeOrigin.declared_wiring, ver, evidence_ids=[ev], label=conn.kind, attributes=attrs)
-        return [f"component:{c.id}" for c in m.components if c.type == "servo"]
+        return
 
     def _mcu_pin(self, canonical: str, gpio: int | None) -> str:
-        pid = mcu_pin_node_id(canonical)
+        pid = mcu_pin_node_id(self.board, canonical)
         attrs = {"gpio": gpio} if gpio is not None else {}
         if gpio in ESP32_INPUT_ONLY:
             attrs["input_only"] = True
-        self.node(pid, NodeKind.pin, canonical, Verification.verified, parent_id="mcu:esp32", attributes=attrs)
-        self.edge("mcu:esp32", pid, EdgeRelation.contains, EdgeOrigin.structural, Verification.verified)
+        self.node(pid, NodeKind.pin, canonical, Verification.verified, parent_id=self.mcu_id, attributes=attrs)
+        self.edge(self.mcu_id, pid, EdgeRelation.contains, EdgeOrigin.structural, Verification.verified)
         return pid
 
-    def _source_hardware_links(self, servo_components: list[str]) -> None:
-        has_mcu = "mcu:esp32" in self._nodes
-        servo_target = servo_components[0] if len(servo_components) == 1 else None
-        if len(servo_components) > 1 and self.p.objects:
-            self.issue("warning", "AMBIGUOUS_SERVO_MAPPING",
-                       "Multiple servo components declared; source servo objects are not auto-mapped")
+    def _component_for_gpio(self, gpio: int, declared_only: bool = True) -> str | None:
+        """Resolve an MCU pin to the component wired to it — the pin-mediated path that makes
+        actuation edges work for any component type, not just servo objects. Declared wiring
+        wins over inferred wiring: an unverified guess must not outrank a manifest."""
+        pin_id = mcu_pin_node_id(self.board, f"GPIO{gpio}")
+        comps: list[str] = []
+        for e in self._edges.values():
+            if e.relation != EdgeRelation.connected_to or e.attributes.get("kind") != "signal":
+                continue
+            if pin_id not in (e.source_id, e.target_id):
+                continue
+            other = e.target_id if e.source_id == pin_id else e.source_id
+            m = re.match(r"pin:([a-z0-9_]+)\.", other)
+            if m:
+                comps.append(f"component:{m.group(1)}")
+        declared = sorted(c for c in set(comps)
+                          if not self._nodes.get(c) or not self._nodes[c].attributes.get("inferred"))
+        pool = declared if declared_only else sorted(set(comps))
+        if len(pool) > 1:
+            self.issue("warning", "AMBIGUOUS_PIN_MAPPING",
+                       f"GPIO{gpio} is wired to multiple components {pool}; actuation edges not guessed")
+            return None
+        return pool[0] if pool else None
+
+    def _subsystem_component(self, function_id: str | None) -> str | None:
+        """The sole declared component of the source file's subsystem (`led_control.cpp` in
+        `lighting` → its one component). Subsystem attribution is what lets a write to a
+        *wrong* pin still attribute to the intended component — exposing the mismatch."""
+        fn = self._nodes.get(function_id) if function_id else None
+        sub = fn.subsystem_id if fn else None
+        if not sub:
+            return None
+        comps = [n.id for n in self._nodes.values()
+                 if n.kind == NodeKind.component and n.subsystem_id == sub
+                 and not n.attributes.get("inferred")]
+        return comps[0] if len(comps) == 1 else None
+
+    def _resolve_component(self, gpio: int, object_type: str | None,
+                           function_id: str | None = None) -> str | None:
+        """Component attribution, in precedence order: declared wiring on the pin → sole
+        declared component matching the object's type → sole declared component of the
+        file's subsystem → inferred wiring on the pin."""
+        comp = self._component_for_gpio(gpio, declared_only=True)
+        if comp:
+            return comp
+        if object_type:
+            ctype = OBJECT_TYPE_HINTS.get(object_type)
+            cands = [n.id for n in self._nodes.values()
+                     if n.kind == NodeKind.component and n.attributes.get("type") == ctype
+                     and not n.attributes.get("inferred")]
+            if len(cands) == 1:
+                return cands[0]
+        comp = self._subsystem_component(function_id)
+        return comp or self._component_for_gpio(gpio, declared_only=False)
+
+    def _ensure_mcu(self) -> bool:
+        """Create an inferred MCU node when source uses GPIO pins but no manifest declared a
+        board. The pin model is still esp32; the node is marked inferred, never verified."""
+        if self.mcu_id in self._nodes:
+            return True
+        if not self.p.pin_uses:
+            return False
+        self.node(self.mcu_id, NodeKind.mcu, f"MCU (assumed {self.board} — no manifest)",
+                  Verification.inferred, attributes={"board": self.board, "inferred": True})
+        self.issue("info", "MCU_INFERRED",
+                   f"No manifest declared a board; assumed {self.board} from source GPIO usage")
+        return True
+
+    def _inferred_component(self, name: str, gpio: int | None, type_hint: str | None,
+                            ev_ids: list[str]) -> str:
+        """Create (or return) an inferred component for something the code drives but no
+        manifest declared. Unverified — hardware existence is never claimed from code alone."""
+        cid = f"component:{name}"
+        if cid in self._nodes:
+            return cid
+        label = f"{type_hint or 'output'} '{name}'" + (f" on GPIO{gpio}" if gpio is not None else "")
+        self.node(cid, NodeKind.component, label, Verification.unverified,
+                  attributes={"type": type_hint or "output", "inferred": True},
+                  evidence_ids=ev_ids)
+        self.issue("info", "COMPONENT_INFERRED",
+                   f"'{label}' inferred from source — confirm hardware in a manifest")
+        if gpio is not None and self._ensure_mcu():
+            pid = self._mcu_pin(f"GPIO{gpio}", gpio)
+            self._nodes[pid].verification = Verification.inferred
+            ppin = f"pin:{name}.signal"
+            self.node(ppin, NodeKind.pin, f"{name}.signal", Verification.unverified,
+                      parent_id=cid, attributes={"pin": "signal", "inferred": True})
+            self.edge(cid, ppin, EdgeRelation.contains, EdgeOrigin.structural, Verification.unverified)
+            self.edge(pid, ppin, EdgeRelation.connected_to, EdgeOrigin.inferred_dependency,
+                      Verification.unverified, evidence_ids=ev_ids, label="signal",
+                      attributes={"kind": "signal", "inferred": True})
+        return cid
+
+    def _hardware_inferred(self) -> None:
+        """Code-derived hardware: declared objects (Servo myservo) and name-hinted pin symbols
+        (LED_PIN) become unverified component nodes when the manifest didn't declare them.
+        Inferred wiring only materializes when no declared component already covers the pin."""
+        for name, (otype, file, line) in self.p.objects.items():
+            ev = [self.src_ev(file, line, f"obj_{name}", f"Declaration of {otype} {name}",
+                              Epistemic.observed, object_name=name, object_type=otype)]
+            declared = [n for n in self._nodes.values() if n.kind == NodeKind.component
+                        and n.attributes.get("type") == OBJECT_TYPE_HINTS.get(otype)
+                        and not n.attributes.get("inferred")]
+            if declared:
+                # declared wins: the object is evidence FOR the manifest component, not a new one
+                for e in ev:
+                    if e not in declared[0].evidence_ids:
+                        declared[0].evidence_ids.append(e)
+                continue
+            self._inferred_component(name, None, OBJECT_TYPE_HINTS.get(otype), ev)
+        for pu in self.p.pin_uses:
+            if pu.gpio is None or pu.api not in WRITE_APIS:
+                continue
+            if self._component_for_gpio(pu.gpio):
+                continue  # declared (or already-inferred) component covers this pin
+            if self._subsystem_component(pu.function_id):
+                continue  # the file's subsystem attributes this write to a declared
+                # component — inventing a twin here would hide wrong-pin mismatches
+            sym = pu.symbol.name if pu.symbol else None
+            if sym is None:
+                continue  # anonymous literal pins don't justify inventing hardware
+            hint = next((t for key, t in _NAME_TYPE_HINTS if key in sym.lower()), None)
+            ev = [self.src_ev(pu.file, pu.line, f"pin_{pu.api}", f"`{pu.call_text}` drives GPIO{pu.gpio}",
+                              api=pu.api, gpio=pu.gpio)]
+            self._inferred_component(sym.lower(), pu.gpio, hint, ev)
+
+    def _source_hardware_links(self) -> None:
+        """Actuation resolves THROUGH THE PIN: a write on GPIO n controls whatever component's
+        declared/inferred signal wiring lands on pin:{board}_gpio{n}. Object-type knowledge
+        (servo.attach → object→pin binding, obj.write() → actuation) feeds the same path."""
+        has_mcu = self._ensure_mcu()
+        obj_pin: dict[str, int] = {}  # object name -> bound gpio (from .attach etc.)
 
         for pu in self.p.pin_uses:
             if pu.gpio is None or pu.function_id is None:
                 continue
+            if pu.object_name is not None:
+                obj_pin[pu.object_name] = pu.gpio
             tag = f"pin_{pu.api}"
             via = f" via {pu.symbol.name} ({pu.symbol.file}:{pu.symbol.line})" if pu.symbol else ""
             ev = [self.src_ev(pu.file, pu.line, tag, f"`{pu.call_text}` configures GPIO{pu.gpio}{via}",
                               api=pu.api, gpio=pu.gpio, raw_arg=pu.raw_arg, resolution=pu.resolution,
-                              object_name=pu.object_name, object_type=pu.object_type)]
+                              level=pu.level, object_name=pu.object_name, object_type=pu.object_type)]
             if pu.symbol:
                 ev.append(self.src_ev(pu.symbol.file, pu.symbol.line, "symbol",
                                       f"{pu.symbol.kind} {pu.symbol.name} = {pu.symbol.raw_value}",
@@ -254,20 +421,36 @@ class _Builder:
                 e.target_id == pid or e.source_id == pid for e in self._edges.values() if e.relation == EdgeRelation.connected_to
             ):
                 self._nodes[pid].verification = Verification.inferred  # only known from source
+            comp = self._resolve_component(pu.gpio, pu.object_type, pu.function_id)
             attrs = {"api": pu.api, "gpio": pu.gpio}
-            if pu.object_type and servo_target:
-                attrs["for_component"] = servo_target
+            if pu.level is not None:
+                attrs["level"] = pu.level
+            if comp:
+                attrs["for_component"] = comp
             self.edge(pu.function_id, pid, EdgeRelation.configures, EdgeOrigin.source_config, Verification.inferred,
                       evidence_ids=ev, label=pu.api, attributes=attrs)
-            if pu.object_type and servo_target:
-                self.edge(pu.function_id, servo_target, EdgeRelation.controls, EdgeOrigin.inferred_dependency,
-                          Verification.inferred, evidence_ids=ev, label=f"via {pu.object_name}")
+            if comp and (pu.api in WRITE_APIS or pu.object_type):
+                # a pin write actuates the wired component; .attach binds a servo object to it
+                lbl = f"via {pu.object_name}" if pu.object_name else pu.api
+                self.edge(pu.function_id, comp, EdgeRelation.controls, EdgeOrigin.inferred_dependency,
+                          Verification.inferred, evidence_ids=ev, label=lbl)
 
         for ac in self.p.actuator_calls:
-            if ac.function_id is None or not servo_target:
+            if ac.function_id is None:
+                continue
+            comp = (self._component_for_gpio(obj_pin[ac.object_name])
+                    if ac.object_name in obj_pin else None)
+            if comp is None:
+                # object not bound to a pin — fall back to the sole declared/inferred
+                # component of the object's type, if unambiguous
+                ctype = OBJECT_TYPE_HINTS.get(ac.object_type or "")
+                cands = [n.id for n in self._nodes.values()
+                         if n.kind == NodeKind.component and n.attributes.get("type") == ctype]
+                comp = cands[0] if len(cands) == 1 else None
+            if comp is None:
                 continue
             ev = self.src_ev(ac.file, ac.line, f"act_{ac.method}", f"`{ac.call_text}` commands {ac.object_name}")
-            self.edge(ac.function_id, servo_target, EdgeRelation.controls, EdgeOrigin.inferred_dependency,
+            self.edge(ac.function_id, comp, EdgeRelation.controls, EdgeOrigin.inferred_dependency,
                       Verification.inferred, evidence_ids=[ev], label=f"{ac.object_name}.{ac.method}")
 
         for lit in self.p.command_literals:
@@ -286,7 +469,8 @@ def signal_wiring_for(component_id: str, edges: list[GraphEdge]) -> tuple[GraphE
             continue
         ends = {e.source_id, e.target_id}
         comp_pin = next((x for x in ends if x.startswith(prefix)), None)
-        mcu_pin = next((x for x in ends if x.startswith("pin:esp32_")), None)
+        # MCU pins are pin:{board}_* (no dot); component pins are pin:{comp}.{pin} (dotted)
+        mcu_pin = next((x for x in ends if x.startswith("pin:") and "." not in x), None)
         if comp_pin and mcu_pin:
             return e, mcu_pin
     return None
@@ -297,6 +481,7 @@ def consistency_issues(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[I
     verification of `configures` edges: conflicting when mismatched, inferred otherwise."""
     labels = {n.id: n.label for n in nodes}
     issues = []
+    flagged: set[tuple[str, str]] = set()  # one issue per (configured pin, component) pair
     for e in edges:
         comp = e.attributes.get("for_component")
         if e.relation != EdgeRelation.configures or not comp:
@@ -307,6 +492,9 @@ def consistency_issues(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[I
             continue
         wire_edge, mcu_pin_id = wired
         e.verification = Verification.conflicting
+        if (e.target_id, comp) in flagged:
+            continue
+        flagged.add((e.target_id, comp))
         issues.append(ImportIssue(
             level="warning", code="GPIO_CONFIG_MISMATCH",
             message=(f"Source configures {labels[e.target_id]} for {labels[comp]}, but "

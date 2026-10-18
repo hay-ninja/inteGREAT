@@ -2811,13 +2811,11 @@
      },
      "metric": {
       "type": "string",
-      "const": "servo_angle_deg",
       "title": "Metric",
       "default": "servo_angle_deg"
      },
      "unit": {
       "type": "string",
-      "const": "deg",
       "title": "Unit",
       "default": "deg"
      },
@@ -2848,6 +2846,17 @@
        }
       ],
       "title": "Ack Pattern"
+     },
+     "on_level": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "On Level"
      },
      "min_motion_deg": {
       "type": "number",
@@ -2898,6 +2907,7 @@
      "deadline_ms",
      "measurement_source",
      "ack_pattern",
+     "on_level",
      "min_motion_deg",
      "min_valid_samples",
      "confirmed_by_engineer",
@@ -3080,7 +3090,8 @@
       "enum": [
        "command_sent",
        "command_acknowledged",
-       "physical_motion"
+       "physical_motion",
+       "physical_state"
       ],
       "title": "Key"
      },
@@ -3126,7 +3137,7 @@
      "note"
     ],
     "title": "Fact",
-    "description": "The three distinct facts PRD \u00a75.3 says must never be conflated."
+    "description": "The three distinct facts PRD \u00a75.3 says must never be conflated. `physical_motion` is the\nanalog form (displacement), `physical_state` the binary form (state reached) \u2014 same slot,\ndifferent metric family."
    },
    "FaultCode": {
     "type": "string",
@@ -3136,6 +3147,7 @@
      "MISSING_SERIAL_ACK",
      "CAMERA_MEASUREMENT_UNAVAILABLE",
      "POSSIBLE_POWER_OR_SIGNAL_FAULT",
+     "INVERTED_LOGIC",
      "AGENT_PROPOSED"
     ],
     "title": "FaultCode"
@@ -4303,6 +4315,7 @@
       "enum": [
        "valid",
        "marker_not_found",
+       "led_not_found",
        "calibration_invalid",
        "dropped"
       ],

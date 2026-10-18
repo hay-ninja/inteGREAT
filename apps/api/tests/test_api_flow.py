@@ -91,7 +91,7 @@ def test_fault_b_offers_manual_checks_and_records_result(client):
     view = client.post(f"{API}/investigations/{run['incident_id']}/manual-results",
                        json={"action_id": check["id"], "result": "Disconnected", "note": "lead off"}).json()
     top = view["hypotheses"][0]
-    assert top["title"].startswith("Servo signal lead") and top["status"] == "supported" and top["rank"] == 1
+    assert "signal lead" in top["title"] and top["status"] == "supported" and top["rank"] == 1
     assert any(e["kind"] == "engineer_assertion" for e in view["evidence"])
 
 

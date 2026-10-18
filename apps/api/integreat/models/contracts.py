@@ -209,14 +209,15 @@ class Expectation(Model):
     test_definition_id: str
     component_id: str
     trigger: ExpectationTrigger
-    metric: Literal["servo_angle_deg"] = "servo_angle_deg"
-    unit: Literal["deg"] = "deg"
+    metric: str = "servo_angle_deg"  # free-form; known: "servo_angle_deg" (deg), "led_state" (0/1)
+    unit: str = "deg"
     target: float
     tolerance: float
     deadline_ms: int
     measurement_source: str = "camera"
     ack_pattern: str | None = None  # serial line prefix that counts as firmware acknowledgement
-    min_motion_deg: float = 5.0  # displacement below this counts as "no physical motion"
+    on_level: str | None = None  # level the code drives for the "on" state (binary metrics; None = unresolved)
+    min_motion_deg: float = 5.0  # displacement below this counts as "no physical motion" (analog metrics)
     min_valid_samples: int = 3
     confirmed_by_engineer: bool = False
     proposed_from_evidence_ids: list[str] = Field(default_factory=list)
@@ -252,9 +253,11 @@ class ExpectationOutcome(StrEnum):
 
 
 class Fact(Model):
-    """The three distinct facts PRD §5.3 says must never be conflated."""
+    """The three distinct facts PRD §5.3 says must never be conflated. `physical_motion` is the
+    analog form (displacement), `physical_state` the binary form (state reached) — same slot,
+    different metric family."""
 
-    key: Literal["command_sent", "command_acknowledged", "physical_motion"]
+    key: Literal["command_sent", "command_acknowledged", "physical_motion", "physical_state"]
     label: str
     value: Literal["yes", "no", "unknown"]
     evidence_ids: list[str] = Field(default_factory=list)
@@ -301,7 +304,8 @@ class Observation(Model):
     metric: str
     value: float | None
     unit: str
-    measurement_quality: Literal["valid", "marker_not_found", "calibration_invalid", "dropped"]
+    measurement_quality: Literal["valid", "marker_not_found", "led_not_found",
+                                 "calibration_invalid", "dropped"]
     evidence_ref: str
     evidence_id: str
 
@@ -470,6 +474,7 @@ class FaultCode(StrEnum):
     MISSING_SERIAL_ACK = "MISSING_SERIAL_ACK"
     CAMERA_MEASUREMENT_UNAVAILABLE = "CAMERA_MEASUREMENT_UNAVAILABLE"
     POSSIBLE_POWER_OR_SIGNAL_FAULT = "POSSIBLE_POWER_OR_SIGNAL_FAULT"
+    INVERTED_LOGIC = "INVERTED_LOGIC"  # code's on-level doesn't match the declared wiring polarity
     AGENT_PROPOSED = "AGENT_PROPOSED"  # hypothesis proposed by an LLM agent; always starts unverified
 
 

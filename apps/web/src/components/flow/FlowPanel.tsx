@@ -125,6 +125,14 @@ export function Notice({ tone, title, body, end }: {
 
 // ------------------------------------------------------------------ 1. Set up
 
+/** Plain-English name for what the camera measures, derived from the expectation's metric. */
+const NOUNS: Record<string, string> = { led_state: "the light", servo_angle_deg: "the arm" };
+const noun = (exp?: { metric: string } | null) => NOUNS[exp?.metric ?? ""] ?? "the component";
+const goalText = (exp: { metric: string; unit: string; target: number; tolerance: number; deadline_ms: number }) =>
+  exp.unit === "state"
+    ? `${noun(exp)} should ${exp.target === 1 ? "turn on" : "turn off"} within ${exp.deadline_ms} ms`
+    : `${noun(exp)} should reach ${exp.target}° ± ${exp.tolerance}° within ${exp.deadline_ms} ms`;
+
 function SetupStep(p: FlowProps) {
   const exp = p.expectation;
   const [draft, setDraft] = useState({ target: 90, tolerance: 8, deadline_ms: 2000, trigger: "MOVE 90" });
@@ -154,15 +162,15 @@ function SetupStep(p: FlowProps) {
     <VStack gap={3}>
       <Eyebrow num="01">Setup — confirm the test</Eyebrow>
       <Heading level={2} type="display-3">Confirm the test</Heading>
-      <Text type="body" color="secondary">Send a command, then the camera checks the servo angle.</Text>
+      <Text type="body" color="secondary">Send a command, then the camera checks whether {noun(exp)} responded.</Text>
       <Card padding={3} variant="muted">
         <VStack gap={3}>
           <Eyebrow>Test parameters</Eyebrow>
-          <Text type="supporting">inteGREAT sends this command to the board, then watches the arm to check it actually moved.</Text>
+          <Text type="supporting">inteGREAT sends this command to the board, then watches {noun(exp)} to check it actually responded.</Text>
           <TextInput label="Command to send" value={draft.trigger} onChange={(v) => setDraft({ ...draft, trigger: v })} />
           <HStack gap={2}>
-            <NumberInput label="Target" units="°" value={draft.target} onChange={(v) => setDraft({ ...draft, target: v })} />
-            <NumberInput label="± tolerance" units="°" value={draft.tolerance} min={0} onChange={(v) => setDraft({ ...draft, tolerance: v })} />
+            <NumberInput label="Target" units={exp.unit === "state" ? "state" : exp.unit} value={draft.target} onChange={(v) => setDraft({ ...draft, target: v })} />
+            <NumberInput label="± tolerance" units={exp.unit === "state" ? "state" : exp.unit} value={draft.tolerance} min={0} onChange={(v) => setDraft({ ...draft, tolerance: v })} />
             <NumberInput label="Within" units="ms" value={draft.deadline_ms} min={100} step={100}
                          onChange={(v) => setDraft({ ...draft, deadline_ms: v })} />
           </HStack>
@@ -195,7 +203,7 @@ function RunStep(p: FlowProps) {
         <VStack gap={0.5}>
           <Text type="code">{exp.trigger.value}</Text>
           <Text type="supporting">
-            servo should reach {exp.target}° ± {exp.tolerance}° within {exp.deadline_ms} ms
+            {goalText(exp)}
           </Text>
         </VStack>
       </Card>
@@ -219,18 +227,23 @@ function recommendedFor(h: Hypothesis | undefined, actions: DiagnosticAction[]):
   return options.find((a) => a.kind !== "verify_fix" && a.status === "proposed") ?? options.find((a) => a.kind !== "verify_fix");
 }
 
-/** One-sentence story of the run for readers who don't know hardware: what went out, what came back, what moved. */
-function inPlainTerms(result: ExpectationResult): string {
+/** One-sentence story of the run for readers who don't know hardware: what went out, what came back, what changed. */
+function inPlainTerms(result: ExpectationResult, exp?: { metric: string; unit: string } | null): string {
   const f = (k: string) => result.facts.find((x) => x.key === k)?.value;
+  const what = noun(exp);
+  const responded = exp?.unit === "state" ? "never changed" : "never moved";
   if (result.outcome === "inconclusive")
-    return "In short: the camera could not measure the arm, so what happened physically is unknown — not proven broken.";
+    return `In short: the camera could not measure ${what}, so what happened physically is unknown — not proven broken.`;
   const ack = f("command_acknowledged"), moved = f("physical_motion");
   if (moved === "no")
     return ack === "yes"
-      ? "In short: the board received the command and replied OK, but the arm never moved — something between the code and the motor is wrong."
-      : "In short: the command went out, but the board never confirmed it and the arm did not move.";
+      ? `In short: the board received the command and replied OK, but ${what} ${responded} — something between the code and the hardware is wrong.`
+      : `In short: the command went out, but the board never confirmed it and ${what} did not respond.`;
   if (moved === "unknown")
-    return "In short: the command went out, but whether the arm moved is unknown — the camera produced no measurement.";
+    return `In short: the command went out, but whether ${what} responded is unknown — the camera produced no measurement.`;
+  const st = f("physical_state");
+  if (moved === "yes" && st === "no")
+    return `In short: ${what} responded to the command — but ended in the wrong state. That's backwards logic, not a dead lead.`;
   return "";
 }
 
@@ -276,8 +289,8 @@ function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
           <Heading level={2} type="display-3">{result?.outcome === "pass" ? "Repeat test passed" : result?.outcome === "inconclusive" ? "Measurement unavailable" : view.incident.title}</Heading>
           <SourceBadge run={currentRun} />
         </HStack>
-        {result && <Text type="supporting">{result.final_valid_value == null ? "No valid angle measurement is available." : `Expected the arm at ${p.expectation?.target ?? "?"}° ± ${p.expectation?.tolerance ?? "?"}°, camera measured ${result.final_valid_value.toFixed(1)}°`}</Text>}
-        {result && inPlainTerms(result) && <Text type="body" color="secondary">{inPlainTerms(result)}</Text>}
+        {result && <Text type="supporting">{result.final_valid_value == null ? "No valid measurement is available." : p.expectation?.unit === "state" ? `Expected ${noun(p.expectation)} ${p.expectation?.target === 1 ? "on" : "off"}, camera saw ${result.final_valid_value === 1 ? "on" : "off"}` : `Expected ${noun(p.expectation)} at ${p.expectation?.target ?? "?"}° ± ${p.expectation?.tolerance ?? "?"}°, camera measured ${result.final_valid_value.toFixed(1)}°`}</Text>}
+        {result && inPlainTerms(result, p.expectation) && <Text type="body" color="secondary">{inPlainTerms(result, p.expectation)}</Text>}
       </VStack>
       {result && <Facts result={result} />}
       {view.causal_chain.length > 0 && <CausalChain steps={view.causal_chain} />}
@@ -314,7 +327,7 @@ function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
               </HStack>
             )}
             <Text type="supporting">{top.fault_code === "CAMERA_MEASUREMENT_UNAVAILABLE"
-              ? "Check marker visibility and calibration, then repeat with valid measurements. Servo behavior is unknown until the camera can measure it."
+              ? "Check marker visibility and calibration, then repeat with valid measurements. The component's behavior is unknown until the camera can measure it."
               : primary?.rationale ?? top.explanation}</Text>
             {tied.length > 1 && <Text type="supporting">These causes have equal rank. The next check gathers evidence to distinguish them.</Text>}
             <Collapsible defaultIsOpen={false} trigger={<Text type="supporting">Why this check?</Text>}>
@@ -450,7 +463,7 @@ const PERMS: { id: PermissionCategory; label: string; hint: string }[] = [
   { id: "repo_read", label: "Read source code", hint: "imported repository only" },
   { id: "netlist_read", label: "Read wiring", hint: "manifest / netlist" },
   { id: "serial_read", label: "Read serial output", hint: "device buffer or recordings" },
-  { id: "camera_observe", label: "Read camera data", hint: "angle measurements, no video" },
+  { id: "camera_observe", label: "Read camera data", hint: "measurement readings, no video" },
 ];
 
 function MoreTools(p: FlowProps & { view: InvestigationView }) {

@@ -2,6 +2,7 @@
 
 import asyncio
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -136,3 +137,80 @@ def test_needs_input_and_audit_evidence():
         v = c.get(f"{API}/investigations/{iid}").json()
         assert any(j["id"] == job["id"] for j in v["repair_jobs"])
         assert any("Devin repair session" in e["summary"] for e in v["evidence"])
+
+
+# ---- Devin HTTP client: org derivation + 404 semantics (D-033) ----------------------------
+
+def _http(handler, org_override=None):
+    from integreat.repair.client import DevinHTTPClient
+    client = DevinHTTPClient("key", org_override)
+    client._client = httpx.AsyncClient(
+        base_url="https://api.devin.ai", transport=httpx.MockTransport(handler),
+        headers=dict(client._client.headers))
+    return client
+
+
+def _whoami_ok(org="org-abc"):
+    def h(r):
+        if r.url.path == "/v3/self":
+            return httpx.Response(200, json={"org_id": org})
+        return httpx.Response(404, json={"detail": "not found"})
+    return h
+
+
+def test_org_id_derived_from_key():
+    client = _http(_whoami_ok("org-real"))
+    assert asyncio.run(client.org_id()) == "org-real"
+
+
+def test_org_override_mismatch_is_clear_error():
+    from integreat.repair import DevinUnavailable
+    client = _http(_whoami_ok("org-real"), org_override="org-typo")
+    with pytest.raises(DevinUnavailable, match="org-typo.*org-real"):
+        asyncio.run(client.org_id())
+
+
+def test_org_override_match_ok():
+    client = _http(_whoami_ok("org-real"), org_override="org-real")
+    assert asyncio.run(client.org_id()) == "org-real"
+
+
+def test_create_404_names_organization_not_session():
+    from integreat.repair import DevinUnavailable
+    def h(r):
+        if r.url.path == "/v3/self":
+            return httpx.Response(200, json={"org_id": "org-real"})
+        return httpx.Response(404, json={"detail": "Organization not found"})
+    client = _http(h)
+    with pytest.raises(DevinUnavailable, match="organization"):
+        asyncio.run(client.create_session(prompt="p", repos=[], title="t", tags=[],
+                                        max_acu_limit=1.0, structured_output_schema={},
+                                        timeout_s=5.0))
+
+
+def test_poll_404_is_session_gone():
+    from integreat.repair import SessionGone
+    client = _http(_whoami_ok())
+    with pytest.raises(SessionGone):
+        asyncio.run(client.get_session("devin-x"))
+
+
+def test_session_gone_marks_job_failed_and_retryable():
+    from integreat.repair import SessionGone
+    devin = FakeDevin(script=[{"status": "running", "status_detail": "working"}],
+                      get_error=SessionGone("Devin session not found (404)"))
+    with make_client(devin=devin) as c:
+        iid = incident(c)
+        job = c.post(f"{API}/investigations/{iid}/repairs",
+                     json={"acknowledge_uncommitted": True}).json()
+        job = c.post(f"{API}/repairs/{job['id']}/refresh").json()
+        assert job["state"] == "failed" and "gone" in job["error"]
+        # terminal now — a new attempt is permitted
+        pre = c.get(f"{API}/investigations/{iid}/repairs/preflight").json()
+        assert pre["active_job_id"] is None
+
+
+def test_make_devin_needs_only_key():
+    from integreat.repair import DevinHTTPClient, make_devin
+    c = make_devin(Settings(db_path=":memory:", fixtures_dir=FIX, devin_api_key="k", devin_org_id=None))
+    assert isinstance(c, DevinHTTPClient)  # org is derived at call time, not required upfront

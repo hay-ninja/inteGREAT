@@ -37,8 +37,39 @@ def facts(res):
 def test_pass_when_settled_within_tolerance():
     res, ev = evaluate(exp(), obs([(0, 0), (500, 60), (1000, 88), (1500, 89)]), serial("ACK MOVE 90"), "r")
     assert res.outcome.value == "pass"
-    assert facts(res) == {"command_sent": "yes", "command_acknowledged": "yes", "physical_motion": "yes"}
+    assert facts(res) == {"command_sent": "yes", "command_acknowledged": "yes",
+                          "physical_motion": "yes", "physical_state": "yes"}
     assert ev.id == res.evidence_id
+
+
+def led_exp(**kw):
+    return exp(metric="led_state", unit="state", target=1.0, tolerance=0.0,
+               trigger=ExpectationTrigger(kind="configured_serial_command", value="LED ON"),
+               ack_pattern="ACK LED ON", **kw)
+
+
+def led_obs(points, quality="valid"):
+    return [o.model_copy(update={"metric": "led_state", "unit": "state"})
+            for o in obs(points, quality=quality)]
+
+
+def test_led_on_passes_when_state_reaches_target():
+    res, _ = evaluate(led_exp(), led_obs([(0, 0), (500, 1), (1000, 1)]), serial("ACK LED ON"), "r")
+    assert res.outcome.value == "pass"
+    assert facts(res)["physical_motion"] == "yes" and facts(res)["physical_state"] == "yes"
+
+
+def test_led_off_after_command_is_fail_with_state_change():
+    """The inverted-logic signature: state changed, ended wrong (Fault C)."""
+    res, _ = evaluate(led_exp(), led_obs([(0, 1), (500, 0), (1000, 0)]), serial("ACK LED ON"), "r")
+    assert res.outcome.value == "fail"
+    assert facts(res)["physical_motion"] == "yes" and facts(res)["physical_state"] == "no"
+
+
+def test_led_never_changes_is_fail_no_response():
+    res, _ = evaluate(led_exp(), led_obs([(0, 0), (500, 0), (1000, 0)]), serial("ACK LED ON"), "r")
+    assert res.outcome.value == "fail"
+    assert facts(res)["physical_motion"] == "no" and facts(res)["physical_state"] == "no"
 
 
 @pytest.mark.parametrize("final,outcome", [(82.0, "pass"), (81.9, "fail"), (98.0, "pass"), (98.1, "fail")])

@@ -6,7 +6,8 @@ Browser (Vite + React + React Flow)
 FastAPI modular monolith  (apps/api/integreat)
    ├─ ingestion/     repository scan · tree-sitter Arduino parser · YAML manifest · KiCad XML netlist
    ├─ graph/         builder (nodes/edges with provenance) · scoped query · GPIO consistency check
-   ├─ observations/  replay · sim rig · live stream · serial adapter · OpenCV camera · ArUco angle
+   ├─ observations/  replay · sim rig · live stream · serial adapter · OpenCV camera ·
+   │                 ArUco angle (cv_angle) · ArUco-anchored LED state (cv_led) —
    │                 (the sim rig doubles as the digital shadow — queried, not just replayed)
    ├─ diagnostics/   expectation evaluator · fault rules · hypotheses + action cards · state machines
    │                 graph_state (metric-keyed run-state write-back, D-028) · shadow (nominal
@@ -57,5 +58,6 @@ The three dependency layers are frontend projections of the one canonical graph 
 |---|---|
 | add a fault rule | `diagnostics/rules.py` + card in `diagnostics/hypotheses.py` + test |
 | add a read-only tool | `tools/registry.py` (`@tool(...)`) + test in `tests/test_tools.py` |
-| support another pin API | `ingestion/arduino_parser.py` (`PIN_FUNCS` / `SERVO_*`) |
+| support another pin API | `ingestion/arduino_parser.py` (`PIN_FUNCS` / `WRITE_VALUE_ARG`) |
+| support another component type | parser `OBJECT_TYPE_HINTS` + proposal `_KIND` in `diagnostics/expectations.py` + a metric in the sim/evaluators |
 | change contracts | `models/contracts.py` → `scripts/gen_api_types.py` → `npm run gen:types` |

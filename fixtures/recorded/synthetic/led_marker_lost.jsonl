@@ -1,0 +1,16 @@
+{"_meta": {"synthetic": true, "scenario": "led_marker_lost", "description": "Camera anchor marker hidden for the whole run: measurement unavailable, never a light fault.", "command": "LED ON", "generated_by": "hand-authored for the lights demo"}}
+{"t_ms": 0, "source": "host", "raw": "LED ON"}
+{"t_ms": 0, "source": "cv", "frame": 0, "quality": "marker_not_found", "value": null}
+{"t_ms": 42, "source": "serial", "raw": "ACK LED ON"}
+{"t_ms": 66, "source": "cv", "frame": 1, "quality": "marker_not_found", "value": null}
+{"t_ms": 132, "source": "cv", "frame": 2, "quality": "marker_not_found", "value": null}
+{"t_ms": 198, "source": "cv", "frame": 3, "quality": "marker_not_found", "value": null}
+{"t_ms": 264, "source": "cv", "frame": 4, "quality": "marker_not_found", "value": null}
+{"t_ms": 330, "source": "cv", "frame": 5, "quality": "marker_not_found", "value": null}
+{"t_ms": 396, "source": "cv", "frame": 6, "quality": "marker_not_found", "value": null}
+{"t_ms": 462, "source": "cv", "frame": 7, "quality": "marker_not_found", "value": null}
+{"t_ms": 528, "source": "cv", "frame": 8, "quality": "marker_not_found", "value": null}
+{"t_ms": 594, "source": "cv", "frame": 9, "quality": "marker_not_found", "value": null}
+{"t_ms": 660, "source": "cv", "frame": 10, "quality": "marker_not_found", "value": null}
+{"t_ms": 726, "source": "cv", "frame": 11, "quality": "marker_not_found", "value": null}
+{"t_ms": 792, "source": "cv", "frame": 12, "quality": "marker_not_found", "value": null}

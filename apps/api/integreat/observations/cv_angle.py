@@ -28,6 +28,11 @@ class AngleEstimate:
     used_reference: bool
     corners: list | None = None
 
+    @property
+    def value(self) -> float | None:
+        """Uniform observation surface shared with LedStateEstimator (metric-agnostic)."""
+        return self.angle_deg
+
 
 def _wrap(a: float) -> float:
     """Wrap to [-180, 180)."""

@@ -84,7 +84,7 @@ export function nodeRole(n: GraphNode, g: GraphSnapshot): string | null {
     case "source_module": {
       const controls = g.edges.some((e) => e.relation === "controls"
         && byId.get(e.source_id)?.parent_id === n.id);
-      return controls ? "servo control code" : "source file";
+      return controls ? "drives hardware" : "source file";
     }
     case "function": {
       if (g.edges.some((e) => (e.relation === "controls" || e.relation === "configures") && e.source_id === n.id))
@@ -107,7 +107,7 @@ export function nodeRole(n: GraphNode, g: GraphSnapshot): string | null {
       const other = link ? byId.get(link.source_id === n.id ? link.target_id : link.source_id) : undefined;
       const comp = other?.parent_id ? byId.get(other.parent_id) : undefined;
       const pinName = other ? other.label.split(".").pop() : "";
-      if (comp?.attributes?.type === "servo" && pinName === "signal") return "servo control pin";
+      if (comp && pinName === "signal") return `${comp.label.split(" ")[0].toLowerCase()} signal pin`;
       if (comp && pinName) return `${comp.label.split(" ")[0].toLowerCase()} ${pinName} pin`;
       if (parent?.kind === "mcu") return "controller pin — role not declared";
       if (pinName === "signal") return "signal input";

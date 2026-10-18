@@ -41,7 +41,7 @@ export function LandingScreen({ onEnter }: { onEnter: () => void }) {
           <HostedDemoBanner />
           <VStack gap={3} maxWidth={760}>
             <Eyebrow>Graph-first debugging for physical projects</Eyebrow>
-            <Heading level={1} type="display-1">Your code said move the servo. The arm didn't move. Now what?</Heading>
+            <Heading level={1} type="display-1">Your code said turn the light on. It stayed dark. Now what?</Heading>
             <Text type="large" color="secondary">
               inteGREAT shows you why — it maps your ESP32 code to the physical wiring, runs a test,
               records what actually happened, and walks you to the fix, one check at a time.
@@ -56,8 +56,9 @@ export function LandingScreen({ onEnter }: { onEnter: () => void }) {
               <Heading level={3}>Why this exists</Heading>
               <Text type="body" color="secondary">
                 Hardware bugs hide in the gap between code and physics. The serial log says the board
-                acknowledged the command — and the arm still doesn't move. Is it the pin the code drives,
-                the wire it's soldered to, or the power feeding it? Logs alone can't tell you.
+                acknowledged the command — and the light still doesn't change. Is it the pin the code drives,
+                the wire it's soldered to, the power feeding it — or a level that's simply backwards?
+                Logs alone can't tell you.
               </Text>
               <Text type="body" color="secondary">
                 inteGREAT keeps those questions separate. Every finding is labelled by what actually
@@ -87,7 +88,7 @@ export function LandingScreen({ onEnter }: { onEnter: () => void }) {
           <VStack gap={3}>
             <VStack gap={1}>
               <Heading level={2}>What's inside</Heading>
-              <Text type="body" color="secondary">Everything below works today — including two simulated demos you can click through in about five minutes.</Text>
+              <Text type="body" color="secondary">Everything below works today — including three simulated LED demos you can click through in about five minutes.</Text>
             </VStack>
             <Grid columns={{ minWidth: 300, repeat: "fill" }} gap={3}>
               {FEATURES.map((f) => (
@@ -106,8 +107,9 @@ export function LandingScreen({ onEnter }: { onEnter: () => void }) {
               <VStack gap={1} maxWidth={560}>
                 <Heading level={3}>Try it on a simulated rig</Heading>
                 <Text type="body" color="secondary">
-                  Two failure stories are built in — a wrong pin in the code, and a disconnected signal
-                  wire. Nothing touches real hardware; every observation is labelled as simulated.
+                  Three failure stories are built in — a wrong pin in the code, a disconnected signal
+                  lead, and an LED wired active-low while the code drives it high. Nothing touches real
+                  hardware; every observation is labelled as simulated.
                 </Text>
               </VStack>
               <Button label="Open the workspace" variant="primary" onClick={onEnter} />

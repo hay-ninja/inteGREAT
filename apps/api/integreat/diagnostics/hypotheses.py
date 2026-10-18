@@ -32,6 +32,9 @@ def build(incident_id: str, findings: list[RuleFinding], wired_pin_label: str | 
     actions: dict[str, DiagnosticAction] = {}
     codes = {f.code for f in findings}
     pin = wired_pin_label or "the declared signal pin"
+    noun = next((f.details.get("component_label") for f in findings
+                 if f.details.get("component_label")), "the component")
+    binary = any(f.details.get("metric", "").endswith("_state") for f in findings)
 
     def act(a: DiagnosticAction) -> str:
         actions.setdefault(a.id, a)
@@ -39,7 +42,7 @@ def build(incident_id: str, findings: list[RuleFinding], wired_pin_label: str | 
 
     repeat = act(DiagnosticAction(
         id=f"action:{incident_id}:repeat_test", incident_id=incident_id, kind=ActionKind.repeat_test,
-        label="Repeat motion test", rationale="Re-run the same confirmed expectation to check the result is repeatable.",
+        label="Repeat the test", rationale="Re-run the same confirmed expectation to check the result is repeatable.",
         expected_outcomes=[ExpectedOutcome(result="Same failure", interpretation="Fault is persistent, not transient"),
                            ExpectedOutcome(result="Passes", interpretation="Intermittent fault or setup issue")]))
     verify = act(DiagnosticAction(
@@ -86,9 +89,9 @@ def build(incident_id: str, findings: list[RuleFinding], wired_pin_label: str | 
                     ExpectedOutcome(result="No result / failed job", interpretation="Incident unchanged; fix the pin by hand")]))
             hyps.append(Hypothesis(
                 id=hid, title="Incorrect GPIO mapping", rank=1, status=HypothesisStatus.plausible,
-                explanation=(f"Firmware configures the servo on {', '.join(f.details['configured'])}, but the "
-                             f"engineer-confirmed wiring connects the servo signal to {f.details['wired']}. "
-                             "Commands would drive a pin the servo isn't connected to."),
+                explanation=(f"Firmware configures {noun} on {', '.join(f.details['configured'])}, but the "
+                             f"engineer-confirmed wiring connects its signal to {f.details['wired']}. "
+                             "Commands would drive a pin the component isn't connected to."),
                 recommended_action_ids=[a, fix, verify], **common))
 
         elif f.code == FaultCode.POSSIBLE_POWER_OR_SIGNAL_FAULT:
@@ -97,10 +100,10 @@ def build(incident_id: str, findings: list[RuleFinding], wired_pin_label: str | 
             sig = act(DiagnosticAction(
                 id=f"action:{incident_id}:check_signal", incident_id=incident_id,
                 kind=ActionKind.request_manual_check, label="Check signal connection",
-                rationale="Cannot measure PWM; a visual check of the signal lead distinguishes signal vs power faults.",
+                rationale="The drive signal is not measured; a visual check of the signal lead distinguishes signal vs power faults.",
                 recommended=not secondary, related_node_ids=f.nodes,
-                manual_instructions=[f"Power down the servo supply before touching wiring.",
-                                     f"Check the signal jumper from {pin} to the servo signal lead (orange/yellow) is seated at both ends.",
+                manual_instructions=[f"Power down {noun}'s supply before touching wiring.",
+                                     f"Check the signal jumper from {pin} to {noun}'s signal pin is seated at both ends.",
                                      "Record what you find."],
                 result_choices=["Connected", "Disconnected", "Unable to verify"],
                 arguments={"hypothesis_id": f"{hid}_signal",
@@ -109,12 +112,12 @@ def build(incident_id: str, findings: list[RuleFinding], wired_pin_label: str | 
                                    ExpectedOutcome(result="Connected", interpretation="Weakens signal-lead fault; check power")]))
             pwr = act(DiagnosticAction(
                 id=f"action:{incident_id}:check_power", incident_id=incident_id,
-                kind=ActionKind.request_manual_check, label="Check servo power & ground",
-                rationale="Servo supply voltage is not measured by inteGREAT; confirm power and common ground by hand.",
+                kind=ActionKind.request_manual_check, label=f"Check {noun} power & ground",
+                rationale="Supply voltage is not measured by inteGREAT; confirm power and common ground by hand.",
                 related_node_ids=f.nodes,
-                manual_instructions=["Confirm the external supply is on and set for the servo's rated voltage.",
-                                     "Check servo V+ and GND leads are seated, and supply GND is common with ESP32 GND.",
-                                     "Do not power the servo from the ESP32 3.3 V pin."],
+                manual_instructions=[f"Confirm the supply is on and rated for {noun}.",
+                                     "Check V+ and GND leads are seated, and supply GND is common with the MCU's GND.",
+                                     "Do not power the component from a logic pin."],
                 result_choices=["Connected", "Disconnected", "Unable to verify"],
                 arguments={"hypothesis_id": f"{hid}_power",
                            "status_on_result": {"Disconnected": "supported", "Connected": "weakened"}},
@@ -124,21 +127,22 @@ def build(incident_id: str, findings: list[RuleFinding], wired_pin_label: str | 
                 id=f"action:{incident_id}:expand_power", incident_id=incident_id, kind=ActionKind.expand_scope,
                 label="Expand power dependencies", tool_name="expand_scope",
                 arguments={"scope_node_id": component_id, "depth": 3}, permission_category="repo_read",
-                rationale="Show the declared supply, ground and signal path around the servo in the graph.",
+                rationale=f"Show the declared supply, ground and signal path around {noun} in the graph.",
                 related_node_ids=f.nodes,
                 expected_outcomes=[ExpectedOutcome(result="Supply/ground declared", interpretation="Check those connections by hand"),
                                    ExpectedOutcome(result="Missing in graph", interpretation="Hardware context incomplete; update manifest/netlist")]))
             note = " A GPIO mismatch was also found and explains the symptom more directly." if secondary else ""
+            response = "the camera saw no state change" if binary else "the camera saw no motion"
             hyps.append(Hypothesis(
-                id=f"{hid}_signal", title="Servo signal lead disconnected or faulty", rank=rank,
+                id=f"{hid}_signal", title=f"{noun} signal lead disconnected or faulty", rank=rank,
                 status=HypothesisStatus.unverified,
-                explanation=("The firmware appears to have handled the command but the camera saw no motion. "
-                             "inteGREAT cannot observe whether a PWM signal reached the servo." + note),
+                explanation=(f"The firmware appears to have handled the command but {response}. "
+                             f"inteGREAT cannot observe whether a drive signal reached {noun}." + note),
                 recommended_action_ids=[sig, verify], **common))
             hyps.append(Hypothesis(
-                id=f"{hid}_power", title="Servo power or ground not reaching servo", rank=rank,
+                id=f"{hid}_power", title=f"Power or ground not reaching {noun}", rank=rank,
                 status=HypothesisStatus.unverified,
-                explanation=("No motion is also consistent with missing servo power or a missing common ground. "
+                explanation=(f"No response is also consistent with missing power or a missing common ground to {noun}. "
                              "Supply voltage is not measured." + note),
                 recommended_action_ids=[pwr, expand, verify], **common))
 
@@ -150,11 +154,54 @@ def build(incident_id: str, findings: list[RuleFinding], wired_pin_label: str | 
                              "or handled the command — or it may simply not have logged it."),
                 recommended_action_ids=[read_serial, repeat], **common))
 
+        elif f.code == FaultCode.INVERTED_LOGIC:
+            confirmed = bool(f.details.get("polarity_confirmed"))
+            on_lvl = f.details.get("on_level") or "unresolved"
+            active = "active-low" if f.details.get("active_low") else "active-high"
+            rewired = act(DiagnosticAction(
+                id=f"action:{incident_id}:check_polarity", incident_id=incident_id,
+                kind=ActionKind.request_manual_check, label="Check LED wiring polarity",
+                rationale=(f"The manifest declares {noun} wired {active}; the code drives "
+                           f"{on_lvl} for 'on'. Confirm which is wrong by looking at the board."),
+                recommended=True, related_node_ids=f.nodes,
+                manual_instructions=[f"With the board powered and idle, is {noun} already lit? "
+                                     "A lit-idle state means active-low wiring.",
+                                     f"Trace {noun}: if its anode goes to supply and cathode to {pin}, it is active-low.",
+                                     "Record which side is wrong: wiring or code."],
+                result_choices=["Wiring is active-low", "Wiring is active-high", "Unable to verify"],
+                arguments={"hypothesis_id": hid,
+                           "status_on_result": {"Wiring is active-low": "supported",
+                                                "Wiring is active-high": "weakened"}},
+                expected_outcomes=[ExpectedOutcome(result="Wiring is active-low",
+                                                   interpretation="Fix the code's drive level (or invert the constant), then Verify fix"),
+                                   ExpectedOutcome(result="Wiring is active-high",
+                                                   interpretation="Weakens the polarity explanation; check signal path")]))
+            fix = act(DiagnosticAction(
+                id=f"action:{incident_id}:prepare_fix", incident_id=incident_id,
+                kind=ActionKind.prepare_software_fix, label="Prepare software fix with Devin",
+                rationale=("If the wiring is right, the fix is a one-line level inversion in firmware. "
+                           "Devin Cloud can prepare it on an isolated branch — nothing is applied "
+                           "locally, merged, or flashed."),
+                related_node_ids=f.nodes,
+                expected_outcomes=[ExpectedOutcome(result="Reviewable diff/PR",
+                                                   interpretation="Engineer reviews, applies it by hand, reflashes, then Verify fix"),
+                                   ExpectedOutcome(result="No result / failed job",
+                                                   interpretation="Incident unchanged; flip the level by hand")]))
+            hyps.append(Hypothesis(
+                id=hid, title="Inverted drive logic (code level vs wiring polarity)", rank=1,
+                status=HypothesisStatus.plausible if confirmed else HypothesisStatus.unverified,
+                explanation=(f"{noun} changed state when commanded — so the signal path works — but ended "
+                             f"in the wrong state. The manifest declares {active} wiring; the code drives "
+                             f"{on_lvl} for 'on'."
+                             + (" That is a confirmed polarity inversion." if confirmed else
+                                " Whether the code level matches the wiring could not be confirmed statically.")),
+                recommended_action_ids=[rewired, fix, verify], **common))
+
         elif f.code == FaultCode.CAMERA_MEASUREMENT_UNAVAILABLE:
             hyps.append(Hypothesis(
                 id=hid, title="Camera measurement unavailable", rank=1, status=HypothesisStatus.supported,
-                explanation=("The marker was not detected in enough frames to judge servo motion. This is a "
-                             "measurement problem, not evidence of a servo fault. Check camera view and marker, then repeat."),
+                explanation=(f"The marker was not detected in enough frames to judge {noun}'s response. This is a "
+                             f"measurement problem, not evidence of a fault in {noun}. Check camera view and marker, then repeat."),
                 recommended_action_ids=[repeat], **common))
         # NO_PHYSICAL_MOTION is a symptom, not a cause: it supports the hypotheses above, no card of its own.
 
