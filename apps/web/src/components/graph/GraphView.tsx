@@ -107,6 +107,7 @@ interface Props {
   selectedId: string | null;
   onToggle: (id: string) => void;
   onSelect: (id: string | null) => void;
+  onEdgeSelect: (edgeIds: string[]) => void;
   fitKey: string;
 }
 
@@ -143,7 +144,7 @@ function Inner(p: Props) {
     labelStyle: { fill: "var(--c-text-dim)", fontSize: 10, opacity: e.dimmed ? 0.2 : 1 },
     labelBgStyle: { fill: "var(--c-bg)" },
     markerEnd: e.relation === "contains" ? undefined : { type: MarkerType.ArrowClosed, width: 14, height: 14 },
-    data: { title: e.highlight?.reason },
+    data: { title: e.highlight?.reason, edgeIds: e.edgeIds },
   }));
 
   useEffect(() => {
@@ -160,6 +161,7 @@ function Inner(p: Props) {
       onNodeClick={(_, n) => p.onSelect(n.id)}
       onNodeDoubleClick={(_, n) => p.onToggle(n.id)}
       onPaneClick={() => p.onSelect(null)}
+      onEdgeClick={(_, e) => p.onEdgeSelect((e.data?.edgeIds as string[]) ?? [e.id])}
       nodesDraggable={false}
       minZoom={0.2}
       proOptions={{ hideAttribution: true }}

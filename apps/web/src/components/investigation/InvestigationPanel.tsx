@@ -35,7 +35,7 @@ export function InvestigationPanel({ view, busyActionId, onAction, onSelectNodes
         return (
           <div className="result result-pass">
             <b>RESOLVED</b> — verified by re-running the same expectation{v?.result ? `: ${v.result.reason}` : "."}
-            {v?.synthetic && <div className="replay-note">Verification used a SYNTHETIC replay, not live hardware.</div>}
+            {v?.synthetic && <div className="replay-note">Verification used synthetic/simulated data, not live hardware.</div>}
           </div>
         );
       })()}
@@ -62,7 +62,9 @@ export function InvestigationPanel({ view, busyActionId, onAction, onSelectNodes
         </section>
       )}
       {view.test_run.synthetic && (
-        <div className="replay-note">Based on a SYNTHETIC replay, not live hardware.</div>
+        <div className="replay-note">
+          Based on {view.test_run.source.kind === "sim" ? "the SIMULATED rig" : "a SYNTHETIC replay"}, not live hardware.
+        </div>
       )}
 
       {result && (
@@ -171,7 +173,7 @@ export function EvidenceList({ title, ids, evById }: { title: string; ids: strin
               {e?.provenance.file && (
                 <span className="cite">
                   {" "}
-                  {e.provenance.file}:{e.provenance.line_start}
+                  {e.provenance.file}{e.provenance.line_start ? `:${e.provenance.line_start}` : ""}
                 </span>
               )}
             </li>
@@ -246,11 +248,12 @@ export function InspectResultModal({ result, onClose }: { result: ActionResult; 
           </div>
         ))}
         {result.evidence
-          .filter((e) => e.kind === "manifest_entry")
+          .filter((e) => e.kind === "manifest_entry" || e.kind === "netlist_entry")
           .map((e) => (
             <div key={e.id} className="excerpt">
               <div className="excerpt-file">
-                hardware manifest{e.provenance.file ? ` · ${e.provenance.file}:${e.provenance.line_start}` : ""}
+                {e.kind === "netlist_entry" ? "KiCad netlist" : "hardware manifest"}
+                {e.provenance.file ? ` · ${e.provenance.file}${e.provenance.line_start ? `:${e.provenance.line_start}` : ""}` : ""}
               </div>
               <div className="manifest-entry">{e.summary}</div>
             </div>

@@ -19,4 +19,11 @@ apps/api/.venv/Scripts/python scripts/dev.py
 
 Open http://localhost:5173, pick a demo fixture, click **Propose test from code → Confirm → Run Test**.
 
-> Until hardware is connected, tests run on **synthetic replay** data and the UI labels them as such.
+Observation sources (top bar): **Sim** (simulated rig through the real CV pipeline), **Replay** (recorded or
+synthetic files), **Live rig** (real ESP32 + camera — see [`docs/hardware-setup.md`](docs/hardware-setup.md)).
+Non-live runs are always labelled as synthetic/simulated.
+
+Optional AI agents: copy `.env.example` to `.env`, set `GEMINI_API_KEY` and `INTEGREAT_GEMINI_MODEL`, then
+run `apps/api/.venv/Scripts/python scripts/gemini_smoke.py`. Without them, everything except *Ask agents* works.
+
+More: [`docs/architecture.md`](docs/architecture.md) · [`docs/demo-script.md`](docs/demo-script.md)

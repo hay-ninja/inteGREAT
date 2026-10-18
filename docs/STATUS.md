@@ -2,63 +2,56 @@
 
 > Update this at the end of every verifiable slice. Keep it short; history lives in git, intent in `decisions.md`.
 
-**Last updated:** 2026-10-17 · **Current milestone:** M1 done → starting M2 · **Hardware:** not connected yet (D-010)
+**Last updated:** 2026-10-17 · **Current milestone:** all software milestones built; **blocked on hardware (H0/M5/M7) and a Gemini key**
 
 ## Milestone plan (PRD §17 adapted)
 | # | Milestone | State |
 |---|---|---|
-| M0 | Contracts (Pydantic) + fixtures (firmware, manifest, synthetic replay) | **done** |
-| H0 | Rig bring-up: board variant, COM port, servo motion, camera+ArUco, real traces | blocked: hardware |
-| M1 | Vertical slice: import → graph → replayed test → rules → incident → actions → verify | **done** (replay only) |
-| M2 | Permissions + tool registry/audit, `read_serial_buffer`, wiring-verification PATCH, Expand Scope | next |
-| M3 | Live serial (D-005) + OpenCV camera + MJPEG preview + device status | todo (needs H0) |
-| M4 | Gemini: LLMProvider (+fake), context packets, 3 agents, orchestrator, validation (D-004) | todo |
-| M5 | Both faults end-to-end on **hardware** incl. Verify Fix | todo |
-| M6 | KiCad XML netlist importer + manifest fallback | todo |
-| M7 | Reliability: 3 consecutive live runs, labeled replay fallback, README | todo |
+| M0 | Contracts + fixtures | **done** |
+| H0 | Rig bring-up (see `docs/hardware-setup.md` checklist) | **blocked: hardware** |
+| M1 | Vertical slice import → graph → test → incident → actions → verify | **done** |
+| M2 | Tool registry + grants + audit, serial-read tool, wiring verification, Expand Scope, notes | **done** (D-015) |
+| M3 | Live serial (D-005), OpenCV camera, ArUco angle, MJPEG preview, devices UI, simulated rig | **done in software** (D-016) — **never run on real hardware** |
+| M4 | Gemini agents: provider, context packets, triage → 3 agents → synthesis, validation, 2-round budget | **done, tested with a scripted fake** (D-017) — **never called real Gemini** |
+| M5 | Both faults end-to-end on hardware incl. Verify Fix | todo — needs rig |
+| M6 | KiCad XML netlist + mapping confirmation + manifest fallback | **done** (D-018) |
+| M7 | Reliability | partial: save-as-replay, hardware guide, demo script, markers script done; 3 live runs + real recordings need the rig |
 
 ## What works now (verified 2026-10-17)
-- **Backend (44 pytest passing):** safe repo scan, tree-sitter Arduino parser, manifest + ESP32 pin
-  normalization, graph with provenance + static GPIO-mismatch flag at import, scoped graph query (AC-08),
-  SQLite doc store + event timeline, replay source, expectation evaluator (3 separate facts), all 5 P0 rule
-  codes, ranked hypotheses + action cards, incident state machine, REST + WebSocket.
-- **Frontend (Vite + React + @xyflow/react):** fixture import, expandable graph (subsystem→module→function,
-  edges lifted to visible ancestors), legend, subsystem focus, search, breadcrumbs, node evidence panel,
-  expectation propose/edit/confirm, Run Test, live CV plot / serial / timeline, investigation panel
-  (facts, hypotheses with cited evidence + unknowns, action cards), Inspect GPIO modal, manual-check modal,
-  Verify fix, RESOLVED banner with follow-up runs, SYNTHETIC REPLAY badges everywhere.
-- **Browser-verified flows** (synthetic replay, NOT hardware):
-  - Fault A: import `esp32_servo_demo_fault_a` → run `fault_a_wrong_gpio` → GPIO mismatch #1 → Inspect shows
-    `#define SERVO_PIN 19` vs manifest GPIO18 → switch replay to `good` → Verify fix → resolved.
-  - Fault B: import `esp32_servo_demo` → run `fault_b_disconnected` → signal/power tied #1 → manual check
-    "Disconnected" → signal hypothesis `supported` → Verify fix (`good`) → resolved.
+- **Tests:** 80 backend (pytest) + 5 frontend (vitest) passing; `tsc` clean.
+- **Browser-verified** (simulated/synthetic only): import Fault A with KiCad netlist + mapping editor → sim run
+  fails with GPIO mismatch #1 → Inspect asks for permission → grant → excerpt + hypothesis `supported` →
+  tool audit shows denied then granted → wiring verification (graph v2, solid edge, engineer evidence) →
+  Devices tab lists real ports → reload restores project + investigation. M1 flows (Fault A/B on replay)
+  were browser-verified earlier.
+- **Test-verified only (not clicked through in a browser):** sim Fault A fix → rescan → Verify fix → resolved;
+  agents round with validation; agent budget/new-evidence rule; save-as-replay.
 
-## Next (M2, in order)
-1. `tools/registry.py` + `tools/permissions.py` + `tools/executor.py` per PRD §13 and D-004: one execution
-   path for every caller, `caller` recorded, per-investigation category grants, audit log of every call/denial.
-   Move `inspect_gpio_config` into the registry (currently inline in `service._inspect_gpio`).
-2. `read_serial_buffer` + `read_test_events` tools (read stored serial for now; live buffer in M3).
-3. Permission grant UI (grant/revoke categories) + approval prompt for ungranted actions (AC-07).
-4. `PATCH /projects/{id}/graph/verification` + UI to confirm/correct wiring (PRD §5.1 step 5).
-5. `expand_scope` action; text input for clarifications (`/investigations/{id}/messages`) (AC-09).
-6. Frontend unit tests for `components/graph/visibleGraph.ts` (pure function, easy to test).
+## Next (in order)
+1. **Gemini:** put `GEMINI_API_KEY` + `INTEGREAT_GEMINI_MODEL` in `.env`; run `scripts/gemini_smoke.py`;
+   then click *Ask agents* on a Fault A incident. Expect schema friction — fix in `agents/schemas.py` only.
+2. **H0 on the rig:** follow `docs/hardware-setup.md`; record board variant, COM port, camera index;
+   confirm opening the port does not reset the board (D-005). Update the manifest's board label.
+3. **M5:** both faults live; save real recordings ("Save as replay") for good / Fault A / Fault B.
+4. **M7:** three consecutive live demos per `docs/demo-script.md`; fix whatever breaks.
+5. Nice-to-have (P1, only after 2–4): SSH gateway tools, Gemini frame description tool (D-020),
+   graph version history UI.
 
 ## Known issues / gotchas
-- ESP32 resets on serial open (D-005). Windows COM ports are exclusive.
-- **React Flow:** nodes are rebuilt on every change; we must pass back each node's `measured` size or React
-  Flow drops handle positions and hides nodes/edges. See `GraphView.tsx` (controlled nodes).
-- **WebSocket 431:** browsers send every `localhost` cookie (other dev projects); the Vite proxy strips
-  cookies (`vite.config.ts`). Vite listens on `localhost` (IPv6), not `127.0.0.1`.
-- UI doesn't restore the last project after a page reload (must re-import). Fine for demo; P1.
-- Running a replay at real speed takes ~2.6 s; tests use `replay_speed=0`.
-- Firmware without a serial command handler gets an `external_sequence` trigger, which can't run yet
-  (no live adapter).
+- ESP32 resets on serial open unless DTR/RTS are low (handled, unverified on hardware). Windows COM ports
+  are exclusive → *Release port* before reflashing.
+- `probe_cameras` takes ~0.5 s per index on Windows (DirectShow).
+- **React Flow:** nodes are rebuilt on every change; GraphView passes back each node's `measured` size or
+  React Flow hides nodes/edges. **WebSocket 431:** Vite proxy strips cookies.
+- Stopping a background `npx vite` task can leave the Node child holding :5173 — kill it by PID.
+- The simulated rig is honest about the fault model but is not hardware evidence; every sim run is
+  `synthetic` and badged SIMULATED.
+- Agents never run tools themselves (D-004); they only see tool output for categories the engineer granted.
 
 ## How to run / verify
-- Backend setup (once): `cd apps/api && py -3.13 -m venv .venv && .venv/Scripts/python -m pip install -e ".[dev]"`
-- Frontend setup (once): `cd apps/web && npm install`
+- Setup (once): `cd apps/api && py -3.13 -m venv .venv && .venv/Scripts/python -m pip install -e ".[dev]"`;
+  `cd apps/web && npm install`; optional `cp .env.example .env` and fill in Gemini.
 - Both servers: `apps/api/.venv/Scripts/python scripts/dev.py` → http://localhost:5173
-- Backend tests: `cd apps/api && .venv/Scripts/python -m pytest -q`
-- Frontend typecheck: `cd apps/web && npx tsc -b`
+- Backend tests: `cd apps/api && .venv/Scripts/python -m pytest -q` · Frontend: `cd apps/web && npx tsc -b && npm test`
 - After changing backend models: `apps/api/.venv/Scripts/python scripts/gen_api_types.py && (cd apps/web && npm run gen:types)`
-- Regenerate synthetic replays: `apps/api/.venv/Scripts/python scripts/gen_synthetic_replays.py`
+- Synthetic replays: `scripts/gen_synthetic_replays.py` · Markers: `scripts/make_aruco_markers.py` · Gemini check: `scripts/gemini_smoke.py`

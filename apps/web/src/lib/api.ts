@@ -23,9 +23,18 @@ export type DemoFixture = S["DemoFixture"];
 export type IntegreatEvent = S["IntegreatEvent"];
 export type ObservationSourceSpec = S["ObservationSourceSpec-Input"];
 export type TestRunDetail = S["TestRunDetail"];
+export type AgentRun = S["AgentRun"];
+export type AgentStatus = S["AgentStatus"];
+export type DeviceStatus = S["DeviceStatus"];
+export type PermissionGrant = S["PermissionGrant"];
+export type ToolCall = S["ToolCall"];
+export type NetlistPreview = S["NetlistPreview"];
+export type SourceOptions = S["SourceOptions"];
+export type Incident = S["Incident"];
+export type PermissionCategory = S["PermissionUpdate"]["category"];
 
 export class ApiError extends Error {
-  constructor(public status: number, public code: string, message: string) {
+  constructor(public status: number, public code: string, message: string, public details: Record<string, unknown> = {}) {
     super(message);
   }
 }
@@ -39,14 +48,15 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   if (!r.ok) {
     let code = "http_error";
     let message = `${r.status} ${r.statusText}`;
+    let details: Record<string, unknown> = {};
     try {
       const j = await r.json();
-      if (j.error) ({ code, message } = j.error);
+      if (j.error) ({ code, message, details = {} } = j.error);
       else if (j.detail) message = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
     } catch {
       /* non-JSON error body */
     }
-    throw new ApiError(r.status, code, message);
+    throw new ApiError(r.status, code, message, details);
   }
   return r.json() as Promise<T>;
 }
@@ -54,10 +64,37 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 const enc = encodeURIComponent;
 
 export const api = {
-  demoFixtures: () => req<DemoFixture[]>("GET", "/demo-fixtures"),
+  demo: () => req<{ fixtures: DemoFixture[]; netlist_path: string }>("GET", "/demo"),
   replays: () => req<ReplayInfo[]>("GET", "/replays"),
-  importProject: (repo_path: string, manifest_path: string | null) =>
-    req<Project>("POST", "/projects/import", { repo_path, manifest_path }),
+  sources: () => req<SourceOptions>("GET", "/sources"),
+  projects: () => req<Project[]>("GET", "/projects"),
+  project: (pid: string) => req<Project>("GET", `/projects/${enc(pid)}`),
+  importProject: (body: {
+    repo_path: string;
+    manifest_path?: string | null;
+    netlist_path?: string | null;
+    netlist_mapping?: Record<string, unknown> | null;
+  }) => req<Project>("POST", "/projects/import", body),
+  netlistPreview: (netlist_path: string, repo_path?: string) =>
+    req<NetlistPreview>("POST", "/netlist/preview", { netlist_path, repo_path }),
+  rescan: (pid: string) => req<Project>("POST", `/projects/${enc(pid)}/rescan`),
+  verifyWiring: (pid: string, edge_id: string, verification: "verified" | "unverified", note?: string) =>
+    req<Project>("PATCH", `/projects/${enc(pid)}/graph/verification`, { edge_id, verification, note }),
+  expectations: (pid: string) => req<Expectation[]>("GET", `/projects/${enc(pid)}/expectations`),
+  incidents: (pid: string) => req<Incident[]>("GET", `/projects/${enc(pid)}/incidents`),
+  saveReplay: (runId: string, name: string) => req<ReplayInfo>("POST", `/tests/${enc(runId)}/save-replay`, { name }),
+  setPermission: (iid: string, category: PermissionCategory, granted: boolean) =>
+    req<PermissionGrant[]>("POST", `/investigations/${enc(iid)}/permissions`, { category, granted }),
+  message: (iid: string, text: string) => req<InvestigationView>("POST", `/investigations/${enc(iid)}/messages`, { text }),
+  diagnose: (iid: string) => req<Incident>("POST", `/investigations/${enc(iid)}/diagnose`),
+  agentStatus: () => req<AgentStatus>("GET", "/agents/status"),
+  devices: () => req<DeviceStatus>("GET", "/devices"),
+  serialConnect: (port: string, baud = 115200) => req<DeviceStatus>("POST", "/devices/serial/connect", { port, baud }),
+  serialRelease: () => req<DeviceStatus>("POST", "/devices/serial/release"),
+  cameraProbe: () => req<number[]>("GET", "/devices/camera/probe"),
+  cameraConnect: (index: number) => req<DeviceStatus>("POST", "/devices/camera/connect", { index }),
+  cameraRelease: () => req<DeviceStatus>("POST", "/devices/camera/release"),
+  cameraCalibrate: (known_angle_deg: number) => req<DeviceStatus>("POST", "/devices/camera/calibrate", { known_angle_deg }),
   graph: (pid: string, scope?: string) =>
     req<GraphSnapshot>("GET", `/projects/${enc(pid)}/graph${scope ? `?scope_node_id=${enc(scope)}` : ""}`),
   subsystems: (pid: string) => req<Subsystem[]>("GET", `/projects/${enc(pid)}/subsystems`),
@@ -72,8 +109,11 @@ export const api = {
     req<TestRun>("POST", `/projects/${enc(pid)}/tests`, { expectation_id, source }),
   test: (runId: string) => req<TestRunDetail>("GET", `/tests/${enc(runId)}`),
   investigation: (iid: string) => req<InvestigationView>("GET", `/investigations/${enc(iid)}`),
-  executeAction: (iid: string, aid: string, source?: ObservationSourceSpec) =>
-    req<{ result: ActionResult }>("POST", `/investigations/${enc(iid)}/actions/${enc(aid)}/execute`, { source }),
+  executeAction: (iid: string, aid: string, source?: ObservationSourceSpec, approve_once = false) =>
+    req<{ result: ActionResult }>("POST", `/investigations/${enc(iid)}/actions/${enc(aid)}/execute`, {
+      source,
+      approve_once,
+    }),
   manualResult: (iid: string, action_id: string, result: string, note?: string) =>
     req<InvestigationView>("POST", `/investigations/${enc(iid)}/manual-results`, { action_id, result, note }),
 };

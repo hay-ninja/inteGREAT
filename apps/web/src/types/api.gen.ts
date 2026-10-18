@@ -38,15 +38,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{pid}/evidence": {
+    "/api/v1/demo": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Evidence */
-        get: operations["get_evidence_api_v1_projects__pid__evidence_get"];
+        /** Demo Info */
+        get: operations["demo_info_api_v1_demo_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -66,6 +66,74 @@ export interface paths {
         get: operations["replays_api_v1_replays_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sources */
+        get: operations["sources_api_v1_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tools */
+        get: operations["tools_api_v1_tools_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Agents Status */
+        get: operations["agents_status_api_v1_agents_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/netlist/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Netlist Preview */
+        post: operations["netlist_preview_api_v1_netlist_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -123,6 +191,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{pid}/rescan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rescan */
+        post: operations["rescan_api_v1_projects__pid__rescan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{pid}/graph": {
         parameters: {
             query?: never;
@@ -140,6 +225,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{pid}/graph/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Verify Wiring */
+        patch: operations["verify_wiring_api_v1_projects__pid__graph_verification_patch"];
+        trace?: never;
+    };
     "/api/v1/projects/{pid}/subsystems": {
         parameters: {
             query?: never;
@@ -149,6 +251,40 @@ export interface paths {
         };
         /** Get Subsystems */
         get: operations["get_subsystems_api_v1_projects__pid__subsystems_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{pid}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Evidence */
+        get: operations["get_evidence_api_v1_projects__pid__evidence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{pid}/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Project Devices */
+        get: operations["project_devices_api_v1_projects__pid__devices_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -276,6 +412,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tests/{run_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Test
+         * @description PRD §15 alias: rerun the incident's verify action for the incident this run opened.
+         */
+        post: operations["verify_test_api_v1_tests__run_id__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tests/{run_id}/save-replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Save Replay */
+        post: operations["save_replay_api_v1_tests__run_id__save_replay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/investigations/{iid}": {
         parameters: {
             query?: never;
@@ -327,6 +500,211 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/investigations/{iid}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Message */
+        post: operations["add_message_api_v1_investigations__iid__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/investigations/{iid}/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Permissions */
+        get: operations["get_permissions_api_v1_investigations__iid__permissions_get"];
+        put?: never;
+        /** Set Permission */
+        post: operations["set_permission_api_v1_investigations__iid__permissions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/investigations/{iid}/diagnose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Diagnose */
+        post: operations["diagnose_api_v1_investigations__iid__diagnose_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Devices */
+        get: operations["devices_api_v1_devices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/serial/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Serial Connect */
+        post: operations["serial_connect_api_v1_devices_serial_connect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/serial/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Serial Release */
+        post: operations["serial_release_api_v1_devices_serial_release_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/camera/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Camera Probe */
+        get: operations["camera_probe_api_v1_devices_camera_probe_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/camera/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Camera Connect */
+        post: operations["camera_connect_api_v1_devices_camera_connect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/camera/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Camera Release */
+        post: operations["camera_release_api_v1_devices_camera_release_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/camera/calibrate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Camera Calibrate */
+        post: operations["camera_calibrate_api_v1_devices_camera_calibrate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/camera/frame.jpg": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Camera Frame */
+        get: operations["camera_frame_api_v1_devices_camera_frame_jpg_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/camera/stream.mjpg": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Camera Stream */
+        get: operations["camera_stream_api_v1_devices_camera_stream_mjpg_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -357,6 +735,145 @@ export interface components {
             evidence: components["schemas"]["Evidence"][];
             /** Test Run Id */
             test_run_id: string | null;
+            /** Tool Call Id */
+            tool_call_id: string | null;
+            /** Node Ids */
+            node_ids: string[];
+            /** Lines */
+            lines: string[];
+        };
+        /** AgentFinding */
+        AgentFinding: {
+            /** Statement */
+            statement: string;
+            /** Supporting Evidence Ids */
+            supporting_evidence_ids: string[];
+            /** Contradicting Evidence Ids */
+            contradicting_evidence_ids: string[];
+            /**
+             * Epistemic Status
+             * @default inferred
+             * @enum {string}
+             */
+            epistemic_status: "inferred" | "hypothesis";
+        };
+        /**
+         * AgentName
+         * @enum {string}
+         */
+        AgentName: "orchestrator" | "code" | "hardware" | "runtime_vision";
+        /** AgentReport */
+        AgentReport: {
+            agent: components["schemas"]["AgentName"];
+            /** Investigation Id */
+            investigation_id: string;
+            /** Scope Node Ids */
+            scope_node_ids: string[];
+            /** Findings */
+            findings: components["schemas"]["AgentFinding"][];
+            /** Unknowns */
+            unknowns: string[];
+            /** Proposed Action Ids */
+            proposed_action_ids: string[];
+        };
+        /** AgentRun */
+        AgentRun: {
+            /** Id */
+            id: string;
+            /** Incident Id */
+            incident_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Round */
+            round: number;
+            agent: components["schemas"]["AgentName"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "failed" | "timeout" | "invalid" | "skipped";
+            /**
+             * Started At Utc
+             * Format: date-time
+             */
+            started_at_utc: string;
+            /**
+             * Duration Ms
+             * @default 0
+             */
+            duration_ms: number;
+            /** Model */
+            model: string | null;
+            context: components["schemas"]["ContextPacketSummary"] | null;
+            report: components["schemas"]["AgentReport"] | null;
+            /** Summary */
+            summary: string | null;
+            /** Dispatched */
+            dispatched: components["schemas"]["AgentName"][];
+            /** Validation Errors */
+            validation_errors: string[];
+            /** Error */
+            error: string | null;
+        };
+        /** AgentStatus */
+        AgentStatus: {
+            /** Available */
+            available: boolean;
+            /** Provider */
+            provider: string;
+            /** Model */
+            model: string | null;
+            /** Reason */
+            reason: string | null;
+        };
+        /** CalibrateRequest */
+        CalibrateRequest: {
+            /** Known Angle Deg */
+            known_angle_deg: number;
+        };
+        /** CameraConnectRequest */
+        CameraConnectRequest: {
+            /** Index */
+            index: number;
+        };
+        /** CameraStatus */
+        CameraStatus: {
+            /** Connected */
+            connected: boolean;
+            /** Source Id */
+            source_id: string | null;
+            /** Fps */
+            fps: number;
+            /** Calibrated */
+            calibrated: boolean;
+            /** Offset Deg */
+            offset_deg: number | null;
+            /** Last Error */
+            last_error: string | null;
+        };
+        /**
+         * ContextPacketSummary
+         * @description What an agent was shown (PRD §10.8) — stored for audit; the full text is not persisted.
+         */
+        ContextPacketSummary: {
+            /** Investigation Id */
+            investigation_id: string;
+            /** Focus Node Ids */
+            focus_node_ids: string[];
+            /** Included Node Ids */
+            included_node_ids: string[];
+            /** Evidence Ids */
+            evidence_ids: string[];
+            /** Tool Call Ids */
+            tool_call_ids: string[];
+            /** Known Unknowns */
+            known_unknowns: string[];
+            /** Omitted Context Summary */
+            omitted_context_summary: string;
+            /** Max Token Budget */
+            max_token_budget: number;
+            /** Estimated Tokens */
+            estimated_tokens: number;
         };
         /** DemoFixture */
         DemoFixture: {
@@ -366,6 +883,18 @@ export interface components {
             repo_path: string;
             /** Manifest Path */
             manifest_path: string;
+        };
+        /** DemoInfo */
+        DemoInfo: {
+            /** Fixtures */
+            fixtures: components["schemas"]["DemoFixture"][];
+            /** Netlist Path */
+            netlist_path: string;
+        };
+        /** DeviceStatus */
+        DeviceStatus: {
+            serial: components["schemas"]["SerialStatus"];
+            camera: components["schemas"]["CameraStatus"];
         };
         /** DiagnosticAction */
         DiagnosticAction: {
@@ -457,10 +986,16 @@ export interface components {
         EvidenceKind: "source_excerpt" | "manifest_entry" | "netlist_entry" | "serial_line" | "host_command" | "cv_measurement" | "tool_output" | "engineer_assertion" | "rule_result";
         /**
          * ExecuteActionRequest
-         * @description Optional override of the observation source for repeat/verify runs (e.g. pick a replay).
+         * @description `source` overrides the observation source for repeat/verify runs. `approve_once` is the engineer
+         *     individually approving one tool call whose category is not granted (never available to agents).
          */
         ExecuteActionRequest: {
             source?: components["schemas"]["ObservationSourceSpec-Input"] | null;
+            /**
+             * Approve Once
+             * @default false
+             */
+            approve_once: boolean;
         };
         /** Expectation */
         Expectation: {
@@ -595,7 +1130,7 @@ export interface components {
          * FaultCode
          * @enum {string}
          */
-        FaultCode: "GPIO_CONFIG_MISMATCH" | "NO_PHYSICAL_MOTION" | "MISSING_SERIAL_ACK" | "CAMERA_MEASUREMENT_UNAVAILABLE" | "POSSIBLE_POWER_OR_SIGNAL_FAULT";
+        FaultCode: "GPIO_CONFIG_MISMATCH" | "NO_PHYSICAL_MOTION" | "MISSING_SERIAL_ACK" | "CAMERA_MEASUREMENT_UNAVAILABLE" | "POSSIBLE_POWER_OR_SIGNAL_FAULT" | "AGENT_PROPOSED";
         /** GraphEdge */
         GraphEdge: {
             /** Id */
@@ -738,6 +1273,12 @@ export interface components {
             repo_path: string;
             /** Manifest Path */
             manifest_path?: string | null;
+            /** Netlist Path */
+            netlist_path?: string | null;
+            /** Netlist Mapping */
+            netlist_mapping?: {
+                [key: string]: unknown;
+            } | null;
             /** Name */
             name?: string | null;
         };
@@ -767,6 +1308,15 @@ export interface components {
             created_at_utc: string;
             /** Resolved By Test Run Id */
             resolved_by_test_run_id: string | null;
+            /**
+             * Agent Rounds Used
+             * @default 0
+             */
+            agent_rounds_used: number;
+            /** Agent Summary */
+            agent_summary: string | null;
+            /** Agent Recommended Action Id */
+            agent_recommended_action_id: string | null;
         };
         /**
          * IncidentState
@@ -815,6 +1365,14 @@ export interface components {
             evidence: components["schemas"]["Evidence"][];
             /** Highlights */
             highlights: components["schemas"]["Highlight"][];
+            /** Permissions */
+            permissions: components["schemas"]["PermissionGrant"][];
+            /** Tool Calls */
+            tool_calls: components["schemas"]["ToolCall"][];
+            /** Messages */
+            messages: components["schemas"]["Evidence"][];
+            /** Agent Runs */
+            agent_runs: components["schemas"]["AgentRun"][];
         };
         /** ManualResultRequest */
         ManualResultRequest: {
@@ -824,6 +1382,37 @@ export interface components {
             result: string;
             /** Note */
             note?: string | null;
+        };
+        /** MessageRequest */
+        MessageRequest: {
+            /** Text */
+            text: string;
+        };
+        /** NetlistPreview */
+        NetlistPreview: {
+            /** File */
+            file: string;
+            /** Components */
+            components: {
+                [key: string]: unknown;
+            }[];
+            /** Nets */
+            nets: {
+                [key: string]: unknown;
+            }[];
+            /** Proposed Mapping */
+            proposed_mapping: {
+                [key: string]: unknown;
+            };
+            /** Warnings */
+            warnings: string[];
+        };
+        /** NetlistPreviewRequest */
+        NetlistPreviewRequest: {
+            /** Netlist Path */
+            netlist_path: string;
+            /** Repo Path */
+            repo_path?: string | null;
         };
         /**
          * NodeKind
@@ -842,7 +1431,7 @@ export interface components {
              * Source Type
              * @enum {string}
              */
-            source_type: "opencv" | "replay_cv";
+            source_type: "opencv" | "replay_cv" | "sim_cv";
             /** Source Id */
             source_id: string;
             /** Component Id */
@@ -870,25 +1459,73 @@ export interface components {
             /** Evidence Id */
             evidence_id: string;
         };
-        /** ObservationSourceSpec */
+        /**
+         * ObservationSourceSpec
+         * @description replay = recorded/synthetic file; sim = simulated rig through the live pipeline; live = real devices.
+         */
         "ObservationSourceSpec-Input": {
             /**
              * Kind
              * @enum {string}
              */
-            kind: "replay" | "live";
+            kind: "replay" | "live" | "sim";
             /** Scenario */
             scenario?: string | null;
         };
-        /** ObservationSourceSpec */
+        /**
+         * ObservationSourceSpec
+         * @description replay = recorded/synthetic file; sim = simulated rig through the live pipeline; live = real devices.
+         */
         "ObservationSourceSpec-Output": {
             /**
              * Kind
              * @enum {string}
              */
-            kind: "replay" | "live";
+            kind: "replay" | "live" | "sim";
             /** Scenario */
             scenario: string | null;
+        };
+        /** PermissionGrant */
+        PermissionGrant: {
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Incident Id */
+            incident_id: string;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "repo_read" | "netlist_read" | "serial_read" | "camera_observe" | "host_diagnostics_read";
+            /**
+             * Target
+             * @default local
+             */
+            target: string;
+            /**
+             * Granted By
+             * @default engineer
+             * @constant
+             */
+            granted_by: "engineer";
+            /**
+             * Granted At Utc
+             * Format: date-time
+             */
+            granted_at_utc: string;
+            /** Revoked At Utc */
+            revoked_at_utc: string | null;
+        };
+        /** PermissionUpdate */
+        PermissionUpdate: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "repo_read" | "netlist_read" | "serial_read" | "camera_observe" | "host_diagnostics_read";
+            /** Granted */
+            granted: boolean;
         };
         /** Project */
         Project: {
@@ -917,6 +1554,22 @@ export interface components {
              * @default 0
              */
             file_count: number;
+            /**
+             * Hardware Source
+             * @default manifest
+             * @enum {string}
+             */
+            hardware_source: "manifest" | "netlist" | "none";
+            /** Netlist Path */
+            netlist_path: string | null;
+            /** Netlist Mapping */
+            netlist_mapping: {
+                [key: string]: unknown;
+            } | null;
+            /** Wiring Overrides */
+            wiring_overrides: {
+                [key: string]: "verified" | "unverified";
+            };
         };
         /** Provenance */
         Provenance: {
@@ -941,6 +1594,21 @@ export interface components {
             description: string;
             /** Synthetic */
             synthetic: boolean;
+        };
+        /** SaveReplayRequest */
+        SaveReplayRequest: {
+            /** Name */
+            name: string;
+        };
+        /** SerialConnectRequest */
+        SerialConnectRequest: {
+            /** Port */
+            port: string;
+            /**
+             * Baud
+             * @default 115200
+             */
+            baud: number;
         };
         /** SerialEvent */
         SerialEvent: {
@@ -969,6 +1637,28 @@ export interface components {
             /** Matched Function Ids */
             matched_function_ids: string[];
         };
+        /** SerialPortInfo */
+        SerialPortInfo: {
+            /** Port */
+            port: string;
+            /** Description */
+            description: string;
+            /** Hwid */
+            hwid: string;
+        };
+        /** SerialStatus */
+        SerialStatus: {
+            /** Connected */
+            connected: boolean;
+            /** Port */
+            port: string | null;
+            /** Baud */
+            baud: number;
+            /** Last Error */
+            last_error: string | null;
+            /** Ports */
+            ports: components["schemas"]["SerialPortInfo"][];
+        };
         /** SourceExcerpt */
         SourceExcerpt: {
             /** File */
@@ -981,6 +1671,13 @@ export interface components {
             highlight_lines: number[];
             /** Evidence Id */
             evidence_id: string;
+        };
+        /** SourceOptions */
+        SourceOptions: {
+            /** Replays */
+            replays: components["schemas"]["ReplayInfo"][];
+            /** Sim */
+            sim: components["schemas"]["ReplayInfo"][];
         };
         /** StartTestRequest */
         StartTestRequest: {
@@ -1046,6 +1743,74 @@ export interface components {
          * @enum {string}
          */
         TestRunState: "configured" | "running" | "completed" | "failed" | "cancelled";
+        /**
+         * ToolCall
+         * @description Audit record for every tool invocation, grant decision and denial (PRD §13.3).
+         */
+        ToolCall: {
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Incident Id */
+            incident_id: string | null;
+            /** Tool Name */
+            tool_name: string;
+            /** Permission Category */
+            permission_category: string;
+            /** Arguments */
+            arguments: {
+                [key: string]: unknown;
+            };
+            /** Caller */
+            caller: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "granted" | "approved_once" | "denied" | "unavailable" | "invalid";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "denied" | "failed";
+            /**
+             * Started At Utc
+             * Format: date-time
+             */
+            started_at_utc: string;
+            /**
+             * Duration Ms
+             * @default 0
+             */
+            duration_ms: number;
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /** Error */
+            error: string | null;
+            /** Evidence Ids */
+            evidence_ids: string[];
+        };
+        /** ToolInfo */
+        ToolInfo: {
+            /** Name */
+            name: string;
+            /** Permission Category */
+            permission_category: string;
+            /** Is Read Only */
+            is_read_only: boolean;
+            /** Available */
+            available: boolean;
+            /** Description */
+            description: string;
+            /** Args Schema */
+            args_schema: {
+                [key: string]: unknown;
+            };
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1065,6 +1830,18 @@ export interface components {
          * @enum {string}
          */
         Verification: "observed" | "verified" | "inferred" | "unverified" | "conflicting";
+        /** WiringVerificationRequest */
+        WiringVerificationRequest: {
+            /** Edge Id */
+            edge_id: string;
+            /**
+             * Verification
+             * @enum {string}
+             */
+            verification: "verified" | "unverified";
+            /** Note */
+            note?: string | null;
+        };
     };
     responses: never;
     parameters: never;
@@ -1114,15 +1891,11 @@ export interface operations {
             };
         };
     };
-    get_evidence_api_v1_projects__pid__evidence_get: {
+    demo_info_api_v1_demo_get: {
         parameters: {
-            query?: {
-                ids?: string[];
-            };
+            query?: never;
             header?: never;
-            path: {
-                pid: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -1133,16 +1906,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Evidence"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["DemoInfo"];
                 };
             };
         };
@@ -1163,6 +1927,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReplayInfo"][];
+                };
+            };
+        };
+    };
+    sources_api_v1_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceOptions"];
+                };
+            };
+        };
+    };
+    tools_api_v1_tools_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolInfo"][];
+                };
+            };
+        };
+    };
+    agents_status_api_v1_agents_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentStatus"];
+                };
+            };
+        };
+    };
+    netlist_preview_api_v1_netlist_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetlistPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetlistPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1251,6 +2108,37 @@ export interface operations {
             };
         };
     };
+    rescan_api_v1_projects__pid__rescan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_graph_api_v1_projects__pid__graph_get: {
         parameters: {
             query?: {
@@ -1285,6 +2173,41 @@ export interface operations {
             };
         };
     };
+    verify_wiring_api_v1_projects__pid__graph_verification_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WiringVerificationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_subsystems_api_v1_projects__pid__subsystems_get: {
         parameters: {
             query?: never;
@@ -1303,6 +2226,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Subsystem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_evidence_api_v1_projects__pid__evidence_get: {
+        parameters: {
+            query?: {
+                ids?: string[];
+            };
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Evidence"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    project_devices_api_v1_projects__pid__devices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceStatus"];
                 };
             };
             /** @description Validation Error */
@@ -1544,6 +2531,72 @@ export interface operations {
             };
         };
     };
+    verify_test_api_v1_tests__run_id__verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_replay_api_v1_tests__run_id__save_replay_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveReplayRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplayInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_investigation_api_v1_investigations__iid__get: {
         parameters: {
             query?: never;
@@ -1642,6 +2695,357 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_message_api_v1_investigations__iid__messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvestigationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_permissions_api_v1_investigations__iid__permissions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PermissionGrant"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_permission_api_v1_investigations__iid__permissions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PermissionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PermissionGrant"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    diagnose_api_v1_investigations__iid__diagnose_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Incident"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    devices_api_v1_devices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceStatus"];
+                };
+            };
+        };
+    };
+    serial_connect_api_v1_devices_serial_connect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SerialConnectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    serial_release_api_v1_devices_serial_release_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceStatus"];
+                };
+            };
+        };
+    };
+    camera_probe_api_v1_devices_camera_probe_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": number[];
+                };
+            };
+        };
+    };
+    camera_connect_api_v1_devices_camera_connect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CameraConnectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    camera_release_api_v1_devices_camera_release_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceStatus"];
+                };
+            };
+        };
+    };
+    camera_calibrate_api_v1_devices_camera_calibrate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalibrateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    camera_frame_api_v1_devices_camera_frame_jpg_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    camera_stream_api_v1_devices_camera_stream_mjpg_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

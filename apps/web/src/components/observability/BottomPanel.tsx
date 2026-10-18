@@ -1,4 +1,4 @@
-import { useState } from "react";
+import type { ReactNode } from "react";
 import type { Expectation, IntegreatEvent, Observation, SerialEvent, TestRun } from "../../lib/api";
 
 interface Props {
@@ -8,25 +8,35 @@ interface Props {
   serial: SerialEvent[];
   expectation: Expectation | null;
   onSelectEvent: (e: IntegreatEvent) => void;
+  devices: ReactNode;
+  audit: ReactNode;
+  onSaveReplay: (runId: string) => void;
+  tab: Tab;
+  onTab: (t: Tab) => void;
 }
 
-type Tab = "plot" | "serial" | "timeline";
+export type Tab = "plot" | "serial" | "timeline" | "devices" | "audit";
+const TAB_LABEL: Record<Tab, string> = {
+  plot: "CV angle", serial: "Serial", timeline: "Timeline", devices: "Devices", audit: "Tool audit",
+};
 
 export function BottomPanel(p: Props) {
-  const [tab, setTab] = useState<Tab>("plot");
+  const tab = p.tab;
   return (
     <div className="bottom">
       <div className="tabs">
-        {(["plot", "serial", "timeline"] as Tab[]).map((t) => (
-          <button key={t} className={tab === t ? "tab active" : "tab"} onClick={() => setTab(t)}>
-            {t === "plot" ? "CV angle" : t === "serial" ? "Serial" : "Timeline"}
+        {(Object.keys(TAB_LABEL) as Tab[]).map((t) => (
+          <button key={t} className={tab === t ? "tab active" : "tab"} onClick={() => p.onTab(t)}>
+            {TAB_LABEL[t]}
           </button>
         ))}
         {p.run && (
           <span className="run-meta">
             {p.run.id} · {p.run.attempt_kind} · {p.run.state}
-            {p.run.source.kind === "replay" && (
-              <span className="badge replay">{p.run.synthetic ? "SYNTHETIC REPLAY" : "REPLAY"}: {p.run.source.scenario}</span>
+            <SourceBadge run={p.run} />
+            {p.run.state === "completed" && p.run.source.kind !== "replay" && (
+              <button className="ghost small" onClick={() => p.onSaveReplay(p.run!.id)}
+                      title="Save this run as a replay fixture for offline demos">Save as replay</button>
             )}
           </span>
         )}
@@ -35,9 +45,18 @@ export function BottomPanel(p: Props) {
         {tab === "plot" && <AnglePlot obs={p.observations} exp={p.expectation} />}
         {tab === "serial" && <SerialLog serial={p.serial} />}
         {tab === "timeline" && <Timeline events={p.events} onSelect={p.onSelectEvent} />}
+        {tab === "devices" && p.devices}
+        {tab === "audit" && p.audit}
       </div>
     </div>
   );
+}
+
+export function SourceBadge({ run }: { run: TestRun }) {
+  const src = run.source;
+  if (src.kind === "live") return <span className="badge live">LIVE HARDWARE</span>;
+  if (src.kind === "sim") return <span className="badge replay">SIMULATED RIG: {src.scenario}</span>;
+  return <span className="badge replay">{run.synthetic ? "SYNTHETIC REPLAY" : "RECORDED REPLAY"}: {src.scenario}</span>;
 }
 
 function AnglePlot({ obs, exp }: { obs: Observation[]; exp: Expectation | null }) {
@@ -101,7 +120,8 @@ function SerialLog({ serial }: { serial: SerialEvent[] }) {
 }
 
 const IMPORTANT = new Set([
-  "project.imported", "expectation.confirmed", "test.started", "test.completed", "expectation.failed",
+  "project.imported", "graph.updated", "permissions.updated", "tool.called", "action.denied", "agent.started",
+  "agent.reported", "message.added", "expectation.confirmed", "test.started", "test.completed", "expectation.failed",
   "incident.created", "hypotheses.updated", "action.started", "action.completed", "test.verification_completed",
   "incident.resolved", "error",
 ]);
@@ -143,6 +163,20 @@ function summarize(e: IntegreatEvent): string {
       return String(p.message ?? "");
     case "project.imported":
       return `${p.name} (${p.issues} import notes)`;
+    case "graph.updated":
+      return `graph v${p.version}${p.reason ? ` (${p.reason})` : ""}${p.verification ? `: wiring ${p.verification}` : ""}`;
+    case "permissions.updated":
+      return `${p.category} ${p.granted ? "granted" : "revoked"}`;
+    case "tool.called":
+      return `${p.tool_name} by ${p.caller}: ${p.decision}`;
+    case "action.denied":
+      return `${p.reason}`;
+    case "agent.started":
+      return `round ${p.round}: ${(p.agents as string[] | undefined)?.join(", ")}`;
+    case "agent.reported":
+      return `${p.agent}: ${p.status} (${p.findings} findings)`;
+    case "message.added":
+      return String(p.text ?? "");
     default:
       return "";
   }

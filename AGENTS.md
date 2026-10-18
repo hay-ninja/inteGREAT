@@ -20,11 +20,11 @@ import repo + hardware manifest → dependency graph → run a test → evidence
 - **Existing firmware only:** inteGREAT never requires its own instrumentation in user firmware.
 
 ## Layout
-- `apps/api/integreat/` — FastAPI modular monolith (package `integreat`).
-  `models/` is the single source of truth for contracts.
+- `apps/api/integreat/` — FastAPI modular monolith (package `integreat`). `models/` is the single source
+  of truth for contracts. Map of modules and "where to change things": `docs/architecture.md`.
 - `apps/web/` — Vite + React + `@xyflow/react`. Types generated from backend OpenAPI.
 - `fixtures/` — demo firmware, manifests, recorded serial/CV JSONL (synthetic files say so in name/header).
-- `docs/` — STATUS, decisions.
+- `docs/` — STATUS, decisions, architecture, hardware-setup (rig checklist), demo-script.
 
 ## Commands
 See `docs/STATUS.md` → "How to run / verify" (kept current there to avoid drift).
