@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, useState,
+         type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
 import { VStack } from "@astryxdesign/core/VStack";
 import { HStack } from "@astryxdesign/core/HStack";
@@ -118,8 +119,8 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
         </HStack>
         <RoiView cid={cid} candidates={candidates ?? []} roi={roi} onPick={useRoi} disabled={busy} />
         <Text type="supporting">
-          Click once for box 1, then hold and release for box 2 — the region between
-          them is the LED. Picking a region also records the LED-off baseline, so make
+          Click box 1 then box 2, or just press-drag-release a box — the region
+          between them is the LED. Picking a region also records the LED-off baseline, so make
           sure it is dark right now. Blink-to-find is usually faster: it toggles the
           LED over serial and watches which part of the image changes — no marker
           needed, and it sends exactly the two commands below, nothing else. If the
@@ -154,13 +155,15 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
   );
 }
 
-/** Live feed with a two-click region marker: click to place box 1, click to place
- *  box 2. Both use click (press+release on the same element) rather than raw
- *  pointer events — pointer capture/move is unreliable over a live MJPEG stream.
- *  A minimum delay between the two clicks prevents one gesture from double-firing
- *  and drawing box 2 prematurely. Rects are kept in natural frame pixels and drawn
- *  as percentage-positioned divs so the overlay tracks the scaled <img>. */
+/** Live feed region marker supporting BOTH gestures: click box 1 + click box 2,
+ *  or press-drag-release to draw a box in one motion — the press point is captured
+ *  on pointerdown, so a press-release spanning >=6px commits that box outright.
+ *  Click (release on the same element) is used instead of raw pointerup so MJPEG
+ *  frame swaps can't break the gesture. A minimum gap after corner 1 prevents an
+ *  echoed event from closing box 2 prematurely. Rects are natural frame pixels
+ *  drawn as percentage-positioned divs so the overlay tracks the scaled <img>. */
 const MIN_CLICK_GAP_MS = 350;
+const MIN_BOX_PX = 6;
 
 function RoiView({ cid, candidates, roi, onPick, disabled }: {
   cid: string;
@@ -174,6 +177,7 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
   const [first, setFirst] = useState<[number, number] | null>(null);  // anchored corner 1, frame px
   const [hover, setHover] = useState<[number, number] | null>(null);  // preview cursor pos
   const firstAt = useRef(0);
+  const pressAt = useRef<[number, number] | null>(null);  // pointerdown of the in-progress gesture
 
   // MJPEG frames don't reliably re-fire onLoad — poll natural size until known.
   useEffect(() => {
@@ -199,25 +203,43 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
     ];
   };
 
+  const span = (a: [number, number], b: [number, number]): number[] =>
+    [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])];
+
+  const down = (e: ReactPointerEvent) => { if (!disabled) pressAt.current = toNat(e); };
+  const move = (e: ReactPointerEvent) => { if (first || pressAt.current) setHover(toNat(e)); };
+
+  // click = pointer released on the same element it pressed (MJPEG-safe). The
+  // gesture's box spans press point → release point: a span >= MIN_BOX_PX is a
+  // drawn box; a smaller span is a plain click (corner placement).
   const click = (e: ReactMouseEvent) => {
     if (disabled) return;
-    const p = toNat(e);
-    if (!p) return;
-    if (!first) { setFirst(p); firstAt.current = performance.now(); return; }
+    const end = toNat(e);
+    const start = pressAt.current; pressAt.current = null;
+    if (!end || !start) return;
+    const drawn = span(start, end);
+    const dragged = drawn[2] >= MIN_BOX_PX && drawn[3] >= MIN_BOX_PX;
+    if (!first) {
+      if (dragged) { onPick(drawn); return; }          // drew the whole box in one gesture
+      setFirst(start); firstAt.current = performance.now();
+      return;
+    }
     // A click landing within the gap is the same gesture echoing (double events,
     // stream hiccups) — never let it close box 2 prematurely.
     if (performance.now() - firstAt.current < MIN_CLICK_GAP_MS) return;
-    const r = [Math.min(first[0], p[0]), Math.min(first[1], p[1]),
-               Math.abs(p[0] - first[0]), Math.abs(p[1] - first[1])];
-    if (r[2] < 6 || r[3] < 6) return;  // degenerate click — keep box 1 so they can click again
+    const r = dragged ? drawn : span(first, end);
+    if (r[2] < MIN_BOX_PX || r[3] < MIN_BOX_PX) return;  // degenerate — keep box 1, click again
     setFirst(null); setHover(null);
     onPick(r);
   };
-  const move = (e: ReactMouseEvent) => { if (first) setHover(toNat(e)); };
-  const preview = first && hover
-    ? [Math.min(first[0], hover[0]), Math.min(first[1], hover[1]),
-       Math.abs(hover[0] - first[0]), Math.abs(hover[1] - first[1])]
-    : null;
+  const leave = () => { pressAt.current = null; if (!first) setHover(null); };
+
+  // Preview follows the cursor from whichever anchor is active — an anchored
+  // corner 1, or the press point mid-drag. Below MIN_BOX_PX it stays hidden so
+  // a tiny preview never reads as a committed box.
+  const anchor = first ?? pressAt.current;
+  const pv = anchor && hover ? span(anchor, hover) : null;
+  const preview = pv && pv[2] >= MIN_BOX_PX && pv[3] >= MIN_BOX_PX ? pv : null;
   const box = (r: number[]) => nat ? {
     left: `${(r[0] / nat[0]) * 100}%`, top: `${(r[1] / nat[1]) * 100}%`,
     width: `${(r[2] / nat[0]) * 100}%`, height: `${(r[3] / nat[1]) * 100}%`,
@@ -228,19 +250,21 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
       <img ref={imgRef} draggable={false}
            src={`/api/v1/devices/camera/stream.mjpg?metric=led_state&component=${encodeURIComponent(cid)}`}
            alt="Live camera — click two corners around the LED" />
-      <div className="roi-layer" role="presentation" onClick={click} onPointerMove={move}>
+      <div className="roi-layer" role="presentation"
+           onPointerDown={down} onPointerMove={move} onPointerLeave={leave} onClick={click}>
         {nat && roi && <div className="roi-box roi-current" style={box(roi)} />}
         {nat && candidates.map((r, i) => (
           <button key={i} className="roi-box roi-candidate" style={box(r)}
                   aria-label={`Use candidate region ${i + 1}`}
-                  onClick={(e) => { e.stopPropagation(); setFirst(null); onPick(r); }} />
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); pressAt.current = null; setFirst(null); onPick(r); }} />
         ))}
         {nat && preview && <div className="roi-box roi-drag" style={box(preview)} />}
         {nat && first && <div className="roi-corner" style={box([first[0] - 4, first[1] - 4, 8, 8])} />}
       </div>
       {first && (
         <div className="roi-hint">
-          <span>Box 1 placed — click box 2</span>
+          <span>Box 1 placed — click or drag box 2</span>
           <button className="roi-reset" onClick={(e) => { e.stopPropagation(); setFirst(null); setHover(null); }}>
             Reset
           </button>
