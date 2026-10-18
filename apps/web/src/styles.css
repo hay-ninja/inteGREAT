@@ -147,6 +147,11 @@
            transition: color var(--duration-fast); }
   .brand:hover { color: var(--color-text-accent); }
   .brand .bmark { color: var(--color-accent); }
+  /* Big wordmark on the projects hub — same glyph treatment as .brand, display size */
+  .wordmark { font-family: var(--font-family-code); font-size: 44px; font-weight: 700;
+              letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-text-primary);
+              line-height: 1.05; }
+  .wordmark .waccent { color: var(--color-accent); }
   /* hairline divider zoning the top bar: context (left) vs live rig state (right) */
   .topbar-divider { align-self: stretch; width: 1px; background: var(--color-border); }
   .react-flow__edge-textbg { fill: var(--color-background-elevated, #232323); }

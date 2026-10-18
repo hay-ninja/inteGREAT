@@ -380,7 +380,7 @@ export default function App() {
 
   if (!project || !graph) {
     if (!entered) return <LandingScreen onEnter={() => setEntered(true)} />;
-    return <ImportScreen onImport={doImport} onOpen={(p) => loadProject(p, false).catch(fail)} busy={busy} onError={(m) => fail(m)} />;
+    return <ImportScreen onImport={doImport} onOpen={(p) => loadProject(p, false).catch(fail)} onBack={() => setEntered(false)} busy={busy} onError={(m) => fail(m)} />;
   }
 
   const runs: TestRun[] = view ? [view.test_run, ...view.followup_runs] : run ? [run] : [];

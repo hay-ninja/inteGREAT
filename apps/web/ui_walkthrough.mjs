@@ -29,7 +29,7 @@ if (await landingCta.isVisible().catch(() => false)) {
   await page.waitForTimeout(600);
 }
 await shot("00-import");
-const onImport = await page.getByText("Explore a demo").isVisible().catch(() => false);
+const onImport = await page.getByText("Try it on pretend hardware").isVisible().catch(() => false);
 if (onImport) {
   await page.getByText("Wrong pin in the code").click();
   await shot("00b-demo-modal");

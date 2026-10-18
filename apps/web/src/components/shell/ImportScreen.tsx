@@ -1,4 +1,5 @@
-/** Start screen: try a demo, reopen a recent project, or import your own — in that order. */
+/** Projects hub: demos on the left, wordmark + your projects in the middle,
+    and a "New project" button that opens the import form in a modal. */
 import { useEffect, useRef, useState } from "react";
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout";
 import { VStack } from "@astryxdesign/core/VStack";
@@ -31,7 +32,7 @@ export interface ImportArgs {
   netlist_mapping?: Record<string, unknown> | null;
 }
 
-export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr: Project) => void; busy: boolean; onError: (m: string) => void }) {
+export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr: Project) => void; onBack?: () => void; busy: boolean; onError: (m: string) => void }) {
   const [fixtures, setFixtures] = useState<DemoFixture[]>([]);
   const [demoNetlist, setDemoNetlist] = useState("");
   const [recent, setRecent] = useState<Project[]>([]);
@@ -43,11 +44,17 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
   const [previewError, setPreviewError] = useState("");
   const [previewBusy, setPreviewBusy] = useState(false);
   const [pending, setPending] = useState<null | { title: string; lines: string[]; action: string; onConfirm: () => void }>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const previewRequest = useRef(0);
 
   useEffect(() => {
     api.demo().then((d) => { setFixtures(d.fixtures); setDemoNetlist(d.netlist_path); }).catch(() => undefined);
-    api.projects().then((ps) => setRecent(ps.slice(-4).reverse())).catch(() => undefined);
+    // One card per folder — re-importing the same repo updates the entry, not duplicates it.
+    api.projects().then((ps) => {
+      const byRoot = new Map<string, Project>();
+      for (const pr of ps) byRoot.set(pr.repo_root, pr);
+      setRecent([...byRoot.values()].slice(-8).reverse());
+    }).catch(() => undefined);
   }, []);
 
   const doPreview = async (nl: string, rp: string) => {
@@ -59,121 +66,125 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
       setPreview(pr);
       setMapping(pr.proposed_mapping as unknown as Mapping);
     } catch (e) {
-      if (request === previewRequest.current) setPreviewError((e as Error).message);
+      if (request !== previewRequest.current) setPreviewError((e as Error).message);
     } finally {
-      if (request === previewRequest.current) setPreviewBusy(false);
+      if (request !== previewRequest.current) setPreviewBusy(false);
     }
   };
 
   return (
     <>
-    <Layout contentWidth={1040} content={
+    <Layout contentWidth={1200} content={
       <LayoutContent>
-        <VStack gap={6} paddingBlock={8}>
-          <HostedDemoBanner />
-          <VStack gap={2} maxWidth={720}>
-            <Eyebrow>Graph-first hardware debugging</Eyebrow>
-            <Heading level={1} type="display-1">Why isn't your hardware doing what the code says?</Heading>
-            <Text type="large" color="secondary">
-              Import an ESP32 project — inteGREAT maps code to wiring, runs a test, and shows the evidence. Nothing is run or changed on import.
-            </Text>
-          </VStack>
-
-          <VStack gap={3}>
+        <VStack paddingBlock={6}>
+        <HStack gap={6} vAlign="start" wrap="wrap">
+          {/* Left rail — demos, like template shortcuts on a projects page */}
+          <VStack gap={3} style={{ width: 300, flexShrink: 0 }}>
             <VStack gap={1}>
-              <Eyebrow num="01">Explore a demo — simulated observations</Eyebrow>
+              <Eyebrow>Demos</Eyebrow>
               <Heading level={2}>Try it on pretend hardware</Heading>
-              <Text type="body" color="secondary">Two failure stories with pretend observations. Safe to click through — nothing touches a real board.</Text>
+              <Text type="body" color="secondary">Two failure stories with pretend observations — safe to click through.</Text>
             </VStack>
-            <Grid columns={{ minWidth: 300, repeat: "fill" }} gap={3}>
-              {fixtures.map((f, i) => (
-                <ClickableCard key={f.repo_path} padding={4} isDisabled={p.busy}
-                  label={i === 0 ? "Wrong pin in the code" : "Disconnected servo signal"}
-                  onClick={() => setPending({
-                    title: i === 0 ? "Demo — Wrong pin in the code" : "Demo — Disconnected servo signal",
-                    lines: [i === 0
-                      ? "A servo project where the code drives one pin but the wiring notes connect a different one — a classic silent failure."
-                      : "A servo project where the board acknowledges the command but the arm never moves — is it the signal wire, or power?",
-                      "inteGREAT maps code to wiring, runs a simulated test, and walks you through the failure. Nothing runs on real hardware."],
-                    action: "Load demo",
-                    onConfirm: () => p.onImport({ repo_path: f.repo_path, manifest_path: f.manifest_path }),
-                  })}>
-                  <VStack gap={2}>
-                    <Text type="large" weight="semibold">{i === 0 ? "Wrong pin in the code" : "Disconnected servo signal"}</Text>
-                    <Text type="body" color="secondary">{i === 0
-                      ? "Inspect a GPIO mismatch, then verify a repair."
-                      : "Separate signal and power hypotheses with a manual check."}</Text>
-                    <Text type="supporting" color="secondary">Simulated · servo arm + camera · ~5 minutes</Text>
-                  </VStack>
-                </ClickableCard>
-              ))}
-            </Grid>
+            {fixtures.map((f, i) => (
+              <ClickableCard key={f.repo_path} padding={4} isDisabled={p.busy}
+                label={i === 0 ? "Wrong pin in the code" : "Disconnected servo signal"}
+                onClick={() => setPending({
+                  title: i === 0 ? "Demo — Wrong pin in the code" : "Demo — Disconnected servo signal",
+                  lines: [i === 0
+                    ? "A servo project where the code drives one pin but the wiring notes connect a different one — a classic silent failure."
+                    : "A servo project where the board acknowledges the command but the arm never moves — is it the signal wire, or power?",
+                    "inteGREAT maps code to wiring, runs a simulated test, and walks you through the failure. Nothing runs on real hardware."],
+                  action: "Load demo",
+                  onConfirm: () => p.onImport({ repo_path: f.repo_path, manifest_path: f.manifest_path }),
+                })}>
+                <VStack gap={2}>
+                  <Text type="body" weight="semibold">{i === 0 ? "Wrong pin in the code" : "Disconnected servo signal"}</Text>
+                  <Text type="supporting" color="secondary">{i === 0
+                    ? "Inspect a GPIO mismatch, then verify a repair."
+                    : "Separate signal and power hypotheses with a manual check."}</Text>
+                  <Text type="supporting" color="secondary">Simulated · ~5 minutes</Text>
+                </VStack>
+              </ClickableCard>
+            ))}
           </VStack>
 
-          {recent.length > 0 && (
+          {/* Main — wordmark, create button, project grid */}
+          <VStack gap={5} style={{ flex: 1, minWidth: 0 }}>
+            <HostedDemoBanner />
+            <VStack gap={2}>
+              <div className="wordmark"><span className="waccent">inte</span>GREAT</div>
+              <Text type="large" color="secondary">
+                Why isn't your hardware doing what the code says? Import a project — the map, tests, and evidence live here.
+              </Text>
+            </VStack>
+            <HStack gap={2} vAlign="center" wrap="wrap">
+              <Button label="+ New project" variant="primary" onClick={() => setImportOpen(true)} />
+              {p.onBack && <Button label="What is inteGREAT?" variant="ghost" onClick={p.onBack} />}
+            </HStack>
             <VStack gap={3}>
-              <VStack gap={1}>
-                <Eyebrow num="02">Reopen a project</Eyebrow>
-                <Heading level={2}>Pick up where you left off</Heading>
-              </VStack>
-              <Grid columns={{ minWidth: 260, repeat: "fill" }} gap={3}>
-                {recent.map((r) => (
-                  <ClickableCard key={r.id} padding={4} isDisabled={p.busy} label={r.name}
-                    onClick={() => setPending({
-                      title: r.name,
-                      lines: [r.repo_root,
-                        `Graph version ${r.graph_version}. Reopens the workspace where you left it — map, test runs, and investigation state included.`],
-                      action: "Open project",
-                      onConfirm: () => p.onOpen(r),
-                    })}>
-                    <VStack gap={2}>
-                      <Text type="large" weight="semibold">{r.name}</Text>
-                      <Text type="supporting" color="secondary" style={{ wordBreak: "break-all" }}>{r.repo_root}</Text>
-                      <Text type="supporting" color="secondary">Graph v{r.graph_version}</Text>
-                    </VStack>
-                  </ClickableCard>
-                ))}
-              </Grid>
+              <Eyebrow>Your projects</Eyebrow>
+              {recent.length ? (
+                <Grid columns={{ minWidth: 240, repeat: "fill" }} gap={3}>
+                  {recent.map((r) => (
+                    <ClickableCard key={r.id} padding={4} isDisabled={p.busy} label={r.name}
+                      onClick={() => setPending({
+                        title: r.name,
+                        lines: [r.repo_root,
+                          `Graph version ${r.graph_version}. Reopens the workspace where you left it — map, test runs, and investigation state included.`],
+                        action: "Open project",
+                        onConfirm: () => p.onOpen(r),
+                      })}>
+                      <VStack gap={2}>
+                        <Text type="body" weight="semibold">{r.name}</Text>
+                        <Text type="supporting" color="secondary" style={{ wordBreak: "break-all" }}>{r.repo_root}</Text>
+                        <Text type="supporting" color="secondary">Graph v{r.graph_version}</Text>
+                      </VStack>
+                    </ClickableCard>
+                  ))}
+                </Grid>
+              ) : (
+                <Card variant="muted" padding={5}>
+                  <Text type="body" color="secondary">No projects on this computer yet — import one and it shows up here.</Text>
+                </Card>
+              )}
             </VStack>
-          )}
-
-          <VStack gap={3}>
-            <VStack gap={1}>
-              <Eyebrow num={recent.length ? "03" : "02"}>Import your own project</Eyebrow>
-              <Heading level={2}>Point it at your code</Heading>
-              <Text type="body" color="secondary">inteGREAT reads your sketch and wiring notes to build the map. It never runs or modifies your code.</Text>
-            </VStack>
-            <Card padding={5} variant="muted">
-              <VStack gap={3}>
-                <TextInput label="Your code folder" value={repo} onChange={(v) => {
-                  setRepo(v); ++previewRequest.current; setPreview(null); setMapping(null); setPreviewError(""); setPreviewBusy(false);
-                }} placeholder="C:\path\to\sketch" description="The folder with your Arduino / ESP32 code (.ino, .cpp)." />
-                <TextInput label="Wiring notes file (YAML)" isOptional value={manifest} onChange={setManifest}
-                           description="A small file describing what is plugged into which pin. Also used as a fallback if the netlist can't be read." />
-                <TextInput label="KiCad netlist (XML)" isOptional value={netlist} width="100%" description="If you drew the circuit in KiCad, inteGREAT reads the real connections from it."
-                           onChange={(v) => { setNetlist(v); ++previewRequest.current; setPreview(null); setMapping(null); setPreviewError(""); setPreviewBusy(false); }} />
-                <HStack gap={2} wrap="wrap">
-                  <Button label="Read netlist" isDisabled={!netlist.trim() || p.busy} isLoading={previewBusy} onClick={() => doPreview(netlist, repo)} />
-                {fixtures[0] && demoNetlist && !netlist && (
-                  <Button label="Use the demo netlist" variant="ghost" size="sm" onClick={() => {
-                    setRepo(fixtures[0].repo_path); setManifest(fixtures[0].manifest_path); setNetlist(demoNetlist);
-                    doPreview(demoNetlist, fixtures[0].repo_path);
-                  }} />
-                )}
-                </HStack>
-                {preview && mapping && <MappingReview preview={preview} mapping={mapping} onChange={setMapping} />}
-                {previewError && <Banner status="warning" collapsible={false} title="The netlist could not be read"
-                                        description={`${previewError}${manifest.trim() ? " Import can continue using the hardware manifest." : " Add a manifest as a fallback, or remove the netlist path."}`} />}
-                <Button label={previewError && manifest.trim() ? "Import with manifest fallback" : netlist ? "Confirm mapping and import" : "Import project"} variant="primary" isLoading={p.busy}
-                        isDisabled={!repo.trim() || previewBusy || (!!netlist.trim() && !mapping && !(previewError && manifest.trim()))}
-                        onClick={() => p.onImport({ repo_path: repo, manifest_path: manifest || null, netlist_path: netlist || null,
-                                                    netlist_mapping: mapping ? { ...mapping, proposed: false } : null })} />
-              </VStack>
-            </Card>
           </VStack>
+        </HStack>
         </VStack>
       </LayoutContent>
     } />
+
+    {/* Import modal — the form only lives here, the page stays a projects hub */}
+    <Dialog isOpen={importOpen} onOpenChange={setImportOpen} width={640} purpose="form">
+      <DialogHeader title="New project" subtitle="Point inteGREAT at your code — nothing is run or changed on import"
+                    onOpenChange={setImportOpen} />
+      <VStack gap={3} padding={4}>
+        <TextInput label="Your code folder (Software)" value={repo} onChange={(v) => {
+          setRepo(v); ++previewRequest.current; setPreview(null); setMapping(null); setPreviewError(""); setPreviewBusy(false);
+        }} placeholder="C:\path\to\sketch" description="The folder with your Arduino / ESP32 code (.ino, .cpp)." />
+        <TextInput label="Wiring notes file (Component definitions · YAML)" isOptional value={manifest} onChange={setManifest}
+                   description="A small file describing what is plugged into which pin. Also used as a fallback if the netlist can't be read." />
+        <TextInput label="KiCad netlist (Hardware CAD · XML)" isOptional value={netlist} width="100%" description="If you drew the circuit in KiCad, inteGREAT reads the real connections from it."
+                   onChange={(v) => { setNetlist(v); ++previewRequest.current; setPreview(null); setMapping(null); setPreviewError(""); setPreviewBusy(false); }} />
+        <HStack gap={2} wrap="wrap">
+          <Button label="Read netlist" isDisabled={!netlist.trim() || p.busy} isLoading={previewBusy} onClick={() => doPreview(netlist, repo)} />
+          {fixtures[0] && demoNetlist && !netlist && (
+            <Button label="Use the demo netlist" variant="ghost" size="sm" onClick={() => {
+              setRepo(fixtures[0].repo_path); setManifest(fixtures[0].manifest_path); setNetlist(demoNetlist);
+              doPreview(demoNetlist, fixtures[0].repo_path);
+            }} />
+          )}
+        </HStack>
+        {preview && mapping && <MappingReview preview={preview} mapping={mapping} onChange={setMapping} />}
+        {previewError && <Banner status="warning" collapsible={false} title="The netlist could not be read"
+                                description={`${previewError}${manifest.trim() ? " Import can continue using the hardware manifest." : " Add a manifest as a fallback, or remove the netlist path."}`} />}
+        <Button label={previewError && manifest.trim() ? "Import with manifest fallback" : netlist ? "Confirm mapping and import" : "Import project"} variant="primary" isLoading={p.busy}
+                isDisabled={!repo.trim() || previewBusy || (!!netlist.trim() && !mapping && !(previewError && manifest.trim()))}
+                onClick={() => { setImportOpen(false); p.onImport({ repo_path: repo, manifest_path: manifest || null, netlist_path: netlist || null,
+                                                    netlist_mapping: mapping ? { ...mapping, proposed: false } : null }); }} />
+      </VStack>
+    </Dialog>
+
     <Dialog isOpen={!!pending} onOpenChange={(o) => !o && setPending(null)} width={440} purpose="form">
       <DialogHeader title={pending?.title ?? ""} subtitle="What happens when you open it"
                     onOpenChange={(o) => !o && setPending(null)} />

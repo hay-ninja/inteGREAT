@@ -396,3 +396,18 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   and turns a judge-clickable URL into a service to babysit); Pyodide/WASM
   backend (slow, fragile); a second fake implementation (duplicate code to keep
   honest).
+
+### D-035 Projects hub instead of stacked import sections — 2026-10-18
+- User asked for a Canva-style project page: demos on the left, big wordmark,
+  recent projects in the middle, and a "New project" button that opens the
+  import form in a modal. The stacked three-section import page became a
+  two-column layout: a 300px demo rail (`ClickableCard`s, unchanged context
+  modal) beside a main column with a large `inteGREAT` wordmark, the New
+  project CTA, a "What is inteGREAT?" back-to-landing link, and a
+  `Your projects` grid.
+- The import form (repo path / manifest / netlist + preview + mapping review)
+  moved into a `Dialog` — the page is a hub, not a form. Field labels now name
+  the artifact plainly: "(Software)", "(Component definitions · YAML)",
+  "(Hardware CAD · XML)".
+- Recents are deduped by `repo_root` (re-imports update the entry instead of
+  stacking identical cards) and capped at 8.

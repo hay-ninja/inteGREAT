@@ -163,6 +163,13 @@ this adds context without changing P0 scope.
 - Not replayed (honest `hosted_demo` errors): real imports, netlist preview, rescan,
   save-replay, device connects, AI diagnose, repair job creation.
 
+## Projects hub home (D-035) — done 2026-10-18
+- Import screen is now a Canva-style projects page: left demo rail, big `INTEGREAT`
+  wordmark + tagline, "+ New project" opens the import form as a modal (fields labeled
+  "(Software)", "(Component definitions · YAML)", "(Hardware CAD · XML)"), "Your
+  projects" grid dedupes recents by repo_root (max 8), "What is inteGREAT?" links back
+  to the landing page. Verified at 1280/800px; `tsc` clean, 17/17 tests.
+
 ## DSG agent architecture (D-028–D-031) — done on `feature/dsg-agent-arch`, 2026-10-18
 Plan: [dsg-agent-architecture.md](dsg-agent-architecture.md). The graph is now a state overlay,
 not just a structural prior; SimRig doubles as a digital shadow queried diagnostically.
