@@ -1,4 +1,4 @@
-// Focused check: SourcePicker -> Live rig -> persistent top-bar badge.
+// Focused check: SourcePicker -> Live environment -> persistent top-bar badge.
 import { chromium } from "playwright";
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -36,12 +36,12 @@ if (await suggest.isVisible().catch(() => false)) {
 }
 await shot("l01-run");
 
-// SourcePicker in the Run chapter — three segments: Simulated / Replay / Live rig
-const picker = page.locator("button").filter({ hasText: "Live rig" }).first();
+// SourcePicker in the Run chapter — three segments: Simulated / Replay / Live environment
+const picker = page.locator("button").filter({ hasText: "Live environment" }).first();
 if (await picker.isVisible().catch(() => false)) { await picker.click(); await sleep(600); }
 await shot("l02-live");
-// Count occurrences: 1 = only the badge (picker is a segmented control, "Live rig" is its option too)
-console.log("Live rig count:", await page.getByText("Live rig").count());
-console.log("badge visible:", await page.locator("header").getByText("Live rig").or(page.locator(".topbar-divider").locator("..").getByText("Live rig")).isVisible().catch(() => false));
-console.log("setup btn:", await page.getByRole("button", { name: "Set up the live rig" }).first().isVisible().catch(() => false));
+// Count occurrences: 1 = only the badge (picker is a segmented control, "Live environment" is its option too)
+console.log("Live environment count:", await page.getByText("Live environment").count());
+console.log("badge visible:", await page.locator("header").getByText("Live environment").or(page.locator(".topbar-divider").locator("..").getByText("Live environment")).isVisible().catch(() => false));
+console.log("setup btn:", await page.getByRole("button", { name: "Set up the live environment" }).first().isVisible().catch(() => false));
 await browser.close();

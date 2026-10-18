@@ -3,7 +3,7 @@
 //
 // Layer views are a projection of ONE canonical graph (D-023): node/edge ids and provenance are
 // never rewritten per layer. Software view keeps small explicit "boundary" hardware references
-// where code touches the rig; hardware view hides code entirely (the inspector offers the route
+// where code touches the environment; hardware view hides code entirely (the inspector offers the route
 // back). Filtering an intermediate node never invents a direct edge: lifted edges keep the real
 // edge ids, are marked `lifted`, and take the least-certain provenance.
 import dagre from "@dagrejs/dagre";
@@ -362,7 +362,7 @@ export function buildVisibleGraph(
       positions.set(n.id, { x: p.x + offX, y: p.y });
     }
     if (swN.length) regions.push({ id: "region:software", label: "Software — your code", x: -PAD, y: -PAD, w: L1.w + PAD * 2, h: L1.h + PAD * 2 });
-    if (hwN.length) regions.push({ id: "region:hardware", label: "Hardware — the physical rig", x: offX - PAD, y: -PAD, w: L2.w + PAD * 2, h: L2.h + PAD * 2 });
+    if (hwN.length) regions.push({ id: "region:hardware", label: "Hardware — the physical environment", x: offX - PAD, y: -PAD, w: L2.w + PAD * 2, h: L2.h + PAD * 2 });
   } else {
     const L = layoutDagre(vis.map((n) => ({ id: n.id, ...sizes.get(n.id)! })), edges);
     for (const n of vis) positions.set(n.id, L.pos.get(n.id)!);

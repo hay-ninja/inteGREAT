@@ -7,7 +7,7 @@ import { StatusDot } from "@astryxdesign/core/StatusDot";
 import type { DeviceStatus } from "../../lib/api";
 import { DeviceControls } from "../drawer/BottomDrawer";
 
-export function RigSetupDialog(p: {
+export function EnvironmentSetupDialog(p: {
   open: boolean;
   onClose: () => void;
   devices: DeviceStatus | null;
@@ -23,7 +23,7 @@ export function RigSetupDialog(p: {
   const ready = checks.every((c) => c.ready);
   return (
     <Dialog isOpen={p.open} onOpenChange={(open) => !open && p.onClose()} width={840} maxHeight="90dvh" purpose="form">
-      <DialogHeader title="Set up the live rig" subtitle="Plug in the board and camera, then tell it the arm's current angle so the camera can measure movement." onOpenChange={(open) => !open && p.onClose()} />
+      <DialogHeader title="Set up the live environment" subtitle="Plug in the board and camera, then tell it the arm's current angle so the camera can measure movement." onOpenChange={(open) => !open && p.onClose()} />
       <VStack gap={4} padding={4}>
         <HStack gap={3} wrap="wrap">
           {checks.map((c) => (
@@ -34,10 +34,10 @@ export function RigSetupDialog(p: {
           ))}
         </HStack>
         <DeviceControls status={p.devices} onStatus={p.onDevices} onError={p.onError} />
-        <Text type="supporting">Live tests require all three checks. You can explore the complete workflow with a clearly labeled simulated rig.</Text>
+        <Text type="supporting">Live tests require all three checks. You can explore the complete workflow with a clearly labeled simulated environment.</Text>
         <HStack gap={2} hAlign="end">
-          {!ready && <Button label="Use simulated rig" variant="primary" onClick={p.onUseSimulation} />}
-          <Button label={ready ? "Rig ready — continue" : "Close setup"} variant={ready ? "primary" : "ghost"} onClick={p.onClose} />
+          {!ready && <Button label="Use simulated environment" variant="primary" onClick={p.onUseSimulation} />}
+          <Button label={ready ? "Environment ready — continue" : "Close setup"} variant={ready ? "primary" : "ghost"} onClick={p.onClose} />
         </HStack>
       </VStack>
     </Dialog>

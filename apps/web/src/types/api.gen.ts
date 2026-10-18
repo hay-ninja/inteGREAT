@@ -1697,7 +1697,7 @@ export interface components {
         };
         /**
          * ObservationSourceSpec
-         * @description replay = recorded/synthetic file; sim = simulated rig through the live pipeline; live = real devices.
+         * @description replay = recorded/synthetic file; sim = simulated environment through the live pipeline; live = real devices.
          */
         "ObservationSourceSpec-Input": {
             /**
@@ -1710,7 +1710,7 @@ export interface components {
         };
         /**
          * ObservationSourceSpec
-         * @description replay = recorded/synthetic file; sim = simulated rig through the live pipeline; live = real devices.
+         * @description replay = recorded/synthetic file; sim = simulated environment through the live pipeline; live = real devices.
          */
         "ObservationSourceSpec-Output": {
             /**

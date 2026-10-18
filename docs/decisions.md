@@ -594,3 +594,20 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   the top-bar mode chip uses the same wording; scenario ids map to plain conditions
   ("wired as declared", "signal lead off", …). The sim SourcePicker copy now says
   plainly it is a software model, no AI involved.
+
+### D-045 Live environment wording + draggable split drawer — 2026-10-18
+- User-facing "rig" renamed to "environment" everywhere: "Environment setup"
+  (was Rig setup), "Set up the live environment", "Simulated environment — {condition}",
+  "Live environment" source segment, graph region "the physical environment", and the
+  `sim://environment` port label. `RigSetupDialog` became `EnvironmentSetupDialog`;
+  backend internals (`SimRig`, module names) are code identifiers and were left.
+- Bottom drawer is now a VS Code-style panel: top-edge `ResizeHandle` (vertical
+  `useResizable`, `collapsible`) — drag down past the header to close, click a tab to
+  reopen; size persists via `autoSaveId`.
+- Drawer gains a fourth tab, **Camera**: the existing `/devices/camera/stream.mjpg`
+  feed with honest states (not connected → setup CTA; stream error → unavailable note;
+  caption states the raw view is never itself a measurement).
+- Split view: an IconButton opens a second pane beside the first — each pane has its own
+  tab set (left uses the header TabList, right its own), the divider drags via a
+  horizontal `useResizable`, and dragging it to the right edge closes the split
+  (`collapsible` → controlled `split` state), matching "drag it back".

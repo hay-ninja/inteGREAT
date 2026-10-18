@@ -31,7 +31,7 @@ import { EventFlowView } from "./components/flow/EventFlowView";
 import { FlowPanel } from "./components/flow/FlowPanel";
 import { SelectionCard } from "./components/flow/SelectionCard";
 import { ProjectReview } from "./components/flow/ProjectReview";
-import { RigSetupDialog } from "./components/setup/RigSetupDialog";
+import { EnvironmentSetupDialog } from "./components/setup/EnvironmentSetupDialog";
 import { parseSource } from "./components/flow/common";
 import { BottomDrawer, type DrawerTab } from "./components/drawer/BottomDrawer";
 import { TopBar } from "./components/shell/TopBar";
@@ -89,7 +89,7 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<DrawerTab>("serial");
   const [fitKey, setFitKey] = useState("init");
-  const [rigSetupOpen, setRigSetupOpen] = useState(false);
+  const [envSetupOpen, setEnvSetupOpen] = useState(false);
   const [evidence, setEvidence] = useState<Evidence | null>(null);
   const [layer, setLayer] = useState<GraphLayer>("combined");
   const [mode, setMode] = useState<CanvasMode>("deps");
@@ -449,7 +449,7 @@ export default function App() {
         <LayoutHeader hasDivider>
           <TopBar project={project} subsystems={subsystems} focus={focusSub} onFocus={focusSubsystem}
                   devices={devices} agents={agentStatus} source={source} onRescan={rescan}
-                  onRigSetup={() => setRigSetupOpen(true)}
+                  onEnvSetup={() => setEnvSetupOpen(true)}
                   onSettings={() => setSettingsOpen(true)}
                   onOpenDrawer={(t) => { setDrawerTab(t); setDrawerOpen(true); }}
                   onProjects={() => { store.set(LAST_PROJECT, null); ++loadVersion.current; projectRef.current = null; incidentRef.current = null; runRef.current = null; setIncidentId(null); setProject(null); setGraph(null); setView(null); setRun(null); setExpectation(null); setBusy(false); setBusyAction(null); setDiagnosing(false); setEntered(false); }} />
@@ -473,7 +473,7 @@ export default function App() {
                        agentStatus={agentStatus} diagnosing={diagnosing} onDiagnose={diagnose}
                        agentProgress={agentProgress}
                        onReveal={(ids) => revealNodes(ids, true)}
-                       onEvidence={showEvidence} onOpenDevices={() => setRigSetupOpen(true)}
+                       onEvidence={showEvidence} onOpenDevices={() => setEnvSetupOpen(true)}
                        projectReview={<ProjectReview project={project} graph={graph} onConnection={setSelectedEdgeIds} />}
                        onSelectRun={selectRun} viewRequest={viewRequest} flowSeq={flowSeq}
                        onNewTest={() => { incidentRef.current = null; runRef.current = null; setIncidentId(null); setView(null); setRun(null); setSerial([]); }}
@@ -506,7 +506,7 @@ export default function App() {
             <BottomDrawer open={drawerOpen} onOpen={setDrawerOpen} tab={drawerTab} onTab={setDrawerTab} run={run}
                           serial={serial} events={events}
                           toolCalls={view?.tool_calls ?? []} devices={devices}
-                          onRigSetup={() => setRigSetupOpen(true)}
+                          onEnvSetup={() => setEnvSetupOpen(true)}
                           onSaveReplay={saveReplay} onError={(m) => fail(m)} />
           </LayoutFooter>} />
         </LayoutContent>
@@ -524,13 +524,13 @@ export default function App() {
           <Button label={expanded.has(selectedNode.id) ? "Collapse in graph" : "Expand in graph"} onClick={() => { toggle(selectedNode.id); setSelectedId(null); }} />}
       </GraphInspector>
       <EvidenceDialog evidence={evidence} onClose={() => setEvidence(null)} />
-      <RigSetupDialog open={rigSetupOpen} onClose={() => setRigSetupOpen(false)} devices={devices} onDevices={setDevices}
-                      onError={(m) => fail(m)} onUseSimulation={() => { setSource(`sim:${sources.sim[0]?.id ?? "connected"}`); setRigSetupOpen(false); }} />
+      <EnvironmentSetupDialog open={envSetupOpen} onClose={() => setEnvSetupOpen(false)} devices={devices} onDevices={setDevices}
+                      onError={(m) => fail(m)} onUseSimulation={() => { setSource(`sim:${sources.sim[0]?.id ?? "connected"}`); setEnvSetupOpen(false); }} />
       <InspectDialog result={inspect} onClose={() => setInspect(null)} />
       <ToolOutputDialog result={toolOutput} onClose={() => setToolOutput(null)} />
       <ManualCheckDialog action={manual} run={run ?? view?.test_run} onSubmit={submitManual} onClose={() => setManual(null)} />
       <RepeatTestDialog action={repeat} expectation={expectation} source={source} onSource={setSource} sources={sources} liveReady={liveReady}
-                        onClose={() => setRepeat(null)} onOpenDevices={() => { setRepeat(null); setRigSetupOpen(true); }}
+                        onClose={() => setRepeat(null)} onOpenDevices={() => { setRepeat(null); setEnvSetupOpen(true); }}
                         onRepeat={() => { const action = repeat!; setRepeat(null); runAction(action, false, true); }} />
       {repairOpen && view && (
         <RepairDialog investigation={view} onClose={() => { setRepairOpen(false); if (incidentId) refreshView(incidentId); }} />

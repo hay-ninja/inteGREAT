@@ -249,10 +249,10 @@ function TestView(p: FlowProps) {
       <SourcePicker value={p.source} onChange={p.onSource} sources={p.sources} liveReady={p.liveReady} />
       {p.source === "live" && p.liveReady && (
         <Notice tone="warning" title="Live hardware debugging"
-                body="This run sends the command to the real board — the rig may physically move. Measurements come from the serial line and camera, not simulation." />
+                body="This run sends the command to the real board — the live environment may physically move. Measurements come from the serial line and camera, not simulation." />
       )}
       {p.source === "live" && !p.liveReady
-        ? <Button label="Set up the live rig" variant="primary" className="flow-primary" onClick={p.onOpenDevices} />
+        ? <Button label="Set up the live environment" variant="primary" className="flow-primary" onClick={p.onOpenDevices} />
         : resolved
           ? <Button label="Start a new test" variant="primary" className="flow-primary" onClick={p.onNewTest} />
           : incidentOpen && repeat
@@ -490,7 +490,7 @@ function VerifyLauncher(p: FlowProps & { view: InvestigationView; label: string;
         <HStack gap={1}>
           <Button label="Run verification" variant="primary" isLoading={p.busyActionId === verify.id}
                   isDisabled={p.source === "live" && !p.liveReady} onClick={() => { setOpen(false); p.onAction(verify); }} />
-          {p.source === "live" && !p.liveReady && <Button label="Set up rig" onClick={() => { setOpen(false); p.onOpenDevices(); }} />}
+          {p.source === "live" && !p.liveReady && <Button label="Set up environment" onClick={() => { setOpen(false); p.onOpenDevices(); }} />}
           <Button label="Cancel" variant="ghost" onClick={() => setOpen(false)} />
         </HStack>
       </VStack>
@@ -596,7 +596,7 @@ function VerifyRecord(p: FlowProps & { view: InvestigationView }) {
     );
   }
   const v = view.followup_runs.find((r) => r.id === inc.resolved_by_test_run_id);
-  const title = v?.source.kind === "sim" ? "Verified on the simulated rig"
+  const title = v?.source.kind === "sim" ? "Verified on the simulated environment"
     : v?.source.kind === "replay" ? `Verified on ${v.synthetic ? "synthetic" : "recorded"} replay`
     : v?.source.kind === "live" ? "Fixed — verified on live hardware" : "Verification record unavailable";
   return (
@@ -787,7 +787,7 @@ function HistoryView(p: FlowProps) {
 /** One-line provenance for a run row: where its measurements came from. */
 function RunSourceLabel({ run }: { run: TestRun }) {
   const k = run.source.kind;
-  return <>{k === "live" ? "Live hardware" : k === "sim" ? "Simulated rig" : run.synthetic ? "Synthetic replay" : "Recorded replay"}</>;
+  return <>{k === "live" ? "Live hardware" : k === "sim" ? "Simulated environment" : run.synthetic ? "Synthetic replay" : "Recorded replay"}</>;
 }
 
 /** Read-only record for a run that never opened an incident (a pass). Debug = "the

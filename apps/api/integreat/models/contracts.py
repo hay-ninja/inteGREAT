@@ -234,7 +234,7 @@ class ExpectationEdit(Model):
 
 
 class ObservationSourceSpec(Model):
-    """replay = recorded/synthetic file; sim = simulated rig through the live pipeline; live = real devices."""
+    """replay = recorded/synthetic file; sim = simulated environment through the live pipeline; live = real devices."""
 
     kind: Literal["replay", "live", "sim"]
     scenario: str | None = Field(default=None, pattern=r"^[a-z0-9_]+$")

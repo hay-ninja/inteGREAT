@@ -110,14 +110,14 @@ const SCENARIO_LABEL: Record<string, string> = {
 export function SourceBadge({ run }: { run: TestRun }) {
   const s = run.source;
   const scenario = SCENARIO_LABEL[s.scenario ?? ""] ?? (s.scenario ?? "").replaceAll("_", " ");
-  const label = s.kind === "live" ? "Live hardware" : s.kind === "sim" ? `Simulated rig — ${scenario}`
+  const label = s.kind === "live" ? "Live hardware" : s.kind === "sim" ? `Simulated environment — ${scenario}`
     : `${run.synthetic ? "Synthetic replay" : "Recorded replay"} — ${scenario}`;
   return <HStack gap={1} vAlign="center"><StatusDot variant={s.kind === "live" ? "success" : "neutral"} label={label} /><Text type="supporting">{label}</Text></HStack>;
 }
 
 /** Where test data comes from: two small choices instead of one long list. */
 const SOURCE_PLAIN: Record<string, string> = {
-  sim: "A software model of the rig — no AI involved. Nothing physical is connected.",
+  sim: "A software model of the environment — no AI involved. Nothing physical is connected.",
   replay: "A saved recording of an earlier run. Nothing happens on the device.",
   live: "The real board, component, and camera on the bench.",
 };
@@ -140,11 +140,11 @@ export function SourcePicker({ value, onChange, sources, liveReady }: {
       <SegmentedControl label="Where the test runs" value={kind} onChange={pick} layout="fill" size="sm">
         <SegmentedControlItem value="sim" label="Simulated" />
         <SegmentedControlItem value="replay" label="Replay" />
-        <SegmentedControlItem value="live" label="Live rig" />
+        <SegmentedControlItem value="live" label="Live environment" />
       </SegmentedControl>
       <Text type="supporting">
         {SOURCE_PLAIN[kind] ?? ""}
-        {kind === "live" && !liveReady ? " Open Rig setup to connect the board and calibrate the camera." : ""}
+        {kind === "live" && !liveReady ? " Open environment setup to connect the board and calibrate the camera." : ""}
       </Text>
       {kind !== "live" && (
         <Selector label={kind === "sim" ? "Simulated condition" : "Recording"} isLabelHidden size="sm"

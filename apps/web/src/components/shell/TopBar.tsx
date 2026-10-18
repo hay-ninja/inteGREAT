@@ -18,7 +18,7 @@ export function TopBar(p: {
   agents: AgentStatus | null;
   source: string;
   onRescan: () => void;
-  onRigSetup: () => void;
+  onEnvSetup: () => void;
   onSettings: () => void;
   onOpenDrawer: (tab: "activity") => void;
   onProjects: () => void;
@@ -28,7 +28,7 @@ export function TopBar(p: {
   const kind = parseSource(p.source).kind;
   const mode = kind === "live" ? { variant: "success" as const, label: "Live hardware" }
     : kind === "replay" ? { variant: "neutral" as const, label: "Recorded replay" }
-    : { variant: "neutral" as const, label: "Simulated rig" };
+    : { variant: "neutral" as const, label: "Simulated environment" };
   return (
     <HStack hAlign="between" vAlign="center" gap={3} width="100%" wrap="wrap">
       <HStack gap={2} vAlign="center">
@@ -46,7 +46,7 @@ export function TopBar(p: {
       <HStack gap={3} vAlign="center">
         <Badge variant={mode.variant} label={mode.label}
                icon={<StatusDot variant={kind === "live" ? "success" : "neutral"} label={mode.label} />} />
-        <Button label="Rig setup" size="sm" onClick={p.onRigSetup} />
+        <Button label="Environment setup" size="sm" onClick={p.onEnvSetup} />
         <HStack gap={3} vAlign="center">
           <HStack gap={1} vAlign="center">
             <StatusDot variant={serial ? "success" : "neutral"} label="ESP32 serial"
@@ -67,7 +67,7 @@ export function TopBar(p: {
         <MoreMenu label="More" alignment="end" items={[
           { label: "Project settings…", description: "Name, files, context notes, subsystem names", onClick: p.onSettings },
           { label: "Rescan repository", description: "After you change the firmware", onClick: p.onRescan },
-          { label: "Rig setup", description: "Connect ESP32 and camera", onClick: p.onRigSetup },
+          { label: "Environment setup", description: "Connect ESP32 and camera", onClick: p.onEnvSetup },
           { label: "Activity & tool audit", description: "Every event, tool call and approval", onClick: () => p.onOpenDrawer("activity") },
           { type: "divider" },
           { label: "Switch project", onClick: p.onProjects },

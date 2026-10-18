@@ -25,7 +25,7 @@ export function RepeatTestDialog(p: {
       <Text type="supporting">Check marker visibility and calibration if measurements were unavailable. A repeat gathers new evidence; verification closes the incident.</Text>
       <SourcePicker value={p.source} onChange={p.onSource} sources={p.sources} liveReady={p.liveReady} />
       <HStack gap={2}>
-        {p.source === "live" && !p.liveReady ? <Button label="Set up rig" variant="primary" onClick={p.onOpenDevices} />
+        {p.source === "live" && !p.liveReady ? <Button label="Set up environment" variant="primary" onClick={p.onOpenDevices} />
           : <Button label="Repeat test" variant="primary" onClick={p.onRepeat} />}
         <Button label="Cancel" variant="ghost" onClick={p.onClose} />
       </HStack>

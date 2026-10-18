@@ -108,6 +108,7 @@
 
   /* MJPEG preview image (an <img> Astryx has no component for) */
   .camera-preview { max-height: 160px; border-radius: var(--radius-element); border: 1px solid var(--color-border); }
+  .drawer-camera { max-width: 100%; min-height: 0; flex: 1; object-fit: contain; border-radius: var(--radius-element); border: 1px solid var(--color-border); background: #000; }
 
   /* ---------------- section labels + chapter strip ----------------
      Plain section labels and a numbered chapter strip. Kept deliberately quiet — no
@@ -152,7 +153,7 @@
               letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-text-primary);
               line-height: 1.05; }
   .wordmark .waccent { color: var(--color-accent); }
-  /* hairline divider zoning the top bar: context (left) vs live rig state (right) */
+  /* hairline divider zoning the top bar: context (left) vs live environment state (right) */
   .topbar-divider { align-self: stretch; width: 1px; background: var(--color-border); }
   /* per-card ⋯ menu on the projects hub — tucked into the card corner */
   .card-menu { position: absolute; top: 6px; right: 6px; z-index: 1; }

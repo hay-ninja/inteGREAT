@@ -366,3 +366,16 @@ What remains is hardware validation.
   as declared" / "Recorded replay — name". Sim picker copy states "no AI involved".
 - Verified: `tsc -b` clean, 17/17 vitest, 163/163 pytest (incl. new runs-list test),
   `vite build` clean.
+
+## Live environment wording + split drawer (D-045) — done 2026-10-18
+- "rig" renamed UI-wide: **Environment setup** dialog/button/menu, "Set up the live
+  environment", "Simulated environment — {condition}", "Live environment" source
+  segment, graph region "the physical environment", `sim://environment` port.
+- Bottom drawer: top-edge drag resizes height (persists), drag down closes, tab click
+  reopens. New **Camera** tab streams `/devices/camera/stream.mjpg` with honest
+  empty/error states and a "raw view is not a measurement" caption.
+- Split view: button opens a second pane with its own tab set (camera + activity is
+  the obvious pair); divider drags; drag to right edge or × closes the split.
+- Verified: `tsc -b` clean, 17/17 vitest, build clean; headless drag test grew the
+  drawer +160px, moved the split divider ~200px, drag-closed both split and drawer,
+  reopened via tab; live camera feed rendered in the Camera pane; zero console errors.

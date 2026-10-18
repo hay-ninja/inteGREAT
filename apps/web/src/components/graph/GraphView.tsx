@@ -206,7 +206,7 @@ function Inner(p: Props) {
   }, [initialized, fitView]);
 
   const layerEmpty = p.layer === "hardware"
-    ? { title: "No hardware in this project", body: "Import a hardware manifest or KiCad netlist to see the physical rig." }
+    ? { title: "No hardware in this project", body: "Import a hardware manifest or KiCad netlist to see the physical environment." }
     : p.layer === "software"
       ? { title: "No source code in this scope", body: "The current scope has no modules — import a firmware repository." }
       : { title: "Empty project", body: "Nothing has been imported yet." };
