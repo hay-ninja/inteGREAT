@@ -29,7 +29,7 @@ export function TopBar(p: {
       </HStack>
       <HStack gap={1.5} vAlign="center">
         <Text type="supporting">Subsystem</Text>
-        <Selector label="Subsystem" isLabelHidden size="sm" width={200} value={p.focus || "all"}
+        <Selector label="Subsystem" isLabelHidden size="sm" width={200} placement="below" value={p.focus || "all"}
                   onChange={(v) => p.onFocus(v === "all" ? "" : v)}
                   options={[{ value: "all", label: "Whole system" },
                             ...p.subsystems.map((s) => ({ value: s.id, label: s.label }))]} />

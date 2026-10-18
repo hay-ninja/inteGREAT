@@ -217,9 +217,12 @@ function Inner(p: Props) {
         <Text type="label" color="secondary">Dependency map</Text>
         <TextInput label="Search nodes in this view" isLabelHidden size="sm" value={search} onChange={setSearch}
                    placeholder="Search…" startIcon="search" hasClear width={200} />
-        <Button label="Expand all" size="sm" variant="ghost" onClick={p.onExpandAll} />
-        <Button label="Collapse" size="sm" variant="ghost" onClick={p.onCollapseAll} />
-        {p.onClearFocus && <Button label="Whole system" size="sm" variant="ghost" onClick={p.onClearFocus} />}
+        <Button label="Expand groups" size="sm" variant="secondary"
+                tooltip="Reveal every part hidden inside the grouped boxes" onClick={p.onExpandAll} />
+        <Button label="Collapse groups" size="sm" variant="secondary"
+                tooltip="Fold the detailed parts back into their groups" onClick={p.onCollapseAll} />
+        {p.onClearFocus && <Button label="Show whole system" size="sm" variant="secondary"
+                tooltip="Leave the subsystem focus — show the full map again" onClick={p.onClearFocus} />}
         {hiddenNote && <Button label={`${hiddenNote} — show everything`} size="sm" variant="ghost" onClick={() => p.onLayer("combined")} />}
       </HStack>
     </LayoutHeader>} content={<LayoutContent padding={0} isScrollable={false} ref={canvasRef}>

@@ -36,6 +36,8 @@ import { parseSource } from "./components/flow/common";
 import { BottomDrawer, type DrawerTab } from "./components/drawer/BottomDrawer";
 import { TopBar } from "./components/shell/TopBar";
 import { ImportScreen, type ImportArgs } from "./components/shell/ImportScreen";
+import { LandingScreen } from "./components/shell/LandingScreen";
+import { useResizable, ResizeHandle } from "@astryxdesign/core/Resizable";
 import { ApprovalDialog, EvidenceDialog, GraphInspector, InspectDialog, ManualCheckDialog, RepeatTestDialog, ToolOutputDialog } from "./components/dialogs/Dialogs";
 import { RepairDialog } from "./components/dialogs/RepairDialog";
 
@@ -50,6 +52,8 @@ const store = {
 export default function App() {
   const toast = useToast();
   const [project, setProject] = useState<Project | null>(null);
+  const [entered, setEntered] = useState(false);
+  const guide = useResizable({ defaultSize: 420, minSize: 320, maxSize: 620, autoSaveId: "integreat.guide" });
   const [graph, setGraph] = useState<GraphSnapshot | null>(null);
   const [subsystems, setSubsystems] = useState<Subsystem[]>([]);
   const [sources, setSources] = useState<SourceOptions>({ replays: [], sim: [] });
@@ -375,6 +379,7 @@ export default function App() {
   // ------------------------------------------------------------------ render
 
   if (!project || !graph) {
+    if (!entered) return <LandingScreen onEnter={() => setEntered(true)} />;
     return <ImportScreen onImport={doImport} onOpen={(p) => loadProject(p, false).catch(fail)} busy={busy} onError={(m) => fail(m)} />;
   }
 
@@ -393,16 +398,18 @@ export default function App() {
                   devices={devices} agents={agentStatus} onRescan={rescan}
                   onRigSetup={() => setRigSetupOpen(true)}
                   onOpenDrawer={(t) => { setDrawerTab(t); setDrawerOpen(true); }}
-                  onProjects={() => { store.set(LAST_PROJECT, null); ++loadVersion.current; projectRef.current = null; incidentRef.current = null; runRef.current = null; setIncidentId(null); setProject(null); setGraph(null); setView(null); setRun(null); setExpectation(null); setBusy(false); setBusyAction(null); setDiagnosing(false); }} />
+                  onProjects={() => { store.set(LAST_PROJECT, null); ++loadVersion.current; projectRef.current = null; incidentRef.current = null; runRef.current = null; setIncidentId(null); setProject(null); setGraph(null); setView(null); setRun(null); setExpectation(null); setBusy(false); setBusyAction(null); setDiagnosing(false); setEntered(false); }} />
         </LayoutHeader>
       }
       start={
-        <LayoutPanel hasDivider width={150} label="Views" padding={2}>
+        <LayoutPanel hasDivider label="Views" padding={0}>
           <ViewRail mode={mode} layer={layer} onMode={setMode} onLayer={setLayer} />
         </LayoutPanel>
       }
       end={
-        <LayoutPanel hasDivider width={420} label="Debugging steps" padding={4}>
+        <>
+          <ResizeHandle resizable={guide.props} hasDivider isReversed label="Resize steps panel" />
+          <LayoutPanel resizable={guide.props} label="Debugging steps" padding={4}>
           <VStack gap={4}>
             <FlowPanel projectId={project.id} conflictNote={conflict} expectation={expectation} onExpectation={setExpectation}
                        run={run} running={busy} view={view} sources={sources} source={source} onSource={setSource}
@@ -417,6 +424,7 @@ export default function App() {
                        onError={(m) => fail(m)} />
           </VStack>
         </LayoutPanel>
+        </>
       }
       content={
         <LayoutContent padding={0} isScrollable={false}>

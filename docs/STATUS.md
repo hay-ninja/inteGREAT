@@ -216,3 +216,14 @@ What remains is hardware validation.
 - Backend tests: `cd apps/api && .venv/Scripts/python -m pytest -q` · Frontend: `cd apps/web && npx tsc -b && npm test`
 - After changing backend models: `apps/api/.venv/Scripts/python scripts/gen_api_types.py && (cd apps/web && npm run gen:types)`
 - Synthetic replays: `scripts/gen_synthetic_replays.py` · Markers: `scripts/make_aruco_markers.py` · Gemini check: `scripts/gemini_smoke.py`
+
+## IDE panels + landing page (D-033) — done 2026-10-18
+- Resizable side panels: rail via SideNav `resizable`, guided steps panel via
+  `useResizable` + `ResizeHandle` (drag-verified headlessly: 388→509px).
+- Dropdowns open downward (`placement="below"`); canvas tools are boxed buttons
+  with explanatory tooltips; decorative mono/uppercase eyebrow styling removed.
+- `LandingScreen` (story → why → how it works → features → CTA) precedes the
+  import screen; home logo returns there.
+- Re-verified: `tsc -b` clean; headless walkthrough updated for the landing step —
+  rail labels, layers, timeline, Activity, Devices→setup, repair dialog all pass;
+  zero console errors; no 800px overflow.

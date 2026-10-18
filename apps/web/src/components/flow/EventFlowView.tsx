@@ -133,7 +133,7 @@ export function EventFlowView(p: Props) {
     <Layout header={<LayoutHeader padding={2} hasDivider>
       <HStack gap={2} vAlign="center" wrap="wrap">
         <Text type="label" color="secondary">Event timeline</Text>
-        <Selector label="Run" isLabelHidden size="sm" value={p.runId ?? ""} onChange={(v) => p.onRunChange(String(v))}
+        <Selector label="Run" isLabelHidden size="sm" placement="below" value={p.runId ?? ""} onChange={(v) => p.onRunChange(String(v))}
                   options={p.runs.map((r) => ({ value: r.id, label: runLabel(r, p.runs) }))} width={230} />
         {selectedRun && <SourceBadge run={selectedRun} />}
         {selectedRun?.state === "running" && (

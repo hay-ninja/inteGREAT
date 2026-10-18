@@ -13,7 +13,8 @@ export function ViewRail({ mode, layer, onMode, onLayer }: {
   onLayer: (l: GraphLayer) => void;
 }) {
   return (
-    <SideNav collapsible={{ defaultIsCollapsed: typeof window !== "undefined" && window.innerWidth < 1000 }}>
+    <SideNav collapsible={{ defaultIsCollapsed: typeof window !== "undefined" && window.innerWidth < 1000 }}
+             resizable={{ defaultWidth: 148, minWidth: 132, maxWidth: 240, autoSaveId: "integreat.rail" }}>
       <SideNavSection title="View">
         <SideNavItem label="Map" icon={<Network size={18} />} isSelected={mode === "deps"}
                      onClick={() => onMode("deps")} />

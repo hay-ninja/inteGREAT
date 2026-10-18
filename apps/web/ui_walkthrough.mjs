@@ -22,6 +22,12 @@ await page.goto("http://localhost:5173", { waitUntil: "networkidle" });
 // App restores the last project from localStorage; clear it so the import screen shows.
 await page.evaluate(() => localStorage.clear());
 await page.reload({ waitUntil: "networkidle" });
+await shot("00-landing");
+const landingCta = page.getByRole("button", { name: "Open the workspace" }).first();
+if (await landingCta.isVisible().catch(() => false)) {
+  await landingCta.click();
+  await page.waitForTimeout(600);
+}
 await shot("00-import");
 const onImport = await page.getByText("Explore a demo").isVisible().catch(() => false);
 if (onImport) {
@@ -75,7 +81,7 @@ const runBtn = page.locator("button").filter({ hasText: /Run test|Run again/ }).
 log("run button visible:", await runBtn.isVisible().catch(() => false));
 if (await runBtn.isVisible().catch(() => false)) {
   await runBtn.click();
-  await page.waitForSelector("text=Collecting measurements, text=Leading hypothesis, text=Possible causes, text=passed", { timeout: 150000 }).catch(() => log("run did not reach a result state in 150s"));
+  await page.waitForSelector("text=In short, text=Passed, text=Measurement unavailable", { timeout: 150000 }).catch(() => log("run did not reach a result state in 150s"));
   await page.waitForTimeout(1500);
 }
 await shot("05-after-run");

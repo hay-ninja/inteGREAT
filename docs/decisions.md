@@ -347,3 +347,21 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
 - Home page un-condensed (user: "should not be condensed"): wider frame (1040),
   `ClickableCard` grids for demos and recents, full-width import card. Same modal-first
   open behavior. No functionality moved or removed.
+
+### D-033 IDE-style resizable panels + marketing landing page; decorative type removed — 2026-10-18
+- User asked for VS Code/Devin-like panels: the view rail uses SideNav's built-in
+  `resizable` (drag handle at its edge, width persisted via `autoSaveId`); the guided
+  steps panel uses `useResizable` + an adjacent `ResizeHandle` (320–620px). Panel
+  *repositioning* (dragging a panel to another side) is not supported — out of
+  scope for the Layout slot model.
+- `Selector` dropdowns now use `placement="below"` so menus open under the trigger
+  instead of centring the selected item over it.
+- Decorative typography removed at user request ("easily usable vibe"): eyebrows
+  and chapter names are now plain body-font labels (no mono, no uppercase, no
+  letter-spacing). The `.eyebrow`/`.chapters` classes remain as layout hooks.
+- Canvas tools are explained, not just labelled: "Expand groups" / "Collapse
+  groups" / "Show whole system" get descriptive tooltips and `secondary` (boxed)
+  styling — plain-text ghost buttons were illegible as controls.
+- New `LandingScreen` before the import screen: product story, why, 3-step how-it-
+  works, feature grid, and an "Open the workspace" CTA. The logo/home button now
+  returns there. Intended to give judges/evaluators context on a live deployment.
