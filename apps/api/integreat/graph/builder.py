@@ -59,8 +59,12 @@ def endpoint_node_id(ep: Endpoint) -> str:
 
 class _Builder:
     def __init__(self, project_id: str, files: list[str], parsed: ParsedProject,
-                 manifest: Manifest | None, manifest_lines: dict[str, int], manifest_rel: str | None):
+                 manifest: Manifest | None, manifest_lines: dict[str, int], manifest_rel: str | None,
+                 hardware_source: str = "manifest"):
         self.pid = project_id
+        self.hw_kind = EvidenceKind.netlist_entry if hardware_source == "netlist" else EvidenceKind.manifest_entry
+        self.hw_src = hardware_source
+        self.hw_word = "Netlist" if hardware_source == "netlist" else "Manifest"
         self.files = files
         self.p = parsed
         self.m = manifest
@@ -133,8 +137,8 @@ class _Builder:
             module_sub[rel] = sid
         for s in subs:
             ev = manifest_evidence_id(f"subsystem_{s.id}")
-            self.evidence(ev, EvidenceKind.manifest_entry, Epistemic.verified, f"Manifest declares subsystem '{s.label}'",
-                          Provenance(source_id="manifest", file=self.mrel, line_start=self.mlines.get(s.id)))
+            self.evidence(ev, self.hw_kind, Epistemic.verified, f"{self.hw_word} declares subsystem '{s.label}'",
+                          Provenance(source_id=self.hw_src, file=self.mrel, line_start=self.mlines.get(s.id)))
             self.node(f"subsystem:{s.id}", NodeKind.subsystem, s.label, Verification.verified, evidence_ids=[ev],
                       subsystem_id=f"subsystem:{s.id}")
         if UNASSIGNED in module_sub.values() or not subs:
@@ -175,9 +179,9 @@ class _Builder:
         sub_of = {cid: f"subsystem:{s.id}" for s in m.subsystems for cid in s.components}
         self.node("mcu:esp32", NodeKind.mcu, m.board.label, Verification.verified, attributes={"board": m.board.id})
         for c in m.components:
-            ev = self.evidence(manifest_evidence_id(c.id), EvidenceKind.manifest_entry, Epistemic.verified,
-                               f"Manifest declares {c.type} '{c.label}' with pins {', '.join(c.pins)}",
-                               Provenance(source_id="manifest", file=self.mrel, line_start=self.mlines.get(c.id)))
+            ev = self.evidence(manifest_evidence_id(c.id), self.hw_kind, Epistemic.verified,
+                               f"{self.hw_word} declares {c.type} '{c.label}' with pins {', '.join(c.pins)}",
+                               Provenance(source_id=self.hw_src, file=self.mrel, line_start=self.mlines.get(c.id)))
             cid = f"component:{c.id}"
             self.node(cid, NodeKind.component, c.label, Verification.verified, subsystem_id=sub_of.get(c.id),
                       attributes={"type": c.type, **c.attributes}, evidence_ids=[ev])
@@ -187,9 +191,9 @@ class _Builder:
                           subsystem_id=sub_of.get(c.id), attributes={"pin": pin})
                 self.edge(cid, pid, EdgeRelation.contains, EdgeOrigin.structural, Verification.verified)
         for ps in m.power_sources:
-            ev = self.evidence(manifest_evidence_id(ps.id), EvidenceKind.manifest_entry, Epistemic.verified,
-                               f"Manifest declares power source '{ps.label}'",
-                               Provenance(source_id="manifest", file=self.mrel, line_start=self.mlines.get(ps.id)))
+            ev = self.evidence(manifest_evidence_id(ps.id), self.hw_kind, Epistemic.verified,
+                               f"{self.hw_word} declares power source '{ps.label}'",
+                               Provenance(source_id=self.hw_src, file=self.mrel, line_start=self.mlines.get(ps.id)))
             self.node(f"power_source:{ps.id}", NodeKind.power_source, ps.label, Verification.verified,
                       subsystem_id=sub_of.get(ps.id), evidence_ids=[ev])
 
@@ -197,10 +201,10 @@ class _Builder:
             a, b = resolve_endpoint(m, conn.from_), resolve_endpoint(m, conn.to)
             ver = Verification.verified if conn.verification == "verified" else Verification.unverified
             epi = Epistemic.verified if conn.verification == "verified" else Epistemic.inferred
-            ev = self.evidence(manifest_evidence_id(conn.id), EvidenceKind.manifest_entry, epi,
-                               f"Manifest: {conn.from_} → {conn.to} ({conn.kind}, {conn.verification})"
+            ev = self.evidence(manifest_evidence_id(conn.id), self.hw_kind, epi,
+                               f"{self.hw_word}: {conn.from_} → {conn.to} ({conn.kind}, {conn.verification})"
                                + (f" — {conn.note}" if conn.note else ""),
-                               Provenance(source_id="manifest", file=self.mrel, line_start=self.mlines.get(conn.id)),
+                               Provenance(source_id=self.hw_src, file=self.mrel, line_start=self.mlines.get(conn.id)),
                                {"connection_id": conn.id, "kind": conn.kind, "verification": conn.verification})
             for ep in (a, b):
                 if ep.part_kind == "mcu":
@@ -271,25 +275,7 @@ class _Builder:
                         Epistemic.observed, literal=lit.text)
 
     def _static_consistency(self) -> None:
-        """Flag source pin config that contradicts declared wiring. Visible before any test runs."""
-        for e in list(self._edges.values()):
-            comp = e.attributes.get("for_component")
-            if e.relation != EdgeRelation.configures or not comp:
-                continue
-            wired = signal_wiring_for(comp, list(self._edges.values()))
-            if not wired:
-                continue
-            wire_edge, mcu_pin_id = wired
-            if mcu_pin_id == e.target_id:
-                continue
-            e.verification = Verification.conflicting
-            self.issue(
-                "warning", "GPIO_CONFIG_MISMATCH",
-                f"Source configures {self._nodes[e.target_id].label} for {self._nodes[comp].label}, "
-                f"but {wire_edge.verification.value} wiring connects it to {self._nodes[mcu_pin_id].label}",
-                evidence_ids=e.evidence_ids + wire_edge.evidence_ids,
-                related_node_ids=[e.target_id, mcu_pin_id, comp], related_edge_ids=[e.id, wire_edge.id],
-            )
+        self.r.issues += consistency_issues(list(self._nodes.values()), list(self._edges.values()))
 
 
 def signal_wiring_for(component_id: str, edges: list[GraphEdge]) -> tuple[GraphEdge, str] | None:
@@ -306,9 +292,34 @@ def signal_wiring_for(component_id: str, edges: list[GraphEdge]) -> tuple[GraphE
     return None
 
 
+def consistency_issues(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[ImportIssue]:
+    """Flag source pin config that contradicts declared wiring (visible before any test). Mutates the
+    verification of `configures` edges: conflicting when mismatched, inferred otherwise."""
+    labels = {n.id: n.label for n in nodes}
+    issues = []
+    for e in edges:
+        comp = e.attributes.get("for_component")
+        if e.relation != EdgeRelation.configures or not comp:
+            continue
+        e.verification = Verification.inferred
+        wired = signal_wiring_for(comp, edges)
+        if not wired or wired[1] == e.target_id:
+            continue
+        wire_edge, mcu_pin_id = wired
+        e.verification = Verification.conflicting
+        issues.append(ImportIssue(
+            level="warning", code="GPIO_CONFIG_MISMATCH",
+            message=(f"Source configures {labels[e.target_id]} for {labels[comp]}, but "
+                     f"{wire_edge.verification.value} wiring connects it to {labels[mcu_pin_id]}"),
+            evidence_ids=e.evidence_ids + wire_edge.evidence_ids,
+            related_node_ids=[e.target_id, mcu_pin_id, comp], related_edge_ids=[e.id, wire_edge.id]))
+    return issues
+
+
 def build_graph(project_id: str, files: list[str], parsed: ParsedProject, manifest: Manifest | None,
-                manifest_lines: dict[str, int] | None = None, manifest_rel: str | None = None) -> BuildResult:
-    r = _Builder(project_id, files, parsed, manifest, manifest_lines or {}, manifest_rel).build()
+                manifest_lines: dict[str, int] | None = None, manifest_rel: str | None = None,
+                hardware_source: str = "manifest") -> BuildResult:
+    r = _Builder(project_id, files, parsed, manifest, manifest_lines or {}, manifest_rel, hardware_source).build()
     module_ids = [n.id for n in r.nodes if n.kind == NodeKind.source_module]
     comp_ids = [n.id for n in r.nodes if n.kind in (NodeKind.component, NodeKind.power_source)]
     for n in r.nodes:

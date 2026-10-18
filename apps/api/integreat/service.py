@@ -1,30 +1,38 @@
-"""Application service: the import → test → evaluate → incident → action loop.
+"""Application service: import → test → evaluate → incident → tools/actions → agents → verify.
 
-Routes stay thin; all orchestration and state transitions live here so they are testable without HTTP.
+Routes stay thin; orchestration and state transitions live here (and in tools/, agents/, observations/)
+so they're testable without HTTP.
 """
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import timedelta
 from pathlib import Path
 
+from .agents.orchestrator import DiagnosisRefused, Orchestrator
+from .agents.provider import GeminiProvider, LLMProvider, UnavailableProvider
 from .api.ws import Hub
 from .config import Settings
 from .diagnostics import expectations as expmod
 from .diagnostics import hypotheses as hypmod
 from .diagnostics.rules import config_vs_wiring, run_rules
-from .diagnostics.state_machine import check_incident, check_test
-from .graph.builder import build_graph, src_evidence_id
+from .diagnostics.state_machine import InvalidTransition, check_incident, check_test
+from .graph.builder import build_graph, consistency_issues, src_evidence_id
 from .graph.query import scope as scope_graph
 from .ingestion.arduino_parser import parse_project
+from .ingestion.kicad_netlist import NetlistError, NetlistMapping, parse_netlist, propose_mapping, to_manifest
 from .ingestion.manifest import ManifestError, load_manifest
-from .ingestion.repository import RepoError, resolve_inside, scan_repository
+from .ingestion.repository import RepoError, scan_repository
 from .models import (
     ActionKind,
     ActionResult,
+    AgentRun,
+    AgentStatus,
     DemoFixture,
     DiagnosticAction,
+    EdgeOrigin,
     Epistemic,
     Evidence,
     EvidenceKind,
@@ -44,28 +52,38 @@ from .models import (
     InvestigationView,
     LogLiteral,
     ManualResultRequest,
+    NetlistPreview,
+    NetlistPreviewRequest,
     Observation,
     ObservationSourceSpec,
     Project,
     ProjectAnalysis,
     Provenance,
     ReplayInfo,
+    RunRecording,
     SerialEvent,
-    SourceExcerpt,
     StartTestRequest,
     Subsystem,
     TestRun,
     TestRunState,
+    Verification,
+    WiringVerificationRequest,
     utcnow,
 )
-from .observations.replay import ReplayError, list_replays, load_replay
+from .observations.cv_angle import ArucoAngleEstimator, render_scene
+from .observations.devices import DeviceManager
+from .observations.live import LiveStream
+from .observations.replay import ReplayError, ReplayEvent, list_replays, load_replay
+from .observations.sim import SIM_SCENARIOS, SimCamera, SimRig, SimSerial, conditions_for
 from .storage.db import Store
+from .tools.executor import ToolDenied, ToolExecutor, ToolFailed
+from .tools.registry import tool_args
 
 
 class ServiceError(Exception):
-    def __init__(self, status: int, code: str, message: str):
+    def __init__(self, status: int, code: str, message: str, details: dict | None = None):
         super().__init__(message)
-        self.status, self.code, self.message = status, code, message
+        self.status, self.code, self.message, self.details = status, code, message, details or {}
 
 
 def _id(prefix: str) -> str:
@@ -75,39 +93,105 @@ def _id(prefix: str) -> str:
 # Document kinds in the store
 K_PROJECT, K_GRAPH, K_SUBSYS, K_EVIDENCE, K_ANALYSIS = "project", "graph", "subsystem", "evidence", "analysis"
 K_EXPECT, K_RUN, K_OBS, K_SERIAL = "expectation", "test_run", "observation", "serial_event"
-K_INCIDENT, K_HYP, K_ACTION = "incident", "hypothesis", "action"
+K_INCIDENT, K_HYP, K_ACTION, K_RECORDING = "incident", "hypothesis", "action", "run_recording"
+
+
+def make_provider(settings: Settings) -> LLMProvider:
+    if not settings.gemini_api_key:
+        return UnavailableProvider("GEMINI_API_KEY not set")
+    if not settings.gemini_model:
+        return UnavailableProvider("INTEGREAT_GEMINI_MODEL not set (no model id is hardcoded)")
+    try:
+        return GeminiProvider(settings.gemini_api_key, settings.gemini_model)
+    except Exception as e:  # noqa: BLE001
+        return UnavailableProvider(f"Gemini client failed to start: {e}")
 
 
 class Service:
-    def __init__(self, store: Store, settings: Settings, hub: Hub):
+    def __init__(self, store: Store, settings: Settings, hub: Hub, llm: LLMProvider | None = None,
+                 devices: DeviceManager | None = None):
         self.store, self.settings, self.hub = store, settings, hub
+        self.devices = devices or DeviceManager()
+        self.tools = ToolExecutor(self)
+        self.llm = llm or make_provider(settings)
+        self.orchestrator = Orchestrator(self)
 
     def _emit(self, type: str, project_id: str, payload: dict | None = None, **kw) -> None:
         self.hub.publish(IntegreatEvent(type=type, project_id=project_id, payload=payload or {}, **kw))
 
+    def transition(self, inc: Incident, new: IncidentState) -> IncidentState:
+        try:
+            return check_incident(inc.state, new)
+        except InvalidTransition as e:
+            raise ServiceError(409, "invalid_state", str(e)) from e
+
     # ------------------------------------------------------------------ projects & graph
 
     def import_project(self, req: ImportRequest) -> Project:
+        project = self._build(_id("project"), req, version=1, overrides={})
+        self._emit("project.imported", project.id, {"name": project.name, "issues": len(project.issues)})
+        return project
+
+    def rescan(self, pid: str) -> Project:
+        """Re-read the repository (e.g. after the engineer fixed firmware) into the SAME project.
+        Graph version increments; engineer wiring confirmations are re-applied."""
+        old = self.project(pid)
+        req = ImportRequest(repo_path=old.repo_root, manifest_path=old.manifest_path, netlist_path=old.netlist_path,
+                            netlist_mapping=old.netlist_mapping, name=old.name)
+        project = self._build(pid, req, version=old.graph_version + 1, overrides=old.wiring_overrides,
+                              created_at=old.created_at_utc)
+        self._emit("graph.updated", pid, {"version": project.graph_version, "reason": "rescan"})
+        return project
+
+    def _load_hardware(self, req: ImportRequest, issues: list[ImportIssue]):
+        """Returns (manifest, line map, file label, source kind). Netlist first if given; manifest fallback."""
+        if req.netlist_path:
+            try:
+                nl = parse_netlist(req.netlist_path)
+                if not req.netlist_mapping:
+                    raise NetlistError("netlist mapping not confirmed; use /netlist/preview and confirm the mapping")
+                mapping = NetlistMapping.model_validate(req.netlist_mapping)
+                manifest, lines, warns = to_manifest(nl, mapping)
+                issues += [ImportIssue(level="warning", code="NETLIST_WARNING", message=w) for w in warns]
+                if mapping.proposed:
+                    issues.append(ImportIssue(level="warning", code="NETLIST_MAPPING_UNCONFIRMED",
+                                              message="Netlist role mapping was not confirmed by the engineer"))
+                issues.append(ImportIssue(level="info", code="NETLIST_DECLARED_ONLY",
+                                          message="Netlist connections describe the schematic, not verified wiring"))
+                return manifest, lines, Path(req.netlist_path).name, "netlist"
+            except (NetlistError, ManifestError, ValueError) as e:
+                issues.append(ImportIssue(level="error", code="NETLIST_UNSUPPORTED",
+                                          message=f"{e}" + (" — falling back to manifest" if req.manifest_path else "")))
+        if req.manifest_path:
+            try:
+                manifest, _, lines = load_manifest(req.manifest_path)
+                return manifest, lines, Path(req.manifest_path).name, "manifest"
+            except ManifestError as e:
+                issues.append(ImportIssue(level="error", code="MANIFEST_INVALID", message=str(e)))
+        return None, {}, None, "none"
+
+    def _build(self, pid: str, req: ImportRequest, version: int, overrides: dict, created_at=None) -> Project:
         try:
             scan = scan_repository(req.repo_path)
         except RepoError as e:
             raise ServiceError(400, "repo_invalid", str(e)) from e
-        pid = _id("project")
         parsed = parse_project(scan.files)
         issues: list[ImportIssue] = [ImportIssue(level="info", code="FILE_SKIPPED", message=f"{rel}: {why}", file=rel)
                                      for rel, why in scan.skipped]
-        manifest = lines = mrel = None
-        if req.manifest_path:
-            try:
-                manifest, _, lines = load_manifest(req.manifest_path)
-                mrel = Path(req.manifest_path).name
-            except ManifestError as e:
-                issues.append(ImportIssue(level="error", code="MANIFEST_INVALID", message=str(e)))
-        built = build_graph(pid, [f.rel for f in scan.files], parsed, manifest, lines, mrel)
+        manifest, lines, hw_file, hw_source = self._load_hardware(req, issues)
+        built = build_graph(pid, [f.rel for f in scan.files], parsed, manifest, lines, hw_file, hardware_source=hw_source)
+
+        # Re-apply engineer wiring confirmations from earlier versions.
+        if overrides:
+            by_id = {e.id: e for e in built.edges}
+            for eid, state in overrides.items():
+                if eid in by_id and by_id[eid].origin == EdgeOrigin.declared_wiring:
+                    by_id[eid].verification = Verification(state)
+            built.issues = [i for i in built.issues if i.code != "GPIO_CONFIG_MISMATCH"]
+            built.issues += consistency_issues(built.nodes, built.edges)
         issues += built.issues
 
-        lit_ev = []
-        literals = []
+        lit_ev, literals = [], []
         for lit in parsed.log_literals:
             eid = src_evidence_id(lit.file, lit.line, "log")
             lit_ev.append(Evidence(id=eid, project_id=pid, kind=EvidenceKind.source_excerpt, epistemic=Epistemic.observed,
@@ -117,14 +201,37 @@ class Service:
             literals.append(LogLiteral(function_id=lit.function_id, text=lit.text, evidence_id=eid))
 
         project = Project(id=pid, name=req.name or scan.root.name, repo_root=str(scan.root),
-                          manifest_path=req.manifest_path, issues=issues, file_count=len(scan.files))
+                          manifest_path=req.manifest_path, issues=issues, file_count=len(scan.files),
+                          graph_version=version, hardware_source=hw_source, netlist_path=req.netlist_path,
+                          netlist_mapping=req.netlist_mapping, wiring_overrides=dict(overrides))
+        if created_at:
+            project.created_at_utc = created_at
         self.store.put(K_PROJECT, project)
-        self.store.put(K_GRAPH, GraphSnapshot(project_id=pid, version=1, nodes=built.nodes, edges=built.edges))
+        self.store.put(K_GRAPH, GraphSnapshot(project_id=pid, version=version, nodes=built.nodes, edges=built.edges))
+        self.store.put(f"{K_GRAPH}_v{version}", GraphSnapshot(project_id=pid, version=version, nodes=built.nodes,
+                                                            edges=built.edges))
         self.store.put_many(K_SUBSYS, built.subsystems, parent_id=pid)
         self.store.put_many(K_EVIDENCE, built.evidence + lit_ev)
         self.store.put(K_ANALYSIS, ProjectAnalysis(id=pid, project_id=pid, log_literals=literals))
-        self._emit("project.imported", pid, {"name": project.name, "issues": len(issues)})
         return project
+
+    def netlist_preview(self, req: NetlistPreviewRequest) -> NetlistPreview:
+        try:
+            nl = parse_netlist(req.netlist_path)
+            stems = []
+            if req.repo_path:
+                try:
+                    stems = sorted({Path(f.rel).stem for f in scan_repository(req.repo_path).files
+                                    if not f.rel.endswith(".ino")})
+                except RepoError:
+                    stems = []
+            mapping = propose_mapping(nl, stems)
+            _, _, warns = to_manifest(nl, mapping)
+        except (NetlistError, ManifestError, ValueError) as e:
+            raise ServiceError(400, "netlist_unsupported", str(e)) from e
+        return NetlistPreview(file=nl.file, components=[c.model_dump() for c in nl.components],
+                              nets=[n.model_dump() for n in nl.nets], proposed_mapping=mapping.model_dump(),
+                              warnings=warns)
 
     def project(self, pid: str) -> Project:
         p = self.store.get(K_PROJECT, pid, Project)
@@ -145,6 +252,37 @@ class Service:
                 raise ServiceError(404, "not_found", f"node {scope_node_id} not in graph") from e
         return g
 
+    def verify_wiring(self, pid: str, req: WiringVerificationRequest) -> Project:
+        """Engineer confirms/un-confirms a declared connection (PRD §5.1 step 5, FR-02)."""
+        project = self.project(pid)
+        g = self.store.get(K_GRAPH, pid, GraphSnapshot)
+        edge = next((e for e in g.edges if e.id == req.edge_id), None)
+        if edge is None:
+            raise ServiceError(404, "not_found", f"edge {req.edge_id} not found")
+        if edge.origin != EdgeOrigin.declared_wiring:
+            raise ServiceError(400, "not_wiring", "only declared wiring/power connections can be physically verified")
+        edge.verification = Verification(req.verification)
+        ev = Evidence(id=f"evidence:engineer:wiring:{uuid.uuid4().hex[:8]}", project_id=pid,
+                      kind=EvidenceKind.engineer_assertion, epistemic=Epistemic.verified,
+                      summary=f"Engineer marked connection {edge.label or edge.relation.value} "
+                              f"({edge.source_id} → {edge.target_id}) as {req.verification}"
+                              + (f": {req.note}" if req.note else ""),
+                      provenance=Provenance(source_id="engineer", captured_at_utc=utcnow()),
+                      payload={"edge_id": edge.id, "verification": req.verification, "note": req.note})
+        self.store.put(K_EVIDENCE, ev)
+        if ev.id not in edge.evidence_ids:
+            edge.evidence_ids.append(ev.id)
+        project.issues = [i for i in project.issues if i.code != "GPIO_CONFIG_MISMATCH"]
+        project.issues += consistency_issues(g.nodes, g.edges)
+        project.graph_version += 1
+        project.wiring_overrides[edge.id] = req.verification
+        g.version = project.graph_version
+        self.store.put(K_GRAPH, g)
+        self.store.put(f"{K_GRAPH}_v{g.version}", g)
+        self.store.put(K_PROJECT, project)
+        self._emit("graph.updated", pid, {"version": g.version, "edge_id": edge.id, "verification": req.verification})
+        return project
+
     def subsystems(self, pid: str) -> list[Subsystem]:
         self.project(pid)
         return self.store.list(K_SUBSYS, Subsystem, parent_id=pid)
@@ -160,8 +298,14 @@ class Service:
                 DemoFixture(label="Correct firmware (GPIO18) — use for Fault B",
                             repo_path=str(f / "esp32_servo_demo"), manifest_path=manifest)]
 
+    def demo_netlist(self) -> str:
+        return str(self.settings.fixtures_dir / "kicad" / "esp32_servo_demo.xml")
+
     def replays(self) -> list[ReplayInfo]:
         return list_replays(self.settings.replay_dir)
+
+    def sim_scenarios(self) -> list[ReplayInfo]:
+        return [ReplayInfo(id=k, description=v, synthetic=True) for k, v in SIM_SCENARIOS.items()]
 
     # ------------------------------------------------------------------ expectations
 
@@ -190,8 +334,9 @@ class Service:
                       summary="Engineer confirmed expectation", provenance=Provenance(source_id="engineer"),
                       payload={"expectation_id": eid, "edits": edit.model_dump(exclude_none=True)})
         self.store.put(K_EVIDENCE, ev)
-        exp = exp.model_copy(update={**upd, "confirmed_by_engineer": True})
-        exp = Expectation.model_validate(exp.model_dump())
+        exp = Expectation.model_validate({**exp.model_dump(), **{k: (v.model_dump() if hasattr(v, "model_dump") else v)
+                                                                 for k, v in upd.items()},
+                                          "confirmed_by_engineer": True})
         self.store.put(K_EXPECT, exp)
         self._emit("expectation.confirmed", pid, {"expectation_id": eid})
         return exp
@@ -206,17 +351,28 @@ class Service:
             raise ServiceError(404, "not_found", f"expectation {req.expectation_id} not found")
         if not exp.confirmed_by_engineer:
             raise ServiceError(409, "expectation_unconfirmed", "Engineer must confirm the expectation before running it")
-        synthetic = False
-        if req.source.kind == "replay":
+        src = req.source
+        if src.kind == "replay":
             try:
-                synthetic = load_replay(self.settings.replay_dir, req.source.scenario or "").synthetic
+                synthetic = load_replay(self.settings.replay_dir, src.scenario or "").synthetic
             except ReplayError as e:
                 raise ServiceError(400, "replay_invalid", str(e)) from e
+        elif src.kind == "sim":
+            if (src.scenario or "connected") not in SIM_SCENARIOS:
+                raise ServiceError(400, "sim_invalid", f"unknown sim scenario; one of {sorted(SIM_SCENARIOS)}")
+            synthetic = True
         else:
-            raise ServiceError(501, "live_unavailable",
-                               "Live serial/camera adapters are not implemented yet (milestone M3). Use a replay.")
+            synthetic = False
+            d = self.devices
+            if exp.trigger.kind == "configured_serial_command" and not d.serial.connected:
+                raise ServiceError(409, "serial_unavailable", "Connect the ESP32 serial port before a live test")
+            if not d.camera.connected:
+                raise ServiceError(409, "camera_unavailable", "Connect a camera before a live test")
+            if not d.camera.estimator().calibrated:
+                raise ServiceError(409, "camera_uncalibrated",
+                                   "Calibrate the camera (servo at a known angle) before a live test")
         run = TestRun(id=_id("test"), project_id=pid, expectation_id=exp.id, attempt_kind=attempt_kind,
-                      verifies_test_run_id=verifies, source=req.source, synthetic=synthetic, incident_id=incident_id)
+                      verifies_test_run_id=verifies, source=src, synthetic=synthetic, incident_id=incident_id)
         self.store.put(K_RUN, run)
         return run
 
@@ -225,6 +381,12 @@ class Service:
         if r is None:
             raise ServiceError(404, "not_found", f"test run {run_id} not found")
         return r
+
+    def runs_for_incident(self, iid: str) -> list[TestRun]:
+        inc = self.incident(iid)
+        runs = [r for r in self.store.list(K_RUN, TestRun, project_id=inc.project_id)
+                if r.incident_id == iid or r.id == inc.test_run_id]
+        return sorted(runs, key=lambda r: r.started_at_utc or utcnow())
 
     def test_data(self, run_id: str) -> tuple[list[Observation], list[SerialEvent]]:
         return (self.store.list(K_OBS, Observation, parent_id=run_id),
@@ -239,13 +401,18 @@ class Service:
         self.store.put(K_RUN, run)
         self._emit("test.started", pid, run.model_dump(mode="json"), test_run_id=run.id)
         try:
-            obs, serial, evs = await self._collect(run, exp)
+            obs, serial = await self._collect(run, exp)
         except Exception as e:  # adapter failure: record honestly, never fabricate a result
             run.state = check_test(run.state, TestRunState.failed)
             run.error = f"{type(e).__name__}: {e}"
             run.ended_at_utc = utcnow()
             self.store.put(K_RUN, run)
-            self._emit("error", pid, {"message": run.error}, test_run_id=run.id)
+            self._emit("error", pid, {"message": f"Test run failed: {run.error}"}, test_run_id=run.id)
+            if run.incident_id:  # a failed verify attempt returns the incident to the engineer
+                inc = self.incident(run.incident_id)
+                if inc.state == IncidentState.verifying:
+                    inc.state = self.transition(inc, IncidentState.awaiting_engineer)
+                    self.store.put(K_INCIDENT, inc)
             return run
 
         result, rev = expmod.evaluate(exp, obs, serial, run.id)
@@ -265,17 +432,43 @@ class Service:
                    investigation_id=run.incident_id)
         return run
 
+    def _stream(self, run: TestRun, exp: Expectation):
+        src = run.source
+        if src.kind == "replay":
+            return load_replay(self.settings.replay_dir, src.scenario or ""), "replay_cv", f"replay:{src.scenario}"
+        command = exp.trigger.value if exp.trigger.kind == "configured_serial_command" else None
+        if src.kind == "sim":
+            g = self.graph(run.project_id)
+            cfg, _, wired = config_vs_wiring(exp.component_id, g.nodes, g.edges)
+            gpio = {n.id: n.attributes.get("gpio") for n in g.nodes}
+            configured = gpio.get(cfg[0].target_id) if cfg else None
+            rig = SimRig(conditions_for(src.scenario or "connected", configured, gpio.get(wired) if wired else None))
+            cam = SimCamera(rig)
+            est = ArucoAngleEstimator()
+            # Calibrate like an engineer would before the run: marker visible at a known angle.
+            est.calibrate(render_scene(rig.angle()), rig.angle())
+            return (LiveStream(scenario=src.scenario or "connected", synthetic=True,
+                               description=SIM_SCENARIOS[src.scenario or "connected"], command=command,
+                               serial=SimSerial(rig), camera=cam, estimator=est, window_ms=exp.deadline_ms),
+                    "sim_cv", "sim:rig")
+        d = self.devices
+        return (LiveStream(scenario="live", synthetic=False, description="live devices", command=command,
+                           serial=d.serial if command else None, camera=d.camera.source,
+                           estimator=d.camera.estimator(), window_ms=exp.deadline_ms),
+                "opencv", d.camera.source.source_id)
+
     async def _collect(self, run: TestRun, exp: Expectation):
-        stream = load_replay(self.settings.replay_dir, run.source.scenario or "")
+        stream, cv_type, src = self._stream(run, exp)
         analysis = self.store.get(K_ANALYSIS, run.project_id, ProjectAnalysis)
-        src = f"replay:{stream.scenario}"
         obs: list[Observation] = []
         serial: list[SerialEvent] = []
         evs: list[Evidence] = []
+        recorded: list[dict] = []
         t0 = run.started_at_utc
         n = 0
         async for ev in stream.play(self.settings.replay_speed):
             n += 1
+            recorded.append({"t_ms": ev.t_ms, "source": ev.source, **ev.data})
             ts = t0 + timedelta(milliseconds=ev.t_ms)
             prov = Provenance(source_id=src, captured_at_utc=ts)
             if ev.source in ("host", "serial"):
@@ -299,7 +492,7 @@ class Service:
             elif ev.source == "cv":
                 q = ev.data.get("quality", "valid")
                 val = ev.data.get("angle_deg")
-                eid = f"evidence:cv:{run.id}:{ev.data.get('frame', n)}"
+                eid = f"evidence:cv:{run.id}:{n}"
                 evs.append(Evidence(
                     id=eid, project_id=run.project_id, kind=EvidenceKind.cv_measurement,
                     epistemic=Epistemic.observed if q == "valid" else Epistemic.unknown, test_run_id=run.id,
@@ -307,7 +500,7 @@ class Service:
                     summary=(f"Servo angle {val}° at {ev.t_ms} ms" if q == "valid" else f"No valid angle at {ev.t_ms} ms ({q})"),
                     payload={"value": val, "quality": q, "elapsed_ms": ev.t_ms}))
                 o = Observation(id=f"obs:{run.id}:{n}", project_id=run.project_id, test_run_id=run.id,
-                                source_type="replay_cv", source_id=src, component_id=exp.component_id,
+                                source_type=cv_type, source_id=src, component_id=exp.component_id,
                                 timestamp_utc=ts, elapsed_ms=ev.t_ms, metric="servo_angle_deg",
                                 value=val if q == "valid" else None, unit="deg", measurement_quality=q,
                                 evidence_ref=f"frame:{ev.data.get('frame')}", evidence_id=eid)
@@ -315,7 +508,29 @@ class Service:
                 self.store.put(K_OBS, o, parent_id=run.id)
                 self._emit("test.observation", run.project_id, o.model_dump(mode="json"), test_run_id=run.id)
         self.store.put_many(K_EVIDENCE, evs)
-        return obs, serial, evs
+        self.store.put(K_RECORDING, RunRecording(id=run.id, project_id=run.project_id, events=recorded,
+                                               command=getattr(stream, "command", None)))
+        return obs, serial
+
+    def save_replay(self, run_id: str, name: str) -> ReplayInfo:
+        """Persist a completed run as a replay fixture (PRD §8 reproducibility, M7 fallback demo).
+        Live runs go to recorded/real/, sim/replay-derived ones to recorded/synthetic/."""
+        run = self.test_run(run_id)
+        rec = self.store.get(K_RECORDING, run_id, RunRecording)
+        if rec is None or run.state != TestRunState.completed:
+            raise ServiceError(409, "no_recording", "only completed runs can be saved as replays")
+        folder = "real" if run.source.kind == "live" else "synthetic"
+        out = self.settings.replay_dir / folder / f"{name}.jsonl"
+        if out.exists():
+            raise ServiceError(409, "exists", f"replay {name} already exists")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        meta = {"_meta": {"synthetic": run.synthetic, "scenario": name, "command": rec.command,
+                          "description": f"Recorded from {run.source.kind} run {run.id}"
+                                         + (f" ({run.source.scenario})" if run.source.scenario else "")
+                                         + (f"; result {run.result.outcome.value}" if run.result else ""),
+                          "recorded_at_utc": (run.started_at_utc or utcnow()).isoformat()}}
+        out.write_text("\n".join(json.dumps(x) for x in [meta, *rec.events]) + "\n", encoding="utf-8")
+        return ReplayInfo(id=name, description=meta["_meta"]["description"], synthetic=run.synthetic)
 
     # ------------------------------------------------------------------ incidents
 
@@ -339,6 +554,8 @@ class Service:
         self.store.put(K_INCIDENT, inc)
         self._emit("incident.created", run.project_id, {"incident_id": iid, "title": title,
                    "fault_codes": [c.value for c in codes]}, investigation_id=iid, test_run_id=run.id)
+        for a in actions:
+            self._emit("action.proposed", run.project_id, {"action_id": a.id, "label": a.label}, investigation_id=iid)
         self._emit("hypotheses.updated", run.project_id, {"hypothesis_ids": inc.hypothesis_ids}, investigation_id=iid)
         return iid
 
@@ -347,12 +564,12 @@ class Service:
         outcome = run.result.outcome
         if run.attempt_kind == "verify":
             if outcome == ExpectationOutcome.passed:
-                inc.state = check_incident(inc.state, IncidentState.resolved)
+                inc.state = self.transition(inc, IncidentState.resolved)
                 inc.resolved_by_test_run_id = run.id
                 self._emit("incident.resolved", inc.project_id, {"test_run_id": run.id},
                            investigation_id=inc.id, test_run_id=run.id)
-            else:
-                inc.state = check_incident(inc.state, IncidentState.awaiting_engineer)
+            elif inc.state == IncidentState.verifying:
+                inc.state = self.transition(inc, IncidentState.awaiting_engineer)
             self._emit("test.verification_completed", inc.project_id,
                        {"outcome": outcome.value, "reason": run.result.reason}, investigation_id=inc.id, test_run_id=run.id)
         self.store.put(K_INCIDENT, inc)
@@ -371,16 +588,25 @@ class Service:
         run = self.test_run(inc.test_run_id)
         hyps = hypmod.rerank(self.store.get_many(K_HYP, inc.hypothesis_ids, Hypothesis))
         actions = self.store.get_many(K_ACTION, inc.action_ids, DiagnosticAction)
-        followups = [r for r in self.store.list(K_RUN, TestRun, project_id=inc.project_id) if r.incident_id == iid and r.id != run.id]
+        followups = [r for r in self.runs_for_incident(iid) if r.id != run.id]
+        agent_runs = self.orchestrator.runs(iid)
+        engineer = [e for e in self.store.list(K_EVIDENCE, Evidence, project_id=inc.project_id)
+                    if e.kind == EvidenceKind.engineer_assertion and e.payload.get("incident_id") == iid]
         ev_ids = [i for h in hyps for i in h.supporting_evidence_ids + h.contradicting_evidence_ids]
         ev_ids += [i for a in actions for i in a.evidence_ids]
-        ev_ids += [run.result.evidence_id] + [i for f in run.result.facts for i in f.evidence_ids] if run.result else []
+        if run.result:
+            ev_ids += [run.result.evidence_id] + [i for f in run.result.facts for i in f.evidence_ids]
         ev_ids += [r.result.evidence_id for r in followups if r.result]
-        ev_ids += [e.id for e in self.store.list(K_EVIDENCE, Evidence, project_id=inc.project_id)
-                   if e.kind == EvidenceKind.engineer_assertion and e.payload.get("incident_id") == iid]
-        followups.sort(key=lambda r: r.started_at_utc or r.ended_at_utc or utcnow())
-        return InvestigationView(incident=inc, test_run=run, followup_runs=followups, hypotheses=hyps, actions=actions,
-                                 evidence=self.evidence(ev_ids), highlights=self._highlights(inc, run, hyps))
+        ev_ids += [e.id for e in engineer]
+        ev_ids += [i for ar in agent_runs if ar.report for f in ar.report.findings
+                   for i in f.supporting_evidence_ids + f.contradicting_evidence_ids]
+        calls = self.tools.calls(iid)
+        ev_ids += [i for c in calls for i in c.evidence_ids]
+        return InvestigationView(
+            incident=inc, test_run=run, followup_runs=followups, hypotheses=hyps, actions=actions,
+            evidence=self.evidence(ev_ids), highlights=self._highlights(inc, run, hyps),
+            permissions=self.tools.permissions.active(iid), tool_calls=calls,
+            messages=[e for e in engineer if e.payload.get("message")], agent_runs=agent_runs)
 
     def _highlights(self, inc: Incident, run: TestRun, hyps: list[Hypothesis]) -> list[Highlight]:
         out: dict[str, Highlight] = {}
@@ -405,20 +631,23 @@ class Service:
                                               reason=f'Serial log line "{se.raw}" matches a print in this function'))
         return list(out.values())
 
-    # ------------------------------------------------------------------ actions
+    # ------------------------------------------------------------------ actions & tools
 
-    def execute_action(self, iid: str, action_id: str, source: ObservationSourceSpec | None) -> tuple[ActionResult, TestRun | None]:
+    async def execute_action(self, iid: str, action_id: str, source: ObservationSourceSpec | None,
+                             approve_once: bool = False) -> tuple[ActionResult, TestRun | None]:
         inc = self.incident(iid)
         action = self.store.get(K_ACTION, action_id, DiagnosticAction)
         if action is None or action.incident_id != iid:
             raise ServiceError(404, "not_found", f"action {action_id} not found")
         if inc.state in (IncidentState.resolved, IncidentState.inconclusive):
             raise ServiceError(409, "incident_closed", f"incident is {inc.state.value}")
+        if inc.state == IncidentState.investigating and action.kind in (ActionKind.verify_fix, ActionKind.repeat_test):
+            raise ServiceError(409, "agents_running", "wait for the agent round to finish")
         self._emit("action.started", inc.project_id, {"action_id": action_id}, investigation_id=iid)
+        run = None
 
-        if action.kind == ActionKind.inspect_source and action.tool_name == "inspect_gpio_config":
-            result = self._inspect_gpio(inc, action)
-            run = None
+        if action.tool_name:
+            result = await self._run_tool_action(inc, action, approve_once)
         elif action.kind in (ActionKind.repeat_test, ActionKind.verify_fix):
             original = self.test_run(inc.test_run_id)
             kind = "verify" if action.kind == ActionKind.verify_fix else "repeat"
@@ -426,7 +655,7 @@ class Service:
                 expectation_id=inc.expectation_id, source=source or original.source),
                 attempt_kind=kind, verifies=original.id, incident_id=iid)
             if kind == "verify":
-                inc.state = check_incident(inc.state, IncidentState.verifying)
+                inc.state = self.transition(inc, IncidentState.verifying)
                 self.store.put(K_INCIDENT, inc)
             result = ActionResult(action_id=action_id, status="completed", test_run_id=run.id,
                                   summary=f"{'Verification' if kind == 'verify' else 'Repeat'} test {run.id} started "
@@ -434,39 +663,54 @@ class Service:
         elif action.kind == ActionKind.request_manual_check:
             raise ServiceError(400, "manual_action", "Manual checks are recorded via /manual-results")
         else:
-            raise ServiceError(400, "unsupported_action", f"action kind {action.kind.value} not executable yet")
+            raise ServiceError(400, "unsupported_action", f"action kind {action.kind.value} is not executable")
 
         action.status = "completed"
         self.store.put(K_ACTION, action)
         self._emit("action.completed", inc.project_id, result.model_dump(mode="json"), investigation_id=iid)
         return result, run
 
-    def _inspect_gpio(self, inc: Incident, action: DiagnosticAction) -> ActionResult:
-        """Read-only: bounded source excerpts for the cited pin evidence + the manifest wiring entry."""
+    async def _run_tool_action(self, inc: Incident, action: DiagnosticAction, approve_once: bool) -> ActionResult:
         project = self.project(inc.project_id)
-        root = Path(project.repo_root)
-        cited = self.evidence(action.evidence_ids)
-        excerpts: list[SourceExcerpt] = []
-        for ev in cited:
-            if ev.kind != EvidenceKind.source_excerpt or not ev.provenance.file:
+        try:
+            call, out = await self.tools.execute(project, inc, action.tool_name, tool_args(action.tool_name, action.arguments),
+                                                 caller="engineer", approve_once=approve_once)
+        except ToolDenied as e:
+            self._emit("action.denied", inc.project_id, {"action_id": action.id, "reason": e.reason,
+                       "category": e.category}, investigation_id=inc.id)
+            code = "permission_required" if e.call.decision == "denied" else "tool_unavailable"
+            raise ServiceError(403, code, e.reason, {"category": e.category, "tool": action.tool_name,
+                                                     "tool_call_id": e.call.id}) from e
+        except ToolFailed as e:
+            raise ServiceError(502, "tool_failed", e.reason, {"tool_call_id": e.call.id}) from e
+
+        self._update_hypotheses_from_tool(inc, action, call.evidence_ids[0], out.data)
+        return ActionResult(action_id=action.id, status="completed", summary=out.summary,
+                            source_excerpts=out.source_excerpts,
+                            evidence=out.cited_evidence + self.evidence(call.evidence_ids),
+                            tool_call_id=call.id, node_ids=out.node_ids, lines=out.lines)
+
+    def _update_hypotheses_from_tool(self, inc: Incident, action: DiagnosticAction, ev_id: str, data: dict) -> None:
+        """Deterministic: Inspect GPIO either confirms or rules out the mismatch hypothesis."""
+        if action.tool_name != "inspect_gpio_config" or not data.get("wired") or not data.get("configured"):
+            return
+        for h in self.store.get_many(K_HYP, inc.hypothesis_ids, Hypothesis):
+            if h.fault_code != FaultCode.GPIO_CONFIG_MISMATCH:
                 continue
-            path = resolve_inside(root, ev.provenance.file)
-            lines = path.read_text(encoding="utf-8").splitlines()
-            ln = ev.provenance.line_start or 1
-            start = max(1, ln - 3)
-            excerpts.append(SourceExcerpt(file=ev.provenance.file, line_start=start, lines=lines[start - 1: ln + 3],
-                                          highlight_lines=[ln], evidence_id=ev.id))
-        wiring = [ev for ev in cited if ev.kind == EvidenceKind.manifest_entry]
-        out_ev = Evidence(id=f"evidence:tool:{action.id}:{uuid.uuid4().hex[:6]}", project_id=inc.project_id,
-                          kind=EvidenceKind.tool_output, epistemic=Epistemic.observed,
-                          summary=f"inspect_gpio_config: {len(excerpts)} source excerpt(s), {len(wiring)} wiring entr(y/ies)",
-                          provenance=Provenance(source_id="tool:inspect_gpio_config"),
-                          payload={"incident_id": inc.id, "action_id": action.id,
-                                   "excerpts": [e.evidence_id for e in excerpts]})
-        self.store.put(K_EVIDENCE, out_ev)
-        summary = "; ".join(ev.summary for ev in cited if ev.kind in (EvidenceKind.source_excerpt, EvidenceKind.manifest_entry))
-        return ActionResult(action_id=action.id, status="completed", summary=summary,
-                            source_excerpts=excerpts, evidence=[*wiring, out_ev])
+            if data["configured"] != [data["wired"]]:
+                h.status = HypothesisStatus.supported
+                h.supporting_evidence_ids.append(ev_id)
+            else:
+                h.status = HypothesisStatus.ruled_out
+                h.contradicting_evidence_ids.append(ev_id)
+            self.store.put(K_HYP, h)
+            self._emit("hypotheses.updated", inc.project_id, {"hypothesis_ids": [h.id]}, investigation_id=inc.id)
+
+    def set_permission(self, iid: str, category: str, granted: bool):
+        inc = self.incident(iid)
+        if inc.state in (IncidentState.resolved, IncidentState.inconclusive):
+            raise ServiceError(409, "incident_closed", "grants end when the investigation ends")
+        return self.tools.permissions.set(inc, category, granted)
 
     def record_manual_result(self, iid: str, req: ManualResultRequest) -> InvestigationView:
         inc = self.incident(iid)
@@ -500,3 +744,29 @@ class Service:
                    investigation_id=iid)
         self._emit("hypotheses.updated", inc.project_id, {"hypothesis_ids": inc.hypothesis_ids}, investigation_id=iid)
         return self.investigation(iid)
+
+    def add_message(self, iid: str, text: str) -> InvestigationView:
+        """Contextual free text (PRD FR-08). Stored as an engineer statement; never changes permissions."""
+        inc = self.incident(iid)
+        ev = Evidence(id=f"evidence:engineer:{iid}:msg:{uuid.uuid4().hex[:8]}", project_id=inc.project_id,
+                      kind=EvidenceKind.engineer_assertion, epistemic=Epistemic.observed,
+                      summary=f"Engineer note: {text}", provenance=Provenance(source_id="engineer", captured_at_utc=utcnow()),
+                      payload={"incident_id": iid, "message": True, "text": text})
+        self.store.put(K_EVIDENCE, ev)
+        self._emit("message.added", inc.project_id, {"text": text[:200]}, investigation_id=iid)
+        return self.investigation(iid)
+
+    # ------------------------------------------------------------------ agents
+
+    def agent_status(self) -> AgentStatus:
+        return AgentStatus(available=self.llm.available, provider=self.llm.name, model=self.llm.model,
+                           reason=getattr(self.llm, "reason", None))
+
+    def begin_diagnosis(self, iid: str) -> Incident:
+        try:
+            return self.orchestrator.begin(self.incident(iid))
+        except DiagnosisRefused as e:
+            raise ServiceError(e.status, e.code, e.message) from e
+
+    async def run_diagnosis(self, iid: str) -> list[AgentRun]:
+        return await self.orchestrator.run_round(iid)

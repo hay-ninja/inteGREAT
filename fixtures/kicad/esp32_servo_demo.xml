@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hand-written KiCad XML netlist ("kicadxml") describing the demo rig's DESIGNED schematic.
+     It is a fixture for the importer; regenerate from a real schematic with:
+     kicad-cli sch export netlist (format kicadxml). See apps/api/integreat/ingestion/kicad_netlist.py -->
+<export version="E">
+  <design>
+    <source>esp32_servo_demo.kicad_sch</source>
+    <tool>Eeschema 8.0</tool>
+  </design>
+  <components>
+    <comp ref="U1">
+      <value>ESP32-DevKitC-32E</value>
+      <footprint>Module:ESP32-DevKitC</footprint>
+      <libsource lib="RF_Module" part="ESP32-DevKitC" description="ESP32 dev board"/>
+    </comp>
+    <comp ref="J1">
+      <value>Servo_SG90</value>
+      <footprint>Connector_PinHeader_2.54mm:PinHeader_1x03</footprint>
+      <libsource lib="Motor" part="Motor_Servo" description="Hobby servo"/>
+    </comp>
+    <comp ref="J2">
+      <value>Power_5V_Barrel</value>
+      <footprint>Connector_BarrelJack:BarrelJack</footprint>
+      <libsource lib="Connector" part="Barrel_Jack" description="5 V supply input"/>
+    </comp>
+    <comp ref="D1">
+      <value>LED</value>
+      <libsource lib="Device" part="LED" description="Status LED"/>
+    </comp>
+  </components>
+  <nets>
+    <net code="1" name="/SERVO_SIG" class="Default">
+      <node ref="U1" pin="25" pinfunction="IO18" pintype="bidirectional"/>
+      <node ref="J1" pin="1" pinfunction="PWM" pintype="input"/>
+    </net>
+    <net code="2" name="+5V" class="Power">
+      <node ref="J2" pin="1" pintype="power_out"/>
+      <node ref="J1" pin="2" pinfunction="+" pintype="passive"/>
+    </net>
+    <net code="3" name="GND" class="Power">
+      <node ref="J2" pin="2" pintype="power_out"/>
+      <node ref="J1" pin="3" pinfunction="-" pintype="passive"/>
+      <node ref="U1" pin="14" pinfunction="GND" pintype="power_in"/>
+    </net>
+    <net code="4" name="/LED_STATUS" class="Default">
+      <node ref="U1" pin="24" pinfunction="IO2" pintype="bidirectional"/>
+      <node ref="D1" pin="2" pinfunction="A" pintype="passive"/>
+    </net>
+  </nets>
+</export>

@@ -52,7 +52,11 @@ def test_fault_a_full_loop(client):
 
     # Inspect GPIO mapping is a real operation that returns the cited source lines
     inspect = next(a for a in view["actions"] if a["label"] == "Inspect GPIO mapping")
-    r = client.post(f"{API}/investigations/{run['incident_id']}/actions/{inspect['id']}/execute", json={}).json()
+    url_inspect = f"{API}/investigations/{run['incident_id']}/actions/{inspect['id']}/execute"
+    denied = client.post(url_inspect, json={})
+    assert denied.status_code == 403 and denied.json()["error"]["code"] == "permission_required"
+    assert denied.json()["error"]["details"]["category"] == "repo_read"
+    r = client.post(url_inspect, json={"approve_once": True}).json()  # engineer approves this one call
     lines = [line for ex in r["result"]["source_excerpts"] for line in ex["lines"]]
     assert "#define SERVO_PIN 19" in lines
     assert any("GPIO18" in e["summary"] for e in r["result"]["evidence"])
@@ -114,7 +118,7 @@ def test_bad_inputs_are_rejected(client):
     r = client.post(tests, json={"expectation_id": exp["id"], "source": {"kind": "replay", "scenario": "nope"}})
     assert r.status_code == 400
     r = client.post(tests, json={"expectation_id": exp["id"], "source": {"kind": "live"}})
-    assert r.status_code == 501
+    assert r.status_code == 409 and r.json()["error"]["code"] == "serial_unavailable"  # no device connected
     r = client.post(f"{API}/projects/import", json={"repo_path": "C:/definitely/not/here"})
     assert r.status_code == 400
 

@@ -48,6 +48,15 @@ def build(incident_id: str, findings: list[RuleFinding], wired_pin_label: str | 
         expected_outcomes=[ExpectedOutcome(result="Pass", interpretation="Incident resolved with measured evidence"),
                            ExpectedOutcome(result="Fail / inconclusive", interpretation="Incident stays open")]))
 
+    read_serial = act(DiagnosticAction(
+        id=f"action:{incident_id}:read_serial", incident_id=incident_id, kind=ActionKind.run_readonly_tool,
+        label="Read recent serial output", tool_name="read_serial_buffer", arguments={"max_lines": 100},
+        permission_category="serial_read",
+        rationale="Check what the firmware printed around the test (live buffer if connected, else recorded runs).",
+        expected_outcomes=[ExpectedOutcome(result="ACK present", interpretation="Firmware received and handled the command"),
+                           ExpectedOutcome(result="Errors / resets", interpretation="Firmware-side problem; inspect source"),
+                           ExpectedOutcome(result="Silence", interpretation="Not proof of failure; firmware may not log")]))
+
     for f in findings:
         hid = f"hypothesis:{incident_id}:{f.code.value.lower()}"
         common = dict(incident_id=incident_id, fault_code=f.code, supporting_evidence_ids=f.supporting,
@@ -101,6 +110,14 @@ def build(incident_id: str, findings: list[RuleFinding], wired_pin_label: str | 
                            "status_on_result": {"Disconnected": "supported", "Connected": "weakened"}},
                 expected_outcomes=[ExpectedOutcome(result="Disconnected", interpretation="Supports power fault; reconnect and Verify fix"),
                                    ExpectedOutcome(result="Connected", interpretation="Weakens power fault")]))
+            expand = act(DiagnosticAction(
+                id=f"action:{incident_id}:expand_power", incident_id=incident_id, kind=ActionKind.expand_scope,
+                label="Expand power dependencies", tool_name="expand_scope",
+                arguments={"scope_node_id": component_id, "depth": 3}, permission_category="repo_read",
+                rationale="Show the declared supply, ground and signal path around the servo in the graph.",
+                related_node_ids=f.nodes,
+                expected_outcomes=[ExpectedOutcome(result="Supply/ground declared", interpretation="Check those connections by hand"),
+                                   ExpectedOutcome(result="Missing in graph", interpretation="Hardware context incomplete; update manifest/netlist")]))
             note = " A GPIO mismatch was also found and explains the symptom more directly." if secondary else ""
             hyps.append(Hypothesis(
                 id=f"{hid}_signal", title="Servo signal lead disconnected or faulty", rank=rank,
@@ -113,7 +130,7 @@ def build(incident_id: str, findings: list[RuleFinding], wired_pin_label: str | 
                 status=HypothesisStatus.unverified,
                 explanation=("No motion is also consistent with missing servo power or a missing common ground. "
                              "Supply voltage is not measured." + note),
-                recommended_action_ids=[pwr, verify], **common))
+                recommended_action_ids=[pwr, expand, verify], **common))
 
         elif f.code == FaultCode.MISSING_SERIAL_ACK:
             hyps.append(Hypothesis(
@@ -121,7 +138,7 @@ def build(incident_id: str, findings: list[RuleFinding], wired_pin_label: str | 
                 status=HypothesisStatus.plausible,
                 explanation=("No acknowledgement line appeared in serial output. The firmware may not have received "
                              "or handled the command — or it may simply not have logged it."),
-                recommended_action_ids=[repeat], **common))
+                recommended_action_ids=[read_serial, repeat], **common))
 
         elif f.code == FaultCode.CAMERA_MEASUREMENT_UNAVAILABLE:
             hyps.append(Hypothesis(

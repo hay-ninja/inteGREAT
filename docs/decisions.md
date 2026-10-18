@@ -78,3 +78,48 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
 ### D-014 Repeat/Verify runs attach to the existing incident — 2026-10-17
 - Repeat and Verify create new test runs linked by `incident_id` instead of new incidents.
   Verify pass → `resolved`; verify fail/inconclusive → back to `awaiting_engineer` (AC-10).
+
+### D-015 One tool execution path with per-investigation grants and full audit — 2026-10-17
+- `tools/registry.py` (fixed functions + typed args) → `tools/executor.py` (validate → risky check → grant
+  check → run with timeout/output caps → audit). Callers: `engineer`, `context_engine`, future `agent:<name>`.
+- `approve_once` is honoured ONLY for caller `engineer` (individual approval). Agents can never self-approve.
+- Risky categories (flash, GPIO write, serial write, file write, reboot) are refused even with approval (P0).
+- Grants are per investigation and end when it is resolved/inconclusive (PRD §13.1).
+- Implements the "keep door open" half of D-004: enabling agent-initiated tools later = letting the
+  orchestrator submit `agent:<name>` calls to this executor. No security redesign needed.
+
+### D-016 Simulated rig as a third observation source (`kind: "sim"`) — 2026-10-17
+- Fake firmware on a fake serial port + rendered ArUco frames, run through the REAL live pipeline
+  (LiveStream → ArUco estimator → evaluator). Always `synthetic=True` and labelled SIMULATED in the UI.
+- Physics follow the fault model: servo moves only if the source-configured GPIO == wired GPIO and the
+  sim's signal/power leads are connected — so Fault A in sim comes from the actual code, and a firmware fix
+  + rescan really changes the outcome.
+- **Why:** lets the whole live code path be tested and demoed before hardware exists. Not evidence of
+  hardware behaviour; never presented as such.
+
+### D-017 Agents: deterministic dispatch fallback, validated citations, rules keep the ranking — 2026-10-17
+- Triage asks the model to choose among exactly 3 agents; any failure → rule-based plan per fault code.
+- Findings citing ids not in the agent's evidence catalog are dropped and logged (`validation_errors`).
+- Agent-proposed hypotheses are added `unverified`, origin `agent`, rank after rule hypotheses. The
+  synthesis contributes an explanation and a recommended next action only; it never reorders ranks.
+- Follow-up round requires new evidence (engineer input, engineer-run tool, or rerun) — agents' own
+  context prefetches don't count. Max 2 rounds per incident (PRD §11.1).
+- No Gemini model id is hardcoded (PRD §11.4): `INTEGREAT_GEMINI_MODEL` must be set; without it the
+  agents report "unavailable" and everything else works. `scripts/gemini_smoke.py` checks access.
+
+### D-018 KiCad: XML netlist only, mapping must be confirmed, all wiring `unverified` — 2026-10-17
+- S-expression `.net` is rejected with the `kicad-cli … --format kicadxml` hint. XML parsed with defusedxml.
+- MCU GPIOs come from the symbol's *pin function* (IO18), never the module's physical pin number.
+- Roles (which ref is the servo, pin roles) are a *proposal* until the engineer confirms; the import
+  records `NETLIST_MAPPING_UNCONFIRMED` if not. A netlist is the designed schematic, so every connection
+  is `unverified` until confirmed via the wiring-verification endpoint (PRD FR-02, §20).
+- Any netlist failure falls back to the manifest without blocking onboarding (AC-01, AC-11).
+
+### D-019 Rescan keeps the project identity — 2026-10-17
+- `POST /projects/{id}/rescan` re-reads the repo into the same project (graph version +1), re-applying
+  engineer wiring confirmations. Needed for Fault A: engineer fixes firmware → rescan → Verify fix on the
+  same incident. Old graph versions are kept as `graph_v<N>` documents.
+
+### D-020 Cut per PRD §17: Gemini frame interpretation and SSH gateway — 2026-10-17
+- `LLMProvider.analyze_image_optional` exists (Gemini impl included) but is not wired into tools/UI.
+- No SSH/Linux gateway tools. Local USB serial is first-class. Both are P1 if time allows.

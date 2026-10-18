@@ -173,6 +173,10 @@ class Project(Model):
     graph_version: int = 1
     issues: list[ImportIssue] = Field(default_factory=list)
     file_count: int = 0
+    hardware_source: Literal["manifest", "netlist", "none"] = "manifest"
+    netlist_path: str | None = None
+    netlist_mapping: dict[str, Any] | None = None  # engineer-confirmed NetlistMapping
+    wiring_overrides: dict[str, Literal["verified", "unverified"]] = Field(default_factory=dict)  # edge id → state
 
 
 class Subsystem(Model):
@@ -218,7 +222,9 @@ class ExpectationEdit(Model):
 
 
 class ObservationSourceSpec(Model):
-    kind: Literal["replay", "live"]
+    """replay = recorded/synthetic file; sim = simulated rig through the live pipeline; live = real devices."""
+
+    kind: Literal["replay", "live", "sim"]
     scenario: str | None = Field(default=None, pattern=r"^[a-z0-9_]+$")
 
 
@@ -278,7 +284,7 @@ class Observation(Model):
     id: str
     project_id: str
     test_run_id: str
-    source_type: Literal["opencv", "replay_cv"]
+    source_type: Literal["opencv", "replay_cv", "sim_cv"]
     source_id: str
     component_id: str
     timestamp_utc: datetime
@@ -321,6 +327,7 @@ class FaultCode(StrEnum):
     MISSING_SERIAL_ACK = "MISSING_SERIAL_ACK"
     CAMERA_MEASUREMENT_UNAVAILABLE = "CAMERA_MEASUREMENT_UNAVAILABLE"
     POSSIBLE_POWER_OR_SIGNAL_FAULT = "POSSIBLE_POWER_OR_SIGNAL_FAULT"
+    AGENT_PROPOSED = "AGENT_PROPOSED"  # hypothesis proposed by an LLM agent; always starts unverified
 
 
 class HypothesisStatus(StrEnum):
@@ -395,6 +402,9 @@ class Incident(Model):
     action_ids: list[str]
     created_at_utc: datetime = Field(default_factory=utcnow)
     resolved_by_test_run_id: str | None = None
+    agent_rounds_used: int = 0
+    agent_summary: str | None = None
+    agent_recommended_action_id: str | None = None
 
 
 class Highlight(Model):
@@ -411,6 +421,10 @@ class InvestigationView(Model):
     actions: list[DiagnosticAction]
     evidence: list[Evidence]  # every evidence item referenced above
     highlights: list[Highlight]
+    permissions: list[PermissionGrant] = Field(default_factory=list)  # active grants
+    tool_calls: list[ToolCall] = Field(default_factory=list)  # audit trail, newest last
+    messages: list[Evidence] = Field(default_factory=list)  # engineer free-text inputs
+    agent_runs: list["AgentRun"] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------- API payloads
@@ -419,6 +433,8 @@ class InvestigationView(Model):
 class ImportRequest(Model):
     repo_path: str
     manifest_path: str | None = None
+    netlist_path: str | None = None
+    netlist_mapping: dict[str, Any] | None = None  # confirmed mapping from /netlist/preview; required with netlist
     name: str | None = None
 
 
@@ -434,9 +450,11 @@ class ManualResultRequest(Model):
 
 
 class ExecuteActionRequest(Model):
-    """Optional override of the observation source for repeat/verify runs (e.g. pick a replay)."""
+    """`source` overrides the observation source for repeat/verify runs. `approve_once` is the engineer
+    individually approving one tool call whose category is not granted (never available to agents)."""
 
     source: ObservationSourceSpec | None = None
+    approve_once: bool = False
 
 
 class LogLiteral(Model):
@@ -468,6 +486,68 @@ class ActionResult(Model):
     source_excerpts: list[SourceExcerpt] = Field(default_factory=list)
     evidence: list[Evidence] = Field(default_factory=list)
     test_run_id: str | None = None
+    tool_call_id: str | None = None
+    node_ids: list[str] = Field(default_factory=list)  # e.g. expanded scope
+    lines: list[str] = Field(default_factory=list)  # e.g. serial buffer output
+
+
+# ---------------------------------------------------------------- tools & permissions (PRD §13, D-004)
+
+PermissionCategory = Literal["repo_read", "netlist_read", "serial_read", "camera_observe", "host_diagnostics_read"]
+
+
+class PermissionGrant(Model):
+    id: str
+    project_id: str
+    incident_id: str
+    category: PermissionCategory
+    target: str = "local"  # host/device the grant applies to
+    granted_by: Literal["engineer"] = "engineer"
+    granted_at_utc: datetime = Field(default_factory=utcnow)
+    revoked_at_utc: datetime | None = None
+
+
+class PermissionUpdate(Model):
+    category: PermissionCategory
+    granted: bool
+
+
+class ToolInfo(Model):
+    name: str
+    permission_category: str
+    is_read_only: bool
+    available: bool
+    description: str
+    args_schema: dict[str, Any]
+
+
+class ToolCall(Model):
+    """Audit record for every tool invocation, grant decision and denial (PRD §13.3)."""
+
+    id: str
+    project_id: str
+    incident_id: str | None
+    tool_name: str
+    permission_category: str
+    arguments: dict[str, Any]
+    caller: str  # "engineer" | "context_engine" | "agent:<name>"
+    decision: Literal["granted", "approved_once", "denied", "unavailable", "invalid"]
+    status: Literal["completed", "denied", "failed"]
+    started_at_utc: datetime = Field(default_factory=utcnow)
+    duration_ms: int = 0
+    summary: str = ""
+    error: str | None = None
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
+class WiringVerificationRequest(Model):
+    edge_id: str
+    verification: Literal["verified", "unverified"]
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class MessageRequest(Model):
+    text: str = Field(min_length=1, max_length=2000)
 
 
 class DemoFixture(Model):
@@ -492,3 +572,141 @@ class IntegreatEvent(Model):
     test_run_id: str | None = None
     timestamp_utc: datetime = Field(default_factory=utcnow)
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+# ---------------------------------------------------------------- agents (PRD §10.5, §11)
+
+
+class AgentName(StrEnum):
+    orchestrator = "orchestrator"
+    code = "code"
+    hardware = "hardware"
+    runtime_vision = "runtime_vision"
+
+
+class AgentFinding(Model):
+    statement: str
+    supporting_evidence_ids: list[str]
+    contradicting_evidence_ids: list[str] = Field(default_factory=list)
+    epistemic_status: Literal["inferred", "hypothesis"] = "inferred"
+
+
+class AgentReport(Model):
+    agent: AgentName
+    investigation_id: str
+    scope_node_ids: list[str]
+    findings: list[AgentFinding]
+    unknowns: list[str] = Field(default_factory=list)
+    proposed_action_ids: list[str] = Field(default_factory=list)
+
+
+class ContextPacketSummary(Model):
+    """What an agent was shown (PRD §10.8) — stored for audit; the full text is not persisted."""
+
+    investigation_id: str
+    focus_node_ids: list[str]
+    included_node_ids: list[str]
+    evidence_ids: list[str]
+    tool_call_ids: list[str]
+    known_unknowns: list[str]
+    omitted_context_summary: str
+    max_token_budget: int
+    estimated_tokens: int
+
+
+class AgentRun(Model):
+    id: str
+    incident_id: str
+    project_id: str
+    round: int
+    agent: AgentName
+    status: Literal["completed", "failed", "timeout", "invalid", "skipped"]
+    started_at_utc: datetime = Field(default_factory=utcnow)
+    duration_ms: int = 0
+    model: str | None = None
+    context: ContextPacketSummary | None = None
+    report: AgentReport | None = None
+    summary: str | None = None  # orchestrator synthesis text
+    dispatched: list[AgentName] = Field(default_factory=list)  # orchestrator triage
+    validation_errors: list[str] = Field(default_factory=list)
+    error: str | None = None
+
+
+class AgentStatus(Model):
+    available: bool
+    provider: str
+    model: str | None
+    reason: str | None = None
+
+
+# ---------------------------------------------------------------- devices (PRD FR-06)
+
+
+class SerialPortInfo(Model):
+    port: str
+    description: str
+    hwid: str
+
+
+class SerialStatus(Model):
+    connected: bool
+    port: str | None
+    baud: int
+    last_error: str | None
+    ports: list[SerialPortInfo]
+
+
+class CameraStatus(Model):
+    connected: bool
+    source_id: str | None
+    fps: float
+    calibrated: bool
+    offset_deg: float | None
+    last_error: str | None
+
+
+class DeviceStatus(Model):
+    serial: SerialStatus
+    camera: CameraStatus
+
+
+class SerialConnectRequest(Model):
+    port: str = Field(max_length=64)
+    baud: int = Field(default=115200, ge=1200, le=2_000_000)
+
+
+class CameraConnectRequest(Model):
+    index: int = Field(ge=0, le=16)
+
+
+class CalibrateRequest(Model):
+    known_angle_deg: float = Field(ge=-90, le=270)
+
+
+class SaveReplayRequest(Model):
+    name: str = Field(pattern=r"^[a-z0-9_]{3,60}$")
+
+
+class NetlistPreviewRequest(Model):
+    netlist_path: str
+    repo_path: str | None = None
+
+
+class NetlistPreview(Model):
+    file: str
+    components: list[dict[str, Any]]
+    nets: list[dict[str, Any]]
+    proposed_mapping: dict[str, Any]
+    warnings: list[str]
+
+
+class RunRecording(Model):
+    """Raw event stream of a completed run, kept so it can be saved as a replay fixture."""
+
+    id: str  # test run id
+    project_id: str
+    events: list[dict[str, Any]]
+    command: str | None = None
+
+
+InvestigationView.model_rebuild()
