@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
 import { VStack } from "@astryxdesign/core/VStack";
 import { HStack } from "@astryxdesign/core/HStack";
@@ -154,10 +154,14 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
   );
 }
 
-/** Live feed with a two-click region marker. Drag doesn't survive the MJPEG stream —
- *  each frame swap can drop pointer capture — so this is click corner 1, click corner 2.
- *  Rects are kept in natural frame pixels and drawn as percentage-positioned divs so
- *  the overlay tracks the scaled <img>. */
+/** Live feed with a two-click region marker: click to place box 1, click to place
+ *  box 2. Both use click (press+release on the same element) rather than raw
+ *  pointer events — pointer capture/move is unreliable over a live MJPEG stream.
+ *  A minimum delay between the two clicks prevents one gesture from double-firing
+ *  and drawing box 2 prematurely. Rects are kept in natural frame pixels and drawn
+ *  as percentage-positioned divs so the overlay tracks the scaled <img>. */
+const MIN_CLICK_GAP_MS = 350;
+
 function RoiView({ cid, candidates, roi, onPick, disabled }: {
   cid: string;
   candidates: number[][];
@@ -168,9 +172,8 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
   const imgRef = useRef<HTMLImageElement>(null);
   const [nat, setNat] = useState<[number, number] | null>(null);
   const [first, setFirst] = useState<[number, number] | null>(null);  // anchored corner 1, frame px
-  const [press, setPress] = useState<[number, number] | null>(null);  // gesture origin while held
-  const [hover, setHover] = useState<[number, number] | null>(null);  // cursor while held
-  const lastCursor = useRef<[number, number] | null>(null);
+  const [hover, setHover] = useState<[number, number] | null>(null);  // preview cursor pos
+  const firstAt = useRef(0);
 
   // MJPEG frames don't reliably re-fire onLoad — poll natural size until known.
   useEffect(() => {
@@ -183,7 +186,7 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
     const id = window.setInterval(tick, 500);
     return () => window.clearInterval(id);
   }, [cid]);
-  useEffect(() => { setFirst(null); setPress(null); setHover(null); }, [cid]);
+  useEffect(() => { setFirst(null); setHover(null); }, [cid]);
 
   const toNat = (e: { clientX: number; clientY: number }): [number, number] | null => {
     const im = imgRef.current;
@@ -196,39 +199,22 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
     ];
   };
 
-  const finish = (origin: [number, number], end: [number, number] | null) => {
-    setPress(null); setHover(null);
-    if (!first) { setFirst(origin); return; }        // gesture 1: box 1 stays placed
-    const e2 = end ?? origin;                         // gesture 2: commit on release point
-    const r = [Math.min(first[0], e2[0]), Math.min(first[1], e2[1]),
-               Math.abs(e2[0] - first[0]), Math.abs(e2[1] - first[1])];
-    if (r[2] >= 6 && r[3] >= 6) { setFirst(null); onPick(r); }
-    // too small a span keeps box 1 so the engineer can just press again
-  };
-
-  // Releases off the image still end the gesture — pointer capture over an MJPEG
-  // stream is unreliable, so a window listener covers release outside the frame.
-  useEffect(() => {
-    if (!press) return;
-    const done = () => finish(press, lastCursor.current);
-    window.addEventListener("pointerup", done);
-    return () => window.removeEventListener("pointerup", done);
-  }, [!!press]);
-
-  const down = (e: ReactPointerEvent) => {
+  const click = (e: ReactMouseEvent) => {
     if (disabled) return;
     const p = toNat(e);
     if (!p) return;
-    lastCursor.current = p;
-    setPress(p); setHover(p);
+    if (!first) { setFirst(p); firstAt.current = performance.now(); return; }
+    // A click landing within the gap is the same gesture echoing (double events,
+    // stream hiccups) — never let it close box 2 prematurely.
+    if (performance.now() - firstAt.current < MIN_CLICK_GAP_MS) return;
+    const r = [Math.min(first[0], p[0]), Math.min(first[1], p[1]),
+               Math.abs(p[0] - first[0]), Math.abs(p[1] - first[1])];
+    if (r[2] < 6 || r[3] < 6) return;  // degenerate click — keep box 1 so they can click again
+    setFirst(null); setHover(null);
+    onPick(r);
   };
-  const move = (e: ReactPointerEvent) => {
-    const p = toNat(e);
-    if (!p) return;
-    lastCursor.current = p;
-    if (press) setHover(p);
-  };
-  const preview = first && press && hover
+  const move = (e: ReactMouseEvent) => { if (first) setHover(toNat(e)); };
+  const preview = first && hover
     ? [Math.min(first[0], hover[0]), Math.min(first[1], hover[1]),
        Math.abs(hover[0] - first[0]), Math.abs(hover[1] - first[1])]
     : null;
@@ -242,20 +228,20 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
       <img ref={imgRef} draggable={false}
            src={`/api/v1/devices/camera/stream.mjpg?metric=led_state&component=${encodeURIComponent(cid)}`}
            alt="Live camera — click two corners around the LED" />
-      <div className="roi-layer" role="presentation" onPointerDown={down} onPointerMove={move}>
+      <div className="roi-layer" role="presentation" onClick={click} onPointerMove={move}>
         {nat && roi && <div className="roi-box roi-current" style={box(roi)} />}
         {nat && candidates.map((r, i) => (
           <button key={i} className="roi-box roi-candidate" style={box(r)}
                   aria-label={`Use candidate region ${i + 1}`}
-                  onPointerDown={(e) => { e.stopPropagation(); setFirst(null); setPress(null); onPick(r); }} />
+                  onClick={(e) => { e.stopPropagation(); setFirst(null); onPick(r); }} />
         ))}
         {nat && preview && <div className="roi-box roi-drag" style={box(preview)} />}
-        {nat && (first ?? press) && <div className="roi-corner" style={box([(first ?? press)![0] - 4, (first ?? press)![1] - 4, 8, 8])} />}
+        {nat && first && <div className="roi-corner" style={box([first[0] - 4, first[1] - 4, 8, 8])} />}
       </div>
       {first && (
         <div className="roi-hint">
-          <span>Box 1 placed — hold and release for box 2</span>
-          <button className="roi-reset" onPointerDown={(e) => { e.stopPropagation(); setFirst(null); setHover(null); }}>
+          <span>Box 1 placed — click box 2</span>
+          <button className="roi-reset" onClick={(e) => { e.stopPropagation(); setFirst(null); setHover(null); }}>
             Reset
           </button>
         </div>
