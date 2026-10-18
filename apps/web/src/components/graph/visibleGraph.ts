@@ -123,22 +123,23 @@ const EDGE_VERB: Record<GraphEdge["relation"], string> = {
   calls: "calls",
   configures: "configures pin",
   controls: "controls",
-  connected_to: "connected to",
-  powered_by: "powered by",
-  reads_from: "reads from",
-  observed_by: "observed by camera",
+  connected_to: "wired",
+  powered_by: "powered",
+  reads_from: "reads",
+  observed_by: "camera",
   depends_on: "depends on",
   contains: "contains",
 };
 
-/** Edge label: verb plus an honest qualifier for un-checked wiring. */
+/** Short canvas label — wiring checks become glyphs so parallel edges don't collide. */
 export function edgeLabel(e: VEdge): string {
   if (e.relation === "contains") return "";
-  let q = "";
-  if (e.origin === "declared_wiring") {
-    q = e.verification === "verified" ? " · verified" : e.verification === "conflicting" ? " · conflicting" : " · declared, unchecked";
+  const v = EDGE_VERB[e.relation];
+  if (e.origin !== "declared_wiring") return v;
+  if (e.relation === "connected_to" || e.relation === "powered_by") {
+    return e.verification === "verified" ? `${v} ✓` : e.verification === "conflicting" ? `${v} ✗` : `${v} ?`;
   }
-  return EDGE_VERB[e.relation] + q;
+  return e.verification === "verified" ? v : e.verification === "conflicting" ? `${v} — conflicting` : `${v} — unchecked`;
 }
 
 const VERIF_SEVERITY: Record<Verification, number> = {

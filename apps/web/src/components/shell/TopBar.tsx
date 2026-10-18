@@ -22,15 +22,19 @@ export function TopBar(p: {
   const serial = p.devices?.serial.connected;
   const cam = p.devices?.camera;
   return (
-    <HStack hAlign="between" vAlign="center" gap={3} width="100%">
+    <HStack hAlign="between" vAlign="center" gap={3} width="100%" wrap="wrap">
       <HStack gap={2} vAlign="center">
-        <span className="brand">inteGREAT</span>
+        <button type="button" className="brand" onClick={p.onProjects} title="Back to projects"><span className="bmark">inte</span>GREAT</button>
         <Text type="supporting" maxLines={1}>{p.project.name}</Text>
       </HStack>
-      <Selector label="Focus" isLabelHidden variant="ghost" size="sm" width={220} value={p.focus || "all"}
-                onChange={(v) => p.onFocus(v === "all" ? "" : v)}
-                options={[{ value: "all", label: "Whole system" },
-                          ...p.subsystems.map((s) => ({ value: s.id, label: s.label }))]} />
+      <HStack gap={1.5} vAlign="center">
+        <Text type="supporting">Subsystem</Text>
+        <Selector label="Subsystem" isLabelHidden size="sm" width={200} value={p.focus || "all"}
+                  onChange={(v) => p.onFocus(v === "all" ? "" : v)}
+                  options={[{ value: "all", label: "Whole system" },
+                            ...p.subsystems.map((s) => ({ value: s.id, label: s.label }))]} />
+      </HStack>
+      <div className="topbar-divider" />
       <HStack gap={3} vAlign="center">
         <Button label="Rig setup" size="sm" onClick={p.onRigSetup} />
         <HStack gap={3} vAlign="center">

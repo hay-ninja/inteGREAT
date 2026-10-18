@@ -11,6 +11,7 @@ import { TextInput } from "@astryxdesign/core/TextInput";
 import { Banner } from "@astryxdesign/core/Banner";
 import { Selector } from "@astryxdesign/core/Selector";
 import { List, ListItem } from "@astryxdesign/core/List";
+import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
 import { api, type DemoFixture, type NetlistPreview, type Project } from "../../lib/api";
 import { Eyebrow } from "../flow/common";
 
@@ -40,6 +41,7 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
   const [mapping, setMapping] = useState<Mapping | null>(null);
   const [previewError, setPreviewError] = useState("");
   const [previewBusy, setPreviewBusy] = useState(false);
+  const [pending, setPending] = useState<null | { title: string; lines: string[]; action: string; onConfirm: () => void }>(null);
   const previewRequest = useRef(0);
 
   useEffect(() => {
@@ -63,6 +65,7 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
   };
 
   return (
+    <>
     <Layout contentWidth={640} content={
       <LayoutContent>
         <VStack gap={5} paddingBlock={8}>
@@ -76,25 +79,43 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
 
           <VStack gap={2}>
             <Eyebrow num="01">Explore a demo — simulated observations</Eyebrow>
+            <Heading level={3}>Try it on pretend hardware</Heading>
             <List density="compact" hasDividers>
               {fixtures.map((f, i) => <ListItem key={f.repo_path} label={i === 0 ? "Wrong pin in the code" : "Disconnected servo signal"}
                 description={i === 0 ? "Inspect a GPIO mismatch, then verify a repair." : "Separate signal and power hypotheses with a manual check."}
-                isDisabled={p.busy} onClick={() => p.onImport({ repo_path: f.repo_path, manifest_path: f.manifest_path })} />)}
+                isDisabled={p.busy} onClick={() => setPending({
+                  title: i === 0 ? "Demo — Wrong pin in the code" : "Demo — Disconnected servo signal",
+                  lines: [i === 0
+                    ? "A servo project where the code drives one pin but the wiring notes connect a different one — a classic silent failure."
+                    : "A servo project where the board acknowledges the command but the arm never moves — is it the signal wire, or power?",
+                    "inteGREAT maps code to wiring, runs a simulated test, and walks you through the failure. Nothing runs on real hardware."],
+                  action: "Load demo",
+                  onConfirm: () => p.onImport({ repo_path: f.repo_path, manifest_path: f.manifest_path }),
+                })} />)}
             </List>
           </VStack>
 
           {recent.length > 0 && (
             <VStack gap={2}>
               <Eyebrow num="02">Reopen a project</Eyebrow>
+              <Heading level={3}>Pick up where you left off</Heading>
               <List density="compact" hasDividers>
                 {recent.map((r) => <ListItem key={r.id} label={r.name} description={r.repo_root} isDisabled={p.busy}
-                  onClick={() => p.onOpen(r)} endContent={<Text type="supporting">v{r.graph_version}</Text>} />)}
+                  onClick={() => setPending({
+                    title: r.name,
+                    lines: [r.repo_root,
+                      `Graph version ${r.graph_version}. Reopens the workspace where you left it — map, test runs, and investigation state included.`],
+                    action: "Open project",
+                    onConfirm: () => p.onOpen(r),
+                  })}
+                  endContent={<Text type="supporting">v{r.graph_version}</Text>} />)}
               </List>
             </VStack>
           )}
 
           <VStack gap={2}>
             <Eyebrow num={recent.length ? "03" : "02"}>Import your own project</Eyebrow>
+            <Heading level={3}>Point it at your code</Heading>
             <Card padding={4} variant="muted">
               <VStack gap={3}>
                 <TextInput label="Your code folder" value={repo} onChange={(v) => {
@@ -126,6 +147,19 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
         </VStack>
       </LayoutContent>
     } />
+    <Dialog isOpen={!!pending} onOpenChange={(o) => !o && setPending(null)} width={440} purpose="form">
+      <DialogHeader title={pending?.title ?? ""} subtitle="What happens when you open it"
+                    onOpenChange={(o) => !o && setPending(null)} />
+      <VStack gap={3} padding={4}>
+        {pending?.lines.map((l) => <Text key={l} type="body" color="secondary">{l}</Text>)}
+        <HStack gap={2} hAlign="end">
+          <Button label="Back" variant="ghost" onClick={() => setPending(null)} />
+          <Button label={pending?.action ?? "Open"} variant="primary"
+                  onClick={() => { const go = pending?.onConfirm; setPending(null); go?.(); }} />
+        </HStack>
+      </VStack>
+    </Dialog>
+    </>
   );
 }
 

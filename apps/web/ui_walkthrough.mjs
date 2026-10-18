@@ -26,6 +26,10 @@ await shot("00-import");
 const onImport = await page.getByText("Explore a demo").isVisible().catch(() => false);
 if (onImport) {
   await page.getByText("Wrong pin in the code").click();
+  await shot("00b-demo-modal");
+  await page.locator("dialog").getByText("Load demo").click().catch(async () => {
+    await page.getByRole("button", { name: "Load demo" }).click();
+  });
   await page.waitForSelector(".graph-canvas", { timeout: 15000 });
 }
 await page.waitForSelector(".graph-canvas", { timeout: 20000 });

@@ -133,6 +133,7 @@ export function CanvasToggles({ mode, onMode, layer, onLayer, hiddenNote }: {
 }) {
   return (
     <HStack gap={3} vAlign="center" wrap="wrap">
+      <Text type="label" color="secondary">Graph view</Text>
       <SegmentedControl label="Main view" value={mode} onChange={(v) => onMode(v as CanvasMode)} size="sm">
         <SegmentedControlItem value="deps" label="Dependencies" />
         <SegmentedControlItem value="flow" label="Event flow" />
@@ -204,7 +205,10 @@ function Inner(p: Props) {
   const edges: Edge[] = vg.edges.map((e) => ({
     id: e.id, source: e.source, target: e.target,
     label: e.relation === "contains" ? undefined : edgeLabel(e),
-    labelStyle: { fontSize: 9 },
+    labelStyle: { fontSize: 10 },
+    labelShowBg: true,
+    labelBgPadding: [4, 2] as [number, number],
+    labelBgBorderRadius: 3,
     animated: e.highlight?.style === "observed" || e.emphasized,
     style: edgeStyle(e),
     markerEnd: e.relation === "contains" ? undefined

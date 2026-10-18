@@ -109,6 +109,14 @@ this adds context without changing P0 scope.
   drawer tabs read "Arm angle · Board messages · Devices · Activity"; top bar shows "Board" not
   "ESP32"; import fields explain themselves ("Your code folder", "Wiring notes file", KiCad
   description). Provenance wording unchanged — nothing technical was removed, only translated.
+- **Legibility pass:** eyebrows/event labels/node subtitles bumped up a type step (were ~7px);
+  edge labels shortened to glyphs on the canvas (`wired ✓`, `powered ?`, `configures pin`) with a
+  background pill so parallel edges stop colliding — full wording stays in the inspector.
+  Top bar re-zoned: `inteGREAT` is now a bold logo button that returns to projects, the focus
+  selector is a labeled "Subsystem" dropdown, and a hairline divider separates context
+  (project/subsystem) from the live-rig status zone. Canvas header carries a "Graph view" title.
+  Home screen: each of the three sections gets a real heading, and clicking a demo or recent
+  project opens a context modal ("what happens when you open it") before loading.
 
 ## Live provider validation (2026-10-18) — verified
 - `stepfun_smoke.py`: step-5-preview triage OK (~8s). `gemini_smoke.py`: OK after model update —

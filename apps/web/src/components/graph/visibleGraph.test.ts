@@ -126,9 +126,11 @@ describe("buildVisibleGraph", () => {
       id: "x", source: "a", target: "b", relation, origin, verification, label: "",
       edgeIds: [], lifted: false, summary: null, dimmed: false, emphasized: false,
     });
-    expect(edgeLabel(ve("connected_to", "declared_wiring", "unverified"))).toBe("connected to · declared, unchecked");
-    expect(edgeLabel(ve("connected_to", "declared_wiring", "verified"))).toBe("connected to · verified");
+    expect(edgeLabel(ve("connected_to", "declared_wiring", "unverified"))).toBe("wired ?");
+    expect(edgeLabel(ve("connected_to", "declared_wiring", "verified"))).toBe("wired ✓");
+    expect(edgeLabel(ve("powered_by", "declared_wiring", "conflicting"))).toBe("powered ✗");
     expect(edgeLabel(ve("configures", "source_config", "inferred"))).toBe("configures pin");
+    expect(edgeLabel(ve("configures", "declared_wiring", "unverified"))).toBe("configures pin — unchecked");
     expect(edgeLabel(ve("contains", "source_config", "verified"))).toBe("");
   });
 });
