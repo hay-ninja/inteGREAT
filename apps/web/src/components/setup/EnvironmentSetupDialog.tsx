@@ -192,15 +192,24 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
   }, [cid]);
   useEffect(() => { setFirst(null); setHover(null); }, [cid]);
 
-  const toNat = (e: { clientX: number; clientY: number }): [number, number] | null => {
+  // object-fit: contain letterboxes the frame inside the <img> element — the
+  // painted sub-rect is what maps to natural pixels, not the element box.
+  const paint = () => {
     const im = imgRef.current;
     if (!im?.naturalWidth) return null;
     const b = im.getBoundingClientRect();
-    const sx = im.naturalWidth / b.width, sy = im.naturalHeight / b.height;
-    return [
-      Math.max(0, Math.min(im.naturalWidth, (e.clientX - b.left) * sx)),
-      Math.max(0, Math.min(im.naturalHeight, (e.clientY - b.top) * sy)),
-    ];
+    const s = Math.min(b.width / im.naturalWidth, b.height / im.naturalHeight);
+    const w = im.naturalWidth * s, h = im.naturalHeight * s;
+    return { l: b.left + (b.width - w) / 2, t: b.top + (b.height - h) / 2, s, el: b };
+  };
+
+  const toNat = (e: { clientX: number; clientY: number }): [number, number] | null => {
+    const im = imgRef.current;
+    const p = paint();
+    if (!im || !p) return null;
+    const x = (e.clientX - p.l) / p.s, y = (e.clientY - p.t) / p.s;
+    if (x < 0 || y < 0 || x >= im.naturalWidth || y >= im.naturalHeight) return null;
+    return [x, y];
   };
 
   const span = (a: [number, number], b: [number, number]): number[] =>
@@ -240,10 +249,16 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
   const anchor = first ?? pressAt.current;
   const pv = anchor && hover ? span(anchor, hover) : null;
   const preview = pv && pv[2] >= MIN_BOX_PX && pv[3] >= MIN_BOX_PX ? pv : null;
-  const box = (r: number[]) => nat ? {
-    left: `${(r[0] / nat[0]) * 100}%`, top: `${(r[1] / nat[1]) * 100}%`,
-    width: `${(r[2] / nat[0]) * 100}%`, height: `${(r[3] / nat[1]) * 100}%`,
-  } : undefined;
+  const box = (r: number[]) => {
+    const p = paint();
+    if (!p || !p.el.width || !p.el.height) return undefined;
+    return {
+      left: `${((p.l - p.el.left + r[0] * p.s) / p.el.width) * 100}%`,
+      top: `${((p.t - p.el.top + r[1] * p.s) / p.el.height) * 100}%`,
+      width: `${(r[2] * p.s / p.el.width) * 100}%`,
+      height: `${(r[3] * p.s / p.el.height) * 100}%`,
+    };
+  };
 
   return (
     <div className="roi-view">
