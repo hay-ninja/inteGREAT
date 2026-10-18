@@ -141,7 +141,7 @@ interface Props {
 }
 
 function Inner(p: Props) {
-  const { fitView } = useReactFlow();
+  const { fitView, setCenter, getZoom } = useReactFlow();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
   const rel = useMemo(() => relatedSelection(p.graph, p.selectedId), [p.graph, p.selectedId]);
@@ -188,6 +188,23 @@ function Inner(p: Props) {
 
   // Fit only once React Flow has measured every node; fitting earlier silently does nothing.
   const initialized = useNodesInitialized();
+  // When a node is selected, pan it to the right of the canvas — the inspector docks left.
+  const lastPanned = useRef<string | null>(null);
+  useEffect(() => {
+    const id = p.selectedId;
+    if (!id) { lastPanned.current = null; return; }
+    if (!initialized || lastPanned.current === id || !canvasRef.current) return;
+    const v = vg.nodes.find((n) => n.id === id);
+    if (!v) return;
+    const n = nodes.find((nd) => nd.id === id);
+    const w = n?.measured?.width ?? 0, h = n?.measured?.height ?? 0;
+    const zoom = getZoom();
+    lastPanned.current = id;
+    // Node lands at ~66% of canvas width: viewport center sits left of the node by (fx - 0.5).
+    setCenter(v.x + w / 2 - 0.16 * (canvasRef.current.clientWidth / zoom), v.y + h / 2,
+      { zoom, duration: 280 });
+  }, [p.selectedId, initialized, vg, nodes, setCenter, getZoom]);
+
   const lastFit = useRef("");
   useEffect(() => {
     const key = `${p.fitKey}|${p.layer}|${vg.nodes.length}`;
@@ -249,7 +266,7 @@ function Inner(p: Props) {
       proOptions={{ hideAttribution: true }}
     >
       <Background gap={28} size={1} />
-      <Panel position="bottom-left"><Legend layer={p.layer} /></Panel>
+      <Panel position="top-right"><Legend layer={p.layer} /></Panel>
       <Controls showInteractive={false} position="bottom-right" />
     </ReactFlow>
     )}
