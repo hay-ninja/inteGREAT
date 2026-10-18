@@ -725,6 +725,23 @@
       }
      }
     ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/ProposeExpectationRequest"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Req"
+       }
+      }
+     }
+    },
     "responses": {
      "200": {
       "description": "Successful Response",
@@ -5220,6 +5237,36 @@
     "type": "object",
     "title": "ProjectUpdate",
     "description": "Engineer edits to an existing project. Any *_path change (or rescan=True) rebuilds the graph\nfrom the new inputs in place \u2014 same project id, graph_version + 1, wiring confirmations kept.\nFields left as None keep their current value."
+   },
+   "ProposeExpectationRequest": {
+    "properties": {
+     "component_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Component Id"
+     },
+     "command": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Command"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "title": "ProposeExpectationRequest",
+    "description": "Optional targeting for rigs with more than one testable component (D-045)."
    },
    "Provenance": {
     "properties": {

@@ -170,6 +170,13 @@
   .history-row:hover { background: var(--color-background-muted); }
   .history-row[aria-selected="true"] { border-color: var(--color-border-focus, var(--color-accent)); }
 
+  /* Every modal scrolls instead of clipping past the viewport. Astryx <dialog> is a
+     column flexbox whose children shrink to fit — so the cap + scroll must live on
+     the children (min-height:0 lets them shrink below content height, then scroll). */
+  dialog[open]:not(#\#):not(#\#) { max-height: calc(100dvh - 24px); overflow: hidden; }
+  dialog[open]:not(#\#) > * { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  dialog[open]:not(#\#) > * > * { flex-shrink: 0; }
+
   /* Side-docked graph inspector — scrolls internally, never overflows the canvas. */
   .graph-inspector { position: absolute; top: 10px; left: 10px; bottom: 10px; z-index: 20;
     width: min(420px, 92%); display: flex; flex-direction: column;
@@ -187,6 +194,7 @@
   .roi-layer { position: absolute; inset: 0; cursor: crosshair; touch-action: none; }
   .roi-box { position: absolute; border: 2px solid transparent; border-radius: 2px; padding: 0; background: none; }
   .roi-current { border-color: #46a24a; }
+  .roi-other { border-color: var(--color-border-emphasized); opacity: 0.6; pointer-events: none; }
   .roi-candidate { border-color: var(--color-accent); background: rgb(128 160 255 / 0.15);
                    cursor: pointer; pointer-events: auto; }
   .roi-candidate:hover, .roi-candidate:focus-visible { background: rgb(128 160 255 / 0.3); }

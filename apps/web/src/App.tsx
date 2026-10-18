@@ -535,7 +535,10 @@ export default function App() {
     />
       <EvidenceDialog evidence={evidence} onClose={() => setEvidence(null)} />
       <EnvironmentSetupDialog open={envSetupOpen} onClose={() => setEnvSetupOpen(false)} devices={devices} onDevices={setDevices}
-                      onError={(m) => fail(m)} expectation={expectation}
+                      onError={(m) => fail(m)} expectation={expectation} expectations={expectations}
+                      leds={(graph?.nodes ?? [])
+                        .filter((n) => n.kind === "component" && String(n.attributes?.type) === "led")
+                        .map((n) => ({ id: n.id, label: n.label }))}
                       onUseSimulation={() => { setSource(`sim:${sources.sim[0]?.id ?? "connected"}`); setEnvSetupOpen(false); }} />
       <InspectDialog result={inspect} onClose={() => setInspect(null)} />
       <ToolOutputDialog result={toolOutput} onClose={() => setToolOutput(null)} />

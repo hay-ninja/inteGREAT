@@ -1948,6 +1948,16 @@ export interface components {
              */
             rescan: boolean;
         };
+        /**
+         * ProposeExpectationRequest
+         * @description Optional targeting for rigs with more than one testable component (D-045).
+         */
+        ProposeExpectationRequest: {
+            /** Component Id */
+            component_id?: string | null;
+            /** Command */
+            command?: string | null;
+        };
         /** Provenance */
         Provenance: {
             /** Source Id */
@@ -2947,7 +2957,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ProposeExpectationRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

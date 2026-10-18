@@ -143,11 +143,14 @@ async function replayReq<T>(method: string, path: string, body?: unknown): Promi
   }
   let hit = bundle.routes[key];
   if (hit === undefined && method === "POST" && /^\/projects\/[^/]+\/tests$/.test(path)) {
-    // Each demo project recorded exactly one run — serve it whatever scenario the
-    // judge picked; the result's SourceBadge still labels the recording honestly.
+    // Serve the recorded run for this expectation whatever scenario the judge picked —
+    // the result's SourceBadge still labels the recording honestly. Multi-expectation
+    // rigs (the Halloween seed has two LEDs) match on expectation_id.
     const prefix = `${method} ${path}::`;
     const alts = Object.keys(bundle.routes).filter((k) => k.startsWith(prefix));
-    if (alts.length === 1) hit = bundle.routes[alts[0]];
+    const eid = (body as { expectation_id?: string } | undefined)?.expectation_id;
+    hit = (alts.length === 1 ? bundle.routes[alts[0]]
+         : alts.map((k) => bundle.routes[k] as TestRun).find((r) => r.expectation_id === eid)) as T;
   }
   if (hit === undefined) {
     throw new ApiError(503, "hosted_demo",

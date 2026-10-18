@@ -19,6 +19,8 @@ export function EnvironmentSetupDialog(p: {
   onError: (message: string) => void;
   onUseSimulation: () => void;
   expectation: Expectation | null;
+  expectations: Expectation[];
+  leds: { id: string; label: string }[];
 }) {
   const isLed = p.expectation?.metric === "led_state";
   const ledReady = isLed && !!p.devices?.camera.calibrations?.includes(`led_state:${p.expectation?.component_id}`);
@@ -45,7 +47,8 @@ export function EnvironmentSetupDialog(p: {
           </HStack>
           <DeviceControls status={p.devices} onStatus={p.onDevices} onError={p.onError} />
           {isLed && p.devices?.camera.connected && (
-            <LedSetup expectation={p.expectation!} devices={p.devices} onDevices={p.onDevices} onError={p.onError} />
+            <LedSetup expectation={p.expectation!} expectations={p.expectations} leds={p.leds}
+                      devices={p.devices} onDevices={p.onDevices} onError={p.onError} />
           )}
           <Text type="supporting">Live tests require all three checks. You can explore the complete workflow with a clearly labeled simulated environment.</Text>
           <HStack gap={2} hAlign="end">
@@ -61,13 +64,17 @@ export function EnvironmentSetupDialog(p: {
 /** LED locator + baseline (D-047). Blink-to-find sends engineer-confirmed fixed serial
  *  commands — never arbitrary writes — and diffs frames; dragging a box on the video
  *  overlay is the manual fallback. */
-function LedSetup({ expectation, devices, onDevices, onError }: {
+function LedSetup({ expectation, expectations, leds, devices, onDevices, onError }: {
   expectation: Expectation;
+  expectations: Expectation[];
+  leds: { id: string; label: string }[];
   devices: DeviceStatus;
   onDevices: (s: DeviceStatus) => void;
   onError: (m: string) => void;
 }) {
-  const cid = expectation.component_id;
+  // Each LED keeps its own estimator keyed led_state:{component} — the switcher
+  // picks which one the next box/blink applies to.
+  const [cid, setCid] = useState(expectation.component_id);
   const calibrated = !!devices.camera.calibrations?.includes(`led_state:${cid}`);
   const serialOk = devices.serial.connected;
   const [busy, setBusy] = useState(false);
@@ -76,9 +83,16 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
     (expectation.trigger?.value ?? "LED ON").replace(/on$/i, "OFF"));
   const [msg, setMsg] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<number[][] | null>(null);
-  const [roi, setRoi] = useState<number[] | null>(null);
+  const [rois, setRois] = useState<Record<string, number[]>>({});   // committed regions per component
   const [manual, setManual] = useState("");
-  useEffect(() => setCandidates(null), [cid]);
+  const roi = rois[cid] ?? null;
+  useEffect(() => { setCandidates(null); setMsg(null); }, [cid]);
+  // Each LED may take a different command (GHOST ON vs FLICKER) — seed the fields
+  // from that component's own expectation when it exists; leave edits alone otherwise.
+  useEffect(() => {
+    const t = expectations.find((e) => e.metric === "led_state" && e.component_id === cid)?.trigger?.value;
+    if (t) { setOnCmd(t); setOffCmd(t.replace(/on$/i, "OFF")); }
+  }, [cid]);
 
   const refresh = () => api.devices().then(onDevices).catch((e) => onError(e.message));
   const locate = () => {
@@ -87,7 +101,7 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
       .then((r) => {
         setMsg(r.message);
         if (r.candidates?.length) setCandidates(r.candidates);
-        if (r.roi) setRoi(r.roi);
+        if (r.roi) setRois((m) => ({ ...m, [cid]: r.roi! }));
         refresh();
       })
       .catch((e) => onError(e.message))
@@ -97,7 +111,7 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
     setBusy(true); setMsg(null);
     api.cameraSetLedRoi(cid, next.map(Math.round))
       .then(onDevices)
-      .then(() => { setRoi(next.map(Math.round)); setCandidates(null); setMsg("Region set — LED-off baseline recorded"); })
+      .then(() => { setRois((m) => ({ ...m, [cid]: next.map(Math.round) })); setCandidates(null); setMsg("Region set — LED-off baseline recorded"); })
       .catch((e) => onError(e.message))
       .finally(() => setBusy(false));
   };
@@ -114,10 +128,25 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
       <VStack gap={2}>
         <HStack gap={1} vAlign="center">
           <StatusDot variant={calibrated ? "success" : "warning"} label={calibrated ? "LED ready" : "LED needs setup"} />
-          <Text type="label">LED measurement — {cid}</Text>
+          <Text type="label">LED measurement — {leds.find((l) => l.id === cid)?.label ?? cid}</Text>
           <Text type="supporting">{calibrated ? "region + off-baseline recorded" : "not yet located"}</Text>
         </HStack>
-        <RoiView cid={cid} candidates={candidates ?? []} roi={roi} onPick={useRoi} disabled={busy} />
+        {leds.length > 1 && (
+          <HStack gap={1} wrap="wrap">
+            {leds.map((l) => {
+              const ready = !!devices.camera.calibrations?.includes(`led_state:${l.id}`);
+              return (
+                <Button key={l.id} size="sm" variant={l.id === cid ? "primary" : "ghost"}
+                        label={`${l.label}${ready ? " ✓" : ""}`}
+                        tooltip={ready ? "Region + baseline recorded" : "Not yet located — draw or blink its box"}
+                        clickAction={() => setCid(l.id)} />
+              );
+            })}
+          </HStack>
+        )}
+        <RoiView cid={cid} candidates={candidates ?? []} roi={roi}
+                 others={Object.entries(rois).filter(([id]) => id !== cid).map(([, r]) => r)}
+                 onPick={useRoi} disabled={busy} />
         <Text type="supporting">
           Click box 1 then box 2, or just press-drag-release a box — the region
           between them is the LED. Picking a region also records the LED-off baseline, so make
@@ -165,10 +194,11 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
 const MIN_CLICK_GAP_MS = 350;
 const MIN_BOX_PX = 6;
 
-function RoiView({ cid, candidates, roi, onPick, disabled }: {
+function RoiView({ cid, candidates, roi, others, onPick, disabled }: {
   cid: string;
   candidates: number[][];
   roi: number[] | null;
+  others: number[][];
   onPick: (r: number[]) => void;
   disabled: boolean;
 }) {
@@ -268,6 +298,7 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
       <div className="roi-layer" role="presentation"
            onPointerDown={down} onPointerMove={move} onPointerLeave={leave} onClick={click}>
         {nat && roi && <div className="roi-box roi-current" style={box(roi)} />}
+        {nat && others.map((r, i) => <div key={`o${i}`} className="roi-box roi-other" style={box(r)} />)}
         {nat && candidates.map((r, i) => (
           <button key={i} className="roi-box roi-candidate" style={box(r)}
                   aria-label={`Use candidate region ${i + 1}`}
