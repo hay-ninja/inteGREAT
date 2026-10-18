@@ -118,6 +118,25 @@ this adds context without changing P0 scope.
   Home screen: each of the three sections gets a real heading, and clicking a demo or recent
   project opens a context modal ("what happens when you open it") before loading.
 
+## Studio-style view rail + spacious home (D-032) — done 2026-10-18
+- Roblox-Studio-inspired navigation: new `shell/ViewRail.tsx` (Astryx `SideNav`) in the Layout
+  `start` slot — icon + text label + selected state, grouped `View` (Map / Timeline) and
+  `Layer` (All / Hardware / Software). The rail is collapsible to an icon strip
+  (`collapsible`, starts collapsed under 1000px viewport).
+- The in-canvas `CanvasToggles` segmented controls are removed; canvas headers now only carry
+  a view title ("Dependency map" / "Event timeline") and canvas tools (search, expand/collapse,
+  whole-system, run selector, hidden-items chip). Keyboard D/E and H/S/C drive the same state.
+- Home page de-condensed: `contentWidth` 640→1040, `display-1` hero, demos and recent projects
+  as `ClickableCard`s in a responsive `Grid` (`minWidth` auto-fill) with section intros; the
+  import form is a full-width card below. Context modal before opening any project unchanged.
+- Fixed: duplicate React key when an evidence id is cited twice in one list (dedupe in
+  `EvidenceList`).
+- Re-verified: `tsc -b` clean, `vitest` 17/17, `vite build` passes, headless-Chromium
+  walkthrough (rail labels, layer switching, Timeline mode, Activity, Devices→rig setup,
+  repair dialog) at 1280×720 / 1024×768 / 800×600 — zero console errors, no horizontal
+  overflow. The run→result wait was raised to 150s because live AI diagnosis (StepFun +
+  Gemini) now runs in that window.
+
 ## DSG agent architecture (D-028–D-031) — done on `feature/dsg-agent-arch`, 2026-10-18
 Plan: [dsg-agent-architecture.md](dsg-agent-architecture.md). The graph is now a state overlay,
 not just a structural prior; SimRig doubles as a digital shadow queried diagnostically.

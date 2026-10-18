@@ -332,3 +332,18 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   been connected, prediction would still show motion — consistent" — a model-level statement,
   never a physical claim. No formal do-calculus; the reduced-order model IS the interventional
   semantics at this fidelity.
+
+### D-032 Studio-style left view rail owns view/layer switching — 2026-10-18
+- User asked for a Roblox-Studio-like structure: sections with defined purposes, icons with
+  clear text labels, visibly separated views. Implemented as `shell/ViewRail.tsx` — an Astryx
+  `SideNav` in `Layout`'s `start` slot with grouped `SideNavItem`s: **View** (Map / Timeline)
+  and **Layer** (All / Hardware / Software), each with an icon, text label, and selected
+  state. Collapsible to an icon strip (`collapsible`, auto-starts collapsed under 1000px).
+- This replaces the in-canvas `CanvasToggles` segmented controls — one place owns
+  "what am I looking at", the canvas header keeps only tools (search, expand, run selector).
+  Deviation from the D-026 segmented-control pattern; the keyboard layer (D/E, H/S/C)
+  drives the same state, and the regions are now rail | canvas | guided panel | drawer —
+  four separated zones instead of toggles inside the canvas chrome.
+- Home page un-condensed (user: "should not be condensed"): wider frame (1040),
+  `ClickableCard` grids for demos and recents, full-width import card. Same modal-first
+  open behavior. No functionality moved or removed.

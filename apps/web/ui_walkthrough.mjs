@@ -75,7 +75,7 @@ const runBtn = page.locator("button").filter({ hasText: /Run test|Run again/ }).
 log("run button visible:", await runBtn.isVisible().catch(() => false));
 if (await runBtn.isVisible().catch(() => false)) {
   await runBtn.click();
-  await page.waitForSelector("text=Collecting measurements, text=Leading hypothesis, text=Possible causes, text=passed", { timeout: 90000 }).catch(() => log("run did not reach a result state in 90s"));
+  await page.waitForSelector("text=Collecting measurements, text=Leading hypothesis, text=Possible causes, text=passed", { timeout: 150000 }).catch(() => log("run did not reach a result state in 150s"));
   await page.waitForTimeout(1500);
 }
 await shot("05-after-run");
