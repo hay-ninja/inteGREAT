@@ -13,7 +13,6 @@ import { Text } from "@astryxdesign/core/Text";
 import { Table, pixel } from "@astryxdesign/core/Table";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Selector } from "@astryxdesign/core/Selector";
-import { NumberInput } from "@astryxdesign/core/NumberInput";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { StatusDot } from "@astryxdesign/core/StatusDot";
 import { Card } from "@astryxdesign/core/Card";
@@ -277,7 +276,6 @@ export function DeviceControls({ status, onStatus, onError }: { status: DeviceSt
     const timer = window.setInterval(() => api.devices().then(onStatus).catch((e) => onError(e.message)), 2000);
     return () => window.clearInterval(timer);
   }, [pairing, onStatus, onError]);
-  const [angle, setAngle] = useState(0);
   useEffect(() => { if (!port && status?.serial.ports.length) setPort(status.serial.ports[0].port); }, [status, port]);
   if (!status) return <EmptyState isCompact title="Loading devices…" />;
   const run = (p: Promise<DeviceStatus>) => p.then(onStatus).catch((e) => onError(e.message));
@@ -345,16 +343,10 @@ export function DeviceControls({ status, onStatus, onError }: { status: DeviceSt
             )}
             </VStack>
           ) : (
-            <HStack gap={1} vAlign="end">
-              <NumberInput label="Servo is at" size="sm" units="°" value={angle} onChange={setAngle} width={130} />
-              <Button label="Calibrate" size="sm" clickAction={() => run(api.cameraCalibrate(angle))} />
-              <Button label="Release" size="sm" variant="ghost" clickAction={() => run(api.cameraRelease()).then(() => setPairing(null))} />
-            </HStack>
+            <Button label="Release" size="sm" variant="ghost" clickAction={() => run(api.cameraRelease()).then(() => setPairing(null))} />
           )}
           {c.last_error && <Text type="supporting" color="secondary">{c.last_error}</Text>}
-          <Text type="supporting">Camera input supports preview and existing marker tracking. LED brightness measurements are not implemented yet.</Text>
-          <Text type="supporting">Two printed marker stickers let the camera measure the arm: id 1 on the moving arm, id 0 beside the servo.</Text>
-          <Text type="supporting">If the camera can't see the markers, the measurement is reported as unavailable — never as a fault. Calibrate at a known angle before a live test.</Text>
+          <Text type="supporting">Keep the printed markers in view — an unseen marker reports "measurement unavailable", never a fault.</Text>
         </VStack>
       </Card>
       {c.connected && <img className="camera-preview" src="/api/v1/devices/camera/stream.mjpg" alt="Live camera preview" />}

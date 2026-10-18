@@ -18,12 +18,12 @@ export function EnvironmentSetupDialog(p: {
   const checks = [
     { label: "ESP32 connected", ready: !!p.devices?.serial.connected },
     { label: "Camera connected", ready: !!p.devices?.camera.connected },
-    { label: "Angle calibrated", ready: !!p.devices?.camera.connected && !!p.devices?.camera.calibrated },
+    { label: "Camera calibrated", ready: !!p.devices?.camera.connected && !!p.devices?.camera.calibrated },
   ];
   const ready = checks.every((c) => c.ready);
   return (
     <Dialog isOpen={p.open} onOpenChange={(open) => !open && p.onClose()} width={840} maxHeight="90dvh" purpose="form">
-      <DialogHeader title="Set up the live environment" subtitle="Plug in the board and camera, then tell it the arm's current angle so the camera can measure movement." onOpenChange={(open) => !open && p.onClose()} />
+      <DialogHeader title="Set up the live environment" subtitle="Plug in the board and camera, then keep the printed markers in view so the camera can measure the component." onOpenChange={(open) => !open && p.onClose()} />
       <VStack gap={4} padding={4}>
         <HStack gap={3} wrap="wrap">
           {checks.map((c) => (
