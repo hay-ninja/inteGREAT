@@ -10,7 +10,8 @@ import { Card } from "@astryxdesign/core/Card";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { Banner } from "@astryxdesign/core/Banner";
 import { Selector } from "@astryxdesign/core/Selector";
-import { List, ListItem } from "@astryxdesign/core/List";
+import { Grid } from "@astryxdesign/core/Grid";
+import { ClickableCard } from "@astryxdesign/core/ClickableCard";
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
 import { api, type DemoFixture, type NetlistPreview, type Project } from "../../lib/api";
 import { Eyebrow } from "../flow/common";
@@ -66,57 +67,82 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
 
   return (
     <>
-    <Layout contentWidth={640} content={
+    <Layout contentWidth={1040} content={
       <LayoutContent>
-        <VStack gap={5} paddingBlock={8}>
-          <VStack gap={2}>
+        <VStack gap={6} paddingBlock={8}>
+          <VStack gap={2} maxWidth={720}>
             <Eyebrow>Graph-first hardware debugging</Eyebrow>
-            <Heading level={1} type="display-2">Why isn't your hardware doing what the code says?</Heading>
-            <Text type="body" color="secondary">
+            <Heading level={1} type="display-1">Why isn't your hardware doing what the code says?</Heading>
+            <Text type="large" color="secondary">
               Import an ESP32 project — inteGREAT maps code to wiring, runs a test, and shows the evidence. Nothing is run or changed on import.
             </Text>
           </VStack>
 
-          <VStack gap={2}>
-            <Eyebrow num="01">Explore a demo — simulated observations</Eyebrow>
-            <Heading level={3}>Try it on pretend hardware</Heading>
-            <List density="compact" hasDividers>
-              {fixtures.map((f, i) => <ListItem key={f.repo_path} label={i === 0 ? "Wrong pin in the code" : "Disconnected servo signal"}
-                description={i === 0 ? "Inspect a GPIO mismatch, then verify a repair." : "Separate signal and power hypotheses with a manual check."}
-                isDisabled={p.busy} onClick={() => setPending({
-                  title: i === 0 ? "Demo — Wrong pin in the code" : "Demo — Disconnected servo signal",
-                  lines: [i === 0
-                    ? "A servo project where the code drives one pin but the wiring notes connect a different one — a classic silent failure."
-                    : "A servo project where the board acknowledges the command but the arm never moves — is it the signal wire, or power?",
-                    "inteGREAT maps code to wiring, runs a simulated test, and walks you through the failure. Nothing runs on real hardware."],
-                  action: "Load demo",
-                  onConfirm: () => p.onImport({ repo_path: f.repo_path, manifest_path: f.manifest_path }),
-                })} />)}
-            </List>
+          <VStack gap={3}>
+            <VStack gap={1}>
+              <Eyebrow num="01">Explore a demo — simulated observations</Eyebrow>
+              <Heading level={2}>Try it on pretend hardware</Heading>
+              <Text type="body" color="secondary">Two failure stories with pretend observations. Safe to click through — nothing touches a real board.</Text>
+            </VStack>
+            <Grid columns={{ minWidth: 300, repeat: "fill" }} gap={3}>
+              {fixtures.map((f, i) => (
+                <ClickableCard key={f.repo_path} padding={4} isDisabled={p.busy}
+                  label={i === 0 ? "Wrong pin in the code" : "Disconnected servo signal"}
+                  onClick={() => setPending({
+                    title: i === 0 ? "Demo — Wrong pin in the code" : "Demo — Disconnected servo signal",
+                    lines: [i === 0
+                      ? "A servo project where the code drives one pin but the wiring notes connect a different one — a classic silent failure."
+                      : "A servo project where the board acknowledges the command but the arm never moves — is it the signal wire, or power?",
+                      "inteGREAT maps code to wiring, runs a simulated test, and walks you through the failure. Nothing runs on real hardware."],
+                    action: "Load demo",
+                    onConfirm: () => p.onImport({ repo_path: f.repo_path, manifest_path: f.manifest_path }),
+                  })}>
+                  <VStack gap={2}>
+                    <Text type="large" weight="semibold">{i === 0 ? "Wrong pin in the code" : "Disconnected servo signal"}</Text>
+                    <Text type="body" color="secondary">{i === 0
+                      ? "Inspect a GPIO mismatch, then verify a repair."
+                      : "Separate signal and power hypotheses with a manual check."}</Text>
+                    <Text type="supporting" color="secondary">Simulated · servo arm + camera · ~5 minutes</Text>
+                  </VStack>
+                </ClickableCard>
+              ))}
+            </Grid>
           </VStack>
 
           {recent.length > 0 && (
-            <VStack gap={2}>
-              <Eyebrow num="02">Reopen a project</Eyebrow>
-              <Heading level={3}>Pick up where you left off</Heading>
-              <List density="compact" hasDividers>
-                {recent.map((r) => <ListItem key={r.id} label={r.name} description={r.repo_root} isDisabled={p.busy}
-                  onClick={() => setPending({
-                    title: r.name,
-                    lines: [r.repo_root,
-                      `Graph version ${r.graph_version}. Reopens the workspace where you left it — map, test runs, and investigation state included.`],
-                    action: "Open project",
-                    onConfirm: () => p.onOpen(r),
-                  })}
-                  endContent={<Text type="supporting">v{r.graph_version}</Text>} />)}
-              </List>
+            <VStack gap={3}>
+              <VStack gap={1}>
+                <Eyebrow num="02">Reopen a project</Eyebrow>
+                <Heading level={2}>Pick up where you left off</Heading>
+              </VStack>
+              <Grid columns={{ minWidth: 260, repeat: "fill" }} gap={3}>
+                {recent.map((r) => (
+                  <ClickableCard key={r.id} padding={4} isDisabled={p.busy} label={r.name}
+                    onClick={() => setPending({
+                      title: r.name,
+                      lines: [r.repo_root,
+                        `Graph version ${r.graph_version}. Reopens the workspace where you left it — map, test runs, and investigation state included.`],
+                      action: "Open project",
+                      onConfirm: () => p.onOpen(r),
+                    })}>
+                    <VStack gap={2}>
+                      <Text type="large" weight="semibold">{r.name}</Text>
+                      <Text type="supporting" color="secondary" style={{ wordBreak: "break-all" }}>{r.repo_root}</Text>
+                      <Text type="supporting" color="secondary">Graph v{r.graph_version}</Text>
+                    </VStack>
+                  </ClickableCard>
+                ))}
+              </Grid>
             </VStack>
           )}
 
-          <VStack gap={2}>
-            <Eyebrow num={recent.length ? "03" : "02"}>Import your own project</Eyebrow>
-            <Heading level={3}>Point it at your code</Heading>
-            <Card padding={4} variant="muted">
+          <VStack gap={3}>
+            <VStack gap={1}>
+              <Eyebrow num={recent.length ? "03" : "02"}>Import your own project</Eyebrow>
+              <Heading level={2}>Point it at your code</Heading>
+              <Text type="body" color="secondary">inteGREAT reads your sketch and wiring notes to build the map. It never runs or modifies your code.</Text>
+            </VStack>
+            <Card padding={5} variant="muted">
               <VStack gap={3}>
                 <TextInput label="Your code folder" value={repo} onChange={(v) => {
                   setRepo(v); ++previewRequest.current; setPreview(null); setMapping(null); setPreviewError(""); setPreviewBusy(false);

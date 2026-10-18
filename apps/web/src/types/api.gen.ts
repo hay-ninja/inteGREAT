@@ -842,7 +842,7 @@ export interface components {
          * AgentName
          * @enum {string}
          */
-        AgentName: "orchestrator" | "code" | "hardware" | "runtime_vision";
+        AgentName: "orchestrator" | "code" | "hardware" | "telemetry" | "vision" | "critic" | "runtime_vision";
         /** AgentReport */
         AgentReport: {
             agent: components["schemas"]["AgentName"];
@@ -935,6 +935,30 @@ export interface components {
             offset_deg: number | null;
             /** Last Error */
             last_error: string | null;
+        };
+        /**
+         * CausalStep
+         * @description One link in the fixed cyber-physical causal chain for a run (diagnostics/causal.py).
+         */
+        CausalStep: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Value
+             * @enum {string}
+             */
+            value: "yes" | "no" | "unknown" | "unmeasured";
+            /**
+             * Inferred
+             * @default false
+             */
+            inferred: boolean;
+            /** Evidence Ids */
+            evidence_ids: string[];
+            /** Breaks If */
+            breaks_if: string | null;
         };
         /**
          * ContextPacketSummary
@@ -1094,7 +1118,7 @@ export interface components {
          * EvidenceKind
          * @enum {string}
          */
-        EvidenceKind: "source_excerpt" | "manifest_entry" | "netlist_entry" | "serial_line" | "host_command" | "cv_measurement" | "tool_output" | "engineer_assertion" | "rule_result";
+        EvidenceKind: "source_excerpt" | "manifest_entry" | "netlist_entry" | "serial_line" | "host_command" | "cv_measurement" | "tool_output" | "engineer_assertion" | "rule_result" | "shadow_residual";
         /**
          * ExecuteActionRequest
          * @description `source` overrides the observation source for repeat/verify runs. `approve_once` is the engineer
@@ -1539,6 +1563,8 @@ export interface components {
             agent_runs: components["schemas"]["AgentRun"][];
             /** Repair Jobs */
             repair_jobs: components["schemas"]["RepairJob"][];
+            /** Causal Chain */
+            causal_chain: components["schemas"]["CausalStep"][];
         };
         /** ManualResultRequest */
         ManualResultRequest: {

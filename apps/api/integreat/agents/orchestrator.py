@@ -21,6 +21,7 @@ import uuid
 from typing import TYPE_CHECKING
 
 from ..context.packet import build_packet
+from ..diagnostics.estimate import assess as shadow_assess
 from ..models import (
     AgentFinding,
     AgentName,
@@ -29,6 +30,7 @@ from ..models import (
     DiagnosticAction,
     Evidence,
     EvidenceKind,
+    Expectation,
     FaultCode,
     Hypothesis,
     HypothesisStatus,
@@ -36,7 +38,7 @@ from ..models import (
     IncidentState,
 )
 from .provider import LLMInvalidOutput, LLMUnavailable
-from .schemas import AgentReportOut, SynthesisOut, TriageOut
+from .schemas import AgentReportOut, CritiqueOut, SynthesisOut, TriageOut
 
 if TYPE_CHECKING:
     from ..service import Service
@@ -58,16 +60,25 @@ AGENT_ROLES = {
                     "GPIO/pin usage, call relationships and whether source matches declared hardware.",
     AgentName.hardware: "You are the Hardware Agent. Focus: declared wiring (manifest/netlist), power and ground "
                         "dependencies, component constraints. Schematic/manifest wiring is a declaration, not proof.",
+    AgentName.telemetry: "You are the Telemetry Agent. Focus: serial lines, event timing and ordering, whether "
+                         "firmware functions executed (log-literal matches), and whether commands/acks flowed.",
+    AgentName.vision: "You are the Vision Agent. Focus: camera measurement validity and residuals — what the "
+                      "camera actually measured vs. the confirmed nominal expectation, and whether the "
+                      "measurement channel itself is trustworthy.",
+    AgentName.critic: "You are the Critic for an embedded-systems debugger. Your job is to INVALIDATE the "
+                      "leading hypotheses: find evidence that contradicts each one, or a predicted signature "
+                      "it cannot match. A hypothesis you cannot refute is 'survives'; be specific about what "
+                      "would falsify it.",
     AgentName.runtime_vision: "You are the Runtime/Vision Agent. Focus: what was actually observed — serial "
                               "lines, timing, camera angle measurements and their validity.",
 }
 
 DEFAULT_DISPATCH = {
     FaultCode.GPIO_CONFIG_MISMATCH: [AgentName.code, AgentName.hardware],
-    FaultCode.NO_PHYSICAL_MOTION: [AgentName.hardware, AgentName.runtime_vision],
-    FaultCode.POSSIBLE_POWER_OR_SIGNAL_FAULT: [AgentName.hardware, AgentName.runtime_vision],
-    FaultCode.MISSING_SERIAL_ACK: [AgentName.runtime_vision, AgentName.code],
-    FaultCode.CAMERA_MEASUREMENT_UNAVAILABLE: [AgentName.runtime_vision],
+    FaultCode.NO_PHYSICAL_MOTION: [AgentName.hardware, AgentName.vision],
+    FaultCode.POSSIBLE_POWER_OR_SIGNAL_FAULT: [AgentName.hardware, AgentName.vision],
+    FaultCode.MISSING_SERIAL_ACK: [AgentName.telemetry, AgentName.code],
+    FaultCode.CAMERA_MEASUREMENT_UNAVAILABLE: [AgentName.vision],
 }
 
 
@@ -83,7 +94,7 @@ def default_dispatch(inc: Incident) -> list[AgentName]:
         for a in DEFAULT_DISPATCH.get(c, []):
             if a not in out:
                 out.append(a)
-    return out or [AgentName.runtime_vision]
+    return out or [AgentName.telemetry]
 
 
 def validate_report(agent: AgentName, inc: Incident, raw: AgentReportOut, ev_ids: set[str], action_ids: set[str],
@@ -223,6 +234,9 @@ class Orchestrator:
                 inc.hypothesis_ids += [h.id for h in new_hyps]
                 svc.store.put("incident", inc)
 
+            # 3.5) adversarial pass: the critic tries to invalidate the leading hypotheses
+            runs.append(await self._refute(inc, rnd))
+
             # 4) synthesis
             synth = await self._synthesize(inc, rnd, [r for r in results if r.report])
             runs.append(synth)
@@ -269,6 +283,84 @@ class Orchestrator:
                   "findings": len(run.report.findings) if run.report else 0}, investigation_id=inc.id)
         return run, proposed
 
+    async def _refute(self, inc: Incident, rnd: int) -> AgentRun:
+        """Adversarial pass (the "Defense"): the critic tries to invalidate each leading
+        hypothesis against the evidence catalog and the deterministic shadow-sweep record.
+        A 'refuted' verdict adds cited evidence ids to contradicting_evidence_ids and a note
+        to unknowns — it never changes status or rank on its own."""
+        svc, s = self.svc, self.svc.settings
+        run = AgentRun(id=f"agentrun:{uuid.uuid4().hex[:10]}", incident_id=inc.id, project_id=inc.project_id,
+                       round=rnd, agent=AgentName.critic, status="completed",
+                       model=svc.specialist_llm.model, provider=svc.specialist_llm.name)
+        t0 = time.perf_counter()
+        hyps = [h for h in svc.store.get_many("hypothesis", inc.hypothesis_ids, Hypothesis)
+                if h.status not in (HypothesisStatus.ruled_out,)]
+        if not hyps:
+            run.status = "skipped"
+            svc.store.put(K_AGENT_RUN, run, parent_id=inc.id)
+            return run
+        try:
+            exp = svc.store.get("expectation", inc.expectation_id, Expectation)
+            t_run = svc.test_run(inc.test_run_id)
+            g = svc.graph(inc.project_id)
+            verdicts = shadow_assess(exp, g.nodes, g.edges, t_run.result, t_run.id)[0] \
+                if exp is not None and t_run.result is not None else []
+            shadow_lines = [f"{v.label}: {'consistent' if v.consistent else 'INCONSISTENT'} "
+                            f"({v.predicted}{'; ' + '; '.join(v.mismatches) if v.mismatches else ''})"
+                            for v in verdicts]
+            packet = await build_packet(svc, inc, AgentName.critic, s.max_context_tokens)
+            run.context = packet.summary
+            hyp_lines = [f"{h.id} | rank {h.rank} | {h.status.value} | {h.title} | {h.explanation[:200]}"
+                         for h in hyps]
+            out = await svc.specialist_llm.generate_structured(
+                system=f"{AGENT_ROLES[AgentName.critic]}\n{RULES}",
+                prompt=f"<data>\n{packet.text}\n\nHYPOTHESES UNDER TEST:\n" + "\n".join(hyp_lines)
+                       + "\n\nSHADOW SWEEP (deterministic model check):\n" + "\n".join(shadow_lines)
+                       + "\n</data>\nGive a verdict for each hypothesis: 'refuted' (cite the contradicting "
+                         "evidence ids), 'survives', or 'undecided' — and what would falsify it.",
+                schema=CritiqueOut, timeout_s=s.agent_timeout_s)
+            findings: list[AgentFinding] = []
+            lines: list[str] = []
+            changed = False
+            for c in out.critiques:
+                h = next((x for x in hyps if x.id == c.hypothesis_id), None)
+                bad = [i for i in c.evidence_ids if i not in packet.evidence_ids]
+                if h is None or c.hypothesis_id not in packet.hypothesis_ids or bad or not c.evidence_ids:
+                    run.validation_errors.append(
+                        f"dropped critique (bad hypothesis/evidence ids {bad}): {c.statement[:100]}")
+                    continue
+                lines.append(f"{h.title}: {c.verdict} — {c.statement}")
+                findings.append(AgentFinding(statement=f"{h.title}: {c.verdict} — {c.statement}",
+                                             supporting_evidence_ids=c.evidence_ids,
+                                             epistemic_status="inferred"))
+                if c.verdict == "refuted":
+                    for eid in c.evidence_ids:
+                        if eid not in h.contradicting_evidence_ids:
+                            h.contradicting_evidence_ids.append(eid)
+                    note = f"Critic verdict (round {rnd}): {c.statement}"
+                    if note not in h.unknowns:
+                        h.unknowns.append(note)
+                    changed = True
+            if changed:
+                svc.store.put_many("hypothesis", hyps)
+            run.summary = "\n".join(lines) or "no critiques survived validation"
+            run.report = AgentReport(agent=AgentName.critic, investigation_id=inc.id,
+                                     scope_node_ids=packet.summary.included_node_ids, findings=findings,
+                                     unknowns=[], proposed_action_ids=[])
+        except asyncio.TimeoutError:
+            run.status, run.error = "timeout", f"no response within {s.agent_timeout_s:.0f}s"
+        except LLMInvalidOutput as e:
+            run.status, run.error = "invalid", f"output failed schema after one repair attempt: {e}"[:400]
+        except LLMUnavailable as e:
+            run.status, run.error = "failed", str(e)[:400]
+        except Exception as e:  # noqa: BLE001 — critic failure must never break the round
+            run.status, run.error = "failed", f"{type(e).__name__}: {e}"[:400]
+        run.duration_ms = int((time.perf_counter() - t0) * 1000)
+        svc.store.put(K_AGENT_RUN, run, parent_id=inc.id)
+        svc._emit("agent.reported", inc.project_id, {"agent": "critic", "status": run.status,
+                  "findings": len(run.report.findings) if run.report else 0}, investigation_id=inc.id)
+        return run
+
     async def _synthesize(self, inc: Incident, rnd: int, reports: list[AgentRun]) -> AgentRun:
         """Orchestration provider (StepFun) reconciles specialist reports — or the deterministic
         evidence alone when no specialists ran — into a short explanation + one safe next check."""
@@ -286,6 +378,17 @@ class Orchestrator:
         if not reports:
             lines.append("NOTE: no specialist reports are available; synthesize only from the "
                          "deterministic rules, evidence catalog and hypotheses below.")
+
+        # Qualitative ambiguity (no probabilities per PRD §12): how many unresolved hypotheses
+        # tie at the top rank. When ambiguous, the recommendation must discriminate between them.
+        open_hyps = [h for h in hyps if h.status in (HypothesisStatus.plausible, HypothesisStatus.unverified)]
+        top_rank = min((h.rank for h in open_hyps), default=None)
+        tied = [h for h in open_hyps if h.rank == top_rank]
+        discriminating = [a for h in tied for a in h.recommended_action_ids if a in actions]
+        if len(tied) >= 2 and discriminating:
+            lines.append(f"AMBIGUITY: {len(tied)} hypotheses are tied at the top rank "
+                         f"({', '.join(h.title for h in tied)}). The recommended action MUST be one "
+                         f"that discriminates between them: {discriminating}. Say what each outcome rules out.")
         t0 = time.perf_counter()
         try:
             packet = await build_packet(svc, inc, AgentName.orchestrator, s.max_context_tokens)
@@ -302,6 +405,11 @@ class Orchestrator:
             if out.recommended_action_id not in actions:
                 run.validation_errors.append(f"recommended unknown action {out.recommended_action_id}; ignored")
                 out.recommended_action_id = ""
+            elif len(tied) >= 2 and discriminating and out.recommended_action_id not in discriminating:
+                run.validation_errors.append(
+                    f"recommended {out.recommended_action_id} does not discriminate the {len(tied)} tied "
+                    f"hypotheses; replaced with {discriminating[0]}")
+                out.recommended_action_id = discriminating[0]
             run.summary = out.summary
             if out.contradictions:
                 run.summary += "\nContradictions: " + "; ".join(out.contradictions)

@@ -18,7 +18,6 @@ import {
   type Highlight,
   type IntegreatEvent,
   type InvestigationView,
-  type Observation,
   type PermissionCategory,
   type Project,
   type SerialEvent,
@@ -27,6 +26,7 @@ import {
   type TestRun,
 } from "./lib/api";
 import { GraphView, type CanvasMode } from "./components/graph/GraphView";
+import { ViewRail } from "./components/shell/ViewRail";
 import { EventFlowView } from "./components/flow/EventFlowView";
 import { FlowPanel } from "./components/flow/FlowPanel";
 import { SelectionCard } from "./components/flow/SelectionCard";
@@ -56,7 +56,6 @@ export default function App() {
   const [source, setSource] = useState("sim:connected");
   const [expectation, setExpectation] = useState<Expectation | null>(null);
   const [run, setRun] = useState<TestRun | null>(null);
-  const [observations, setObservations] = useState<Observation[]>([]);
   const [serial, setSerial] = useState<SerialEvent[]>([]);
   const [incidentId, setIncidentId] = useState<string | null>(null);
   const [view, setView] = useState<InvestigationView | null>(null);
@@ -77,7 +76,7 @@ export default function App() {
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<DrawerTab>("angle");
+  const [drawerTab, setDrawerTab] = useState<DrawerTab>("serial");
   const [fitKey, setFitKey] = useState("init");
   const [rigSetupOpen, setRigSetupOpen] = useState(false);
   const [evidence, setEvidence] = useState<Evidence | null>(null);
@@ -118,8 +117,8 @@ export default function App() {
     const scoped = preferredScope ? await api.graph(p.id, preferredScope) : null;
     if (version !== loadVersion.current) return;
     projectRef.current = p.id;
-    setProject(p); setGraph(g); setSubsystems(subs); setEvents([]); setRun(null); runRef.current = null; setObservations([]); setSerial([]);
-    setDrawerOpen(false); setDrawerTab("angle"); setBusy(false); setBusyAction(null); setDiagnosing(false);
+    setProject(p); setGraph(g); setSubsystems(subs); setEvents([]); setRun(null); runRef.current = null; setSerial([]);
+    setDrawerOpen(false); setDrawerTab("serial"); setBusy(false); setBusyAction(null); setDiagnosing(false);
     const lastInc = fresh ? null : incs[incs.length - 1] ?? null;
     const open = lastInc;
     setExpectation(exps.find((e) => e.id === open?.expectation_id)
@@ -163,10 +162,9 @@ export default function App() {
       switch (ev.type) {
         case "test.started":
           runRef.current = ev.test_run_id ?? null;
-          setRun(p as unknown as TestRun); setObservations([]); setSerial([]); setFlowSeq((s) => s + 1);
+          setRun(p as unknown as TestRun); setSerial([]); setFlowSeq((s) => s + 1);
           break;
         case "test.observation":
-          if (ev.test_run_id === runRef.current) setObservations((o) => [...o, p as unknown as Observation]);
           setFlowSeq((s) => s + 1);
           break;
         case "test.serial":
@@ -199,7 +197,7 @@ export default function App() {
   useEffect(() => {
     let current = true;
     if (run?.state === "completed") api.test(run.id).then((d) => {
-      if (current && runRef.current === run.id) { setObservations(d.observations); setSerial(d.serial); }
+      if (current && runRef.current === run.id) { setSerial(d.serial); }
     }).catch(() => undefined);
     return () => { current = false; };
   }, [run?.id, run?.state]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -257,11 +255,11 @@ export default function App() {
     if (!project || !expectation) return;
     const pid = project.id;
     setBusy(true); incidentRef.current = null; setIncidentId(null); setView(null);
-    setDrawerTab("angle"); setDrawerOpen(true);
+    setDrawerTab("serial"); setDrawerOpen(true);
     try {
       const r = await api.startTest(pid, expectation.id, parseSource(source));
       if (projectRef.current !== pid) return;
-      runRef.current = r.id; setRun(r); setObservations([]); setSerial([]);
+      runRef.current = r.id; setRun(r); setSerial([]);
     } catch (e) { if (projectRef.current === pid) { fail(e); setBusy(false); } }
   };
 
@@ -306,7 +304,7 @@ export default function App() {
     try {
       const { result } = await api.executeAction(iid, a.id, needsSource ? parseSource(source) : undefined, approveOnce);
       if (incidentRef.current !== iid) return;
-      if (needsSource) { setDrawerTab("angle"); setDrawerOpen(true); }
+      if (needsSource) { setDrawerTab("serial"); setDrawerOpen(true); }
       if (result.source_excerpts.length) setInspect(result);
       else if (result.node_ids.length) { revealNodes(result.node_ids, true); notify(result.summary); }
       else if (a.kind === "run_readonly_tool") setToolOutput(result);
@@ -398,6 +396,11 @@ export default function App() {
                   onProjects={() => { store.set(LAST_PROJECT, null); ++loadVersion.current; projectRef.current = null; incidentRef.current = null; runRef.current = null; setIncidentId(null); setProject(null); setGraph(null); setView(null); setRun(null); setExpectation(null); setBusy(false); setBusyAction(null); setDiagnosing(false); }} />
         </LayoutHeader>
       }
+      start={
+        <LayoutPanel hasDivider width={150} label="Views" padding={2}>
+          <ViewRail mode={mode} layer={layer} onMode={setMode} onLayer={setLayer} />
+        </LayoutPanel>
+      }
       end={
         <LayoutPanel hasDivider width={420} label="Debugging steps" padding={4}>
           <VStack gap={4}>
@@ -410,7 +413,7 @@ export default function App() {
                        onReveal={(ids) => revealNodes(ids, true)}
                        onEvidence={showEvidence} onOpenDevices={() => setRigSetupOpen(true)}
                        projectReview={<ProjectReview project={project} graph={graph} onConnection={setSelectedEdgeIds} />}
-                       onNewTest={() => { incidentRef.current = null; runRef.current = null; setIncidentId(null); setView(null); setRun(null); setObservations([]); setSerial([]); }}
+                       onNewTest={() => { incidentRef.current = null; runRef.current = null; setIncidentId(null); setView(null); setRun(null); setSerial([]); }}
                        onError={(m) => fail(m)} />
           </VStack>
         </LayoutPanel>
@@ -421,12 +424,12 @@ export default function App() {
             {mode === "flow" ? (
               <EventFlowView runs={runs} runId={run?.id ?? runs[runs.length - 1]?.id ?? null}
                              onRunChange={(id) => { const r = runs.find((x) => x.id === id); if (r) { runRef.current = id; setRun(r); } }}
-                             layer={layer} mode={mode} onMode={setMode} onLayer={setLayer} refreshSeq={flowSeq}
+                             layer={layer} refreshSeq={flowSeq}
                              onSelectNode={(id) => { setMode("deps"); revealNodes([id], true); }}
                              onEvidence={showEvidence} />
             ) : (
             <GraphView graph={graph} expanded={expanded} highlights={highlights} focusIds={focusIds}
-                       layer={layer} mode={mode} onMode={setMode} onLayer={setLayer}
+                       layer={layer} onLayer={setLayer}
                        selectedId={selectedId ?? graph.nodes.find((n) => evidence && n.evidence_ids.includes(evidence.id))?.id ?? null} onToggle={toggle}
                        onSelect={(id) => { setSelectedId(id); setSelectedEdgeIds([]); }}
                        onEdgeSelect={(ids) => { setSelectedEdgeIds(ids); setSelectedId(null); }}
@@ -437,7 +440,7 @@ export default function App() {
             )}
           </LayoutContent>} footer={<LayoutFooter hasDivider padding={0}>
             <BottomDrawer open={drawerOpen} onOpen={setDrawerOpen} tab={drawerTab} onTab={setDrawerTab} run={run}
-                          observations={observations} serial={serial} expectation={expectation} events={events}
+                          serial={serial} events={events}
                           toolCalls={view?.tool_calls ?? []} devices={devices}
                           onRigSetup={() => setRigSetupOpen(true)}
                           onSaveReplay={saveReplay} onError={(m) => fail(m)} />

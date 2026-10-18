@@ -34,6 +34,9 @@ if (onImport) {
 }
 await page.waitForSelector(".graph-canvas", { timeout: 20000 });
 log("graph canvas rendered");
+const railLabels = await page.evaluate(() => ["Map", "Timeline", "All", "Hardware", "Software"]
+  .filter((t) => document.body.innerText.includes(t)));
+log(`view rail labels visible: ${railLabels.join(", ") || "NONE"}`);
 await shot("01-combined-1280");
 
 // ---- layer selector ---------------------------------------------------------------
@@ -52,7 +55,7 @@ const boundary = await page.locator(".gn.boundary").count();
 log(`software layer: ${swNodes} code nodes, ${boundary} boundary refs`);
 await shot("03-software-layer");
 
-await page.getByText("Combined", { exact: true }).first().click();
+await page.getByText("All", { exact: true }).first().click();
 await page.waitForTimeout(700);
 const regions = await page.locator(".graph-region").count();
 const edgeLabels = await page.locator(".react-flow__edge-text").allTextContents();
@@ -72,7 +75,7 @@ const runBtn = page.locator("button").filter({ hasText: /Run test|Run again/ }).
 log("run button visible:", await runBtn.isVisible().catch(() => false));
 if (await runBtn.isVisible().catch(() => false)) {
   await runBtn.click();
-  await page.waitForSelector("text=Collecting measurements, text=Leading hypothesis, text=Possible causes, text=passed", { timeout: 20000 }).catch(() => log("run did not reach a result state in 20s"));
+  await page.waitForSelector("text=Collecting measurements, text=Leading hypothesis, text=Possible causes, text=passed", { timeout: 90000 }).catch(() => log("run did not reach a result state in 90s"));
   await page.waitForTimeout(1500);
 }
 await shot("05-after-run");
@@ -86,7 +89,7 @@ const closeAnyDialog = async () => {
 };
 
 // ---- event flow view ---------------------------------------------------------------
-await page.getByText("Event flow", { exact: true }).first().click();
+await page.getByText("Timeline", { exact: true }).first().click();
 await page.waitForTimeout(1200);
 const fevCount = await page.locator(".fev").count();
 const lanes = await page.locator(".lane-row").count();

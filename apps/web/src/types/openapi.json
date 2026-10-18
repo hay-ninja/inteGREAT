@@ -1908,6 +1908,9 @@
      "orchestrator",
      "code",
      "hardware",
+     "telemetry",
+     "vision",
+     "critic",
      "runtime_vision"
     ],
     "title": "AgentName"
@@ -2247,6 +2250,63 @@
      "last_error"
     ],
     "title": "CameraStatus"
+   },
+   "CausalStep": {
+    "properties": {
+     "key": {
+      "type": "string",
+      "title": "Key"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "value": {
+      "type": "string",
+      "enum": [
+       "yes",
+       "no",
+       "unknown",
+       "unmeasured"
+      ],
+      "title": "Value"
+     },
+     "inferred": {
+      "type": "boolean",
+      "title": "Inferred",
+      "default": false
+     },
+     "evidence_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Evidence Ids"
+     },
+     "breaks_if": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Breaks If"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "key",
+     "label",
+     "value",
+     "inferred",
+     "evidence_ids",
+     "breaks_if"
+    ],
+    "title": "CausalStep",
+    "description": "One link in the fixed cyber-physical causal chain for a run (diagnostics/causal.py)."
    },
    "ContextPacketSummary": {
     "properties": {
@@ -2700,7 +2760,8 @@
      "cv_measurement",
      "tool_output",
      "engineer_assertion",
-     "rule_result"
+     "rule_result",
+     "shadow_residual"
     ],
     "title": "EvidenceKind"
    },
@@ -4016,6 +4077,13 @@
       },
       "type": "array",
       "title": "Repair Jobs"
+     },
+     "causal_chain": {
+      "items": {
+       "$ref": "#/components/schemas/CausalStep"
+      },
+      "type": "array",
+      "title": "Causal Chain"
      }
     },
     "additionalProperties": false,
@@ -4032,7 +4100,8 @@
      "tool_calls",
      "messages",
      "agent_runs",
-     "repair_jobs"
+     "repair_jobs",
+     "causal_chain"
     ],
     "title": "InvestigationView"
    },

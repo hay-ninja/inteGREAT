@@ -2,7 +2,7 @@
 
 > Update this at the end of every verifiable slice. Keep it short; history lives in git, intent in `decisions.md`.
 
-**Last updated:** 2026-10-18 · **Current milestone:** layer views + Event Flow + StepFun routing + Devin repair implemented (D-023–D-025); **live hardware (H0/M5/M7) and real model/Devin calls remain outstanding (no API keys configured)**
+**Last updated:** 2026-10-18 · **Current milestone:** DSG/agent architecture implemented on `feature/dsg-agent-arch` (D-028–D-031): angle plot removed, metric-keyed graph write-back, SimRig digital shadow + fault estimation, 4-agent roster + deterministic refutation, causal chain. **Live hardware (H0/M5/M7) still outstanding.**
 
 **Hackathon:** LA Hacks AI Hackathon (Oct 17–18), targeting **Beyond the Digital** and relevant company
 challenges. See [hackathon context](hackathon-context.md) for supplied requirements and candidate fit;
@@ -22,8 +22,8 @@ this adds context without changing P0 scope.
 | M7 | Reliability | partial: save-as-replay, hardware guide, demo script, markers script done; 3 live runs + real recordings need the rig |
 | M8 | Expansion: graph layers (D-023), Event Flow (D-024), StepFun orchestration + Devin repair (D-025) | **done in software** — real adapters + deterministic fallbacks tested; **live StepFun/Gemini/Devin calls blocked: no API keys** |
 
-## What works now (verified 2026-10-18)
-- **Tests:** 100 backend (pytest) + 17 frontend (vitest) passing; `tsc -b` clean; production build passing.
+## What works now (verified 2026-10-18, `feature/dsg-agent-arch`)
+- **Tests:** 109 backend (pytest) + 17 frontend (vitest) passing; `tsc -b` clean; production build passing.
 - **Browser-verified via headless Chromium walkthrough** (`apps/web/ui_walkthrough.mjs`, simulated data):
   Fault A demo import → combined graph with Software/Hardware regions, verb edge labels
   ("configures pin", "connected to · verified"), conflict highlights → Hardware layer (6 hw nodes,
@@ -117,6 +117,33 @@ this adds context without changing P0 scope.
   (project/subsystem) from the live-rig status zone. Canvas header carries a "Graph view" title.
   Home screen: each of the three sections gets a real heading, and clicking a demo or recent
   project opens a context modal ("what happens when you open it") before loading.
+
+## DSG agent architecture (D-028–D-031) — done on `feature/dsg-agent-arch`, 2026-10-18
+Plan: [dsg-agent-architecture.md](dsg-agent-architecture.md). The graph is now a state overlay,
+not just a structural prior; SimRig doubles as a digital shadow queried diagnostically.
+- **Angle demoted (D-028):** the "Arm angle" plot tab is gone from the drawer; default tab is
+  Serial. CV evidence/observations unchanged — angle lives in agent/diagnostic logic only.
+  After each run, `graph_state.record_run_state` writes metric-keyed `obs_*` attributes +
+  `traversal` (`observed`/`unobserved`, evidence-cited) back onto graph nodes/edges; ids are
+  deterministic so state re-applies after rescan. `moveServoTo` shows observed (prints ACK),
+  `servoSetup` stays unobserved — traversal follows evidence, never assumption.
+- **Digital shadow + estimation (D-029):** `shadow.py` predicts the nominal run from graph +
+  expectation and emits `shadow_residual` evidence (epistemic=inferred, labelled "model" in UI).
+  `estimate.py` sweeps the SimRig fault knobs and reports which θ reproduces the observed
+  signature. Diagnosis-as-parameter-estimation with zero API keys.
+- **Roster + refutation (D-029/D-030):** `runtime_vision` split into `telemetry` + `vision`
+  (4 specialists; `runtime_vision` kept only so old AgentRuns deserialize). New `critic`
+  pseudo-agent gives optional adversarial commentary — but `_refute` checks each top hypothesis
+  by **shadow consistency first**, executable and authoritative over prose. When ≥2 hypotheses
+  tie at top rank, synthesis must recommend the discriminating action (qualitative ambiguity,
+  no probabilities per PRD §12).
+- **Causal chain (D-031):** `causal.py` builds command→ACK→signal→motion→feedback per incident,
+  rendered under the facts in the Debug chapter (deduced links say so; "unmeasured" stays
+  honest). Counterfactuals are shadow interventions (`do(signal=connected)`) attached to the
+  leading hypothesis as model-level statements.
+- Tests added in `tests/test_shadow.py`: graph write-back split, shadow residual for every
+  sim fault scenario, θ-estimation recovers injected fault, refute/causal paths, legacy
+  `runtime_vision` run deserialization.
 
 ## Live provider validation (2026-10-18) — verified
 - `stepfun_smoke.py`: step-5-preview triage OK (~8s). `gemini_smoke.py`: OK after model update —

@@ -18,6 +18,7 @@ export type Hypothesis = S["Hypothesis"];
 export type DiagnosticAction = S["DiagnosticAction"];
 export type Evidence = S["Evidence"];
 export type Highlight = S["Highlight"];
+export type CausalStep = S["CausalStep"];
 export type ActionResult = S["ActionResult"];
 export type ReplayInfo = S["ReplayInfo"];
 export type DemoFixture = S["DemoFixture"];
