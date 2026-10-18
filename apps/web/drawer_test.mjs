@@ -45,7 +45,7 @@ await page.waitForTimeout(500);
 const divider = page.locator('[role="separator"][aria-label="Resize split pane"]');
 log("split divider:", await divider.isVisible().catch(() => false));
 log("right pane tabs:", await page.getByRole("button", { name: "Activity", exact: true }).count() >= 1
-                    && await page.getByRole("button", { name: "Board messages", exact: true }).count() >= 1);
+                    && await page.getByRole("button", { name: "Serial output", exact: true }).count() >= 1);
 await page.screenshot({ path: `${shots}/d02-split.png` });
 
 // drag divider left → right pane grows

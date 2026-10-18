@@ -379,3 +379,6 @@ What remains is hardware validation.
 - Verified: `tsc -b` clean, 17/17 vitest, build clean; headless drag test grew the
   drawer +160px, moved the split divider ~200px, drag-closed both split and drawer,
   reopened via tab; live camera feed rendered in the Camera pane; zero console errors.
+- Polish: "Board messages" → "Serial output"; 16px grip spacer under the resize
+  handle so its 15px hitbox can't eat tab/button clicks; open/close is a chevron
+  IconButton (VS Code panel chrome).

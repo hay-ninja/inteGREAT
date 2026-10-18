@@ -611,3 +611,8 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   tab set (left uses the header TabList, right its own), the divider drags via a
   horizontal `useResizable`, and dragging it to the right edge closes the split
   (`collapsible` → controlled `split` state), matching "drag it back".
+- Follow-up polish (same day): "Board messages" renamed "Serial output". The resize
+  handle's invisible hitbox extends ~15px below its 1px line and was eating the top
+  half of tab/button clicks — a fixed 16px grip spacer now absorbs it (the pill grip
+  sits in that zone, like VS Code's panel sash). Text open/close buttons became
+  chevron IconButtons (collapse/expand), matching the VS Code panel chrome.

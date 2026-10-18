@@ -7,7 +7,7 @@ import { VStack } from "@astryxdesign/core/VStack";
 import { TabList, Tab } from "@astryxdesign/core/TabList";
 import { Button } from "@astryxdesign/core/Button";
 import { IconButton } from "@astryxdesign/core/IconButton";
-import { SquareSplitHorizontal, X } from "lucide-react";
+import { ChevronDown, ChevronUp, SquareSplitHorizontal, X } from "lucide-react";
 import { useResizable, ResizeHandle } from "@astryxdesign/core/Resizable";
 import { Text } from "@astryxdesign/core/Text";
 import { Table, pixel } from "@astryxdesign/core/Table";
@@ -30,7 +30,7 @@ import { Eyebrow, SourceBadge } from "../flow/common";
 export type DrawerTab = "serial" | "devices" | "activity" | "camera";
 
 const TAB_LABEL: Record<DrawerTab, string> = {
-  serial: "Board messages",
+  serial: "Serial output",
   devices: "Devices",
   activity: "Activity",
   camera: "Camera",
@@ -103,6 +103,9 @@ export function BottomDrawer(p: Props) {
   return (
     <VStack gap={0} height={p.open ? drawer.size : undefined}>
       <ResizeHandle direction="vertical" isReversed hasDivider resizable={drawer.props} label="Resize logs panel" />
+      {/* The handle's invisible hitbox extends ~15px below its 1px line — this grip zone
+          absorbs it so tabs and buttons stay fully clickable (VS Code sash behaviour). */}
+      <div aria-hidden style={{ height: 16 }} />
       <HStack hAlign="between" vAlign="center" gap={2} paddingInline={2} wrap="wrap">
         <DrawerTabs value={p.tab} onChange={(t) => { p.onTab(t); p.onOpen(true); }} />
         <HStack gap={1} vAlign="center">
@@ -114,7 +117,10 @@ export function BottomDrawer(p: Props) {
           <IconButton label={split ? "Close split view" : "Split into two panes"} size="sm" variant="ghost"
                       tooltip={split ? "Back to one pane" : "Show two panels side by side — e.g. camera next to activity"}
                       icon={<SquareSplitHorizontal size={14} />} onClick={() => (split ? setSplit(false) : openSplit())} />
-          <Button label={p.open ? "Focus graph" : "Show logs"} size="sm" variant="ghost" onClick={() => p.onOpen(!p.open)} />
+          <IconButton label={p.open ? "Collapse panel" : "Expand panel"} size="sm" variant="ghost"
+                      tooltip={p.open ? "Collapse to the tab row" : "Expand the panel"}
+                      icon={p.open ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+                      onClick={() => p.onOpen(!p.open)} />
         </HStack>
       </HStack>
       {p.open && !split && (
