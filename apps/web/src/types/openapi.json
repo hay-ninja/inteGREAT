@@ -2181,14 +2181,25 @@
       "type": "integer",
       "maximum": 16.0,
       "minimum": 0.0,
-      "title": "Index"
+      "title": "Index",
+      "default": 0
+     },
+     "stream_url": {
+      "anyOf": [
+       {
+        "type": "string",
+        "maxLength": 512,
+        "minLength": 1
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stream Url"
      }
     },
     "additionalProperties": false,
     "type": "object",
-    "required": [
-     "index"
-    ],
     "title": "CameraConnectRequest"
    },
    "CameraStatus": {

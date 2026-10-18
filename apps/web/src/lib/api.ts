@@ -102,6 +102,7 @@ export const api = {
   serialRelease: () => req<DeviceStatus>("POST", "/devices/serial/release"),
   cameraProbe: () => req<number[]>("GET", "/devices/camera/probe"),
   cameraConnect: (index: number) => req<DeviceStatus>("POST", "/devices/camera/connect", { index }),
+  cameraConnectPhone: (stream_url: string) => req<DeviceStatus>("POST", "/devices/camera/connect", { stream_url }),
   cameraRelease: () => req<DeviceStatus>("POST", "/devices/camera/release"),
   cameraCalibrate: (known_angle_deg: number) => req<DeviceStatus>("POST", "/devices/camera/calibrate", { known_angle_deg }),
   graph: (pid: string, scope?: string) =>

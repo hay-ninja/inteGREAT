@@ -1,5 +1,12 @@
 # Decision log
 
+### D-034 Two-LED bench sketch while preparing alternate demo — 2026-10-18
+- Owner has two external LEDs on GPIO18/19 and requested alternating fades; added standalone
+  Arduino firmware using analogWrite, with no inteGREAT instrumentation or app changes.
+- This supports bench bring-up; it does not satisfy or replace the PRD servo-angle acceptance
+  criteria. An LED-based app investigation still needs explicitly adapted contracts/observations.
+- Each LED requires its own series resistor. Hardware operation is unverified.
+
 Append-only. Each entry: what, why, what it rules out, and when to revisit. Supersede, don't edit:
 mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — the code shows what, this shows why.
 
@@ -365,3 +372,16 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
 - New `LandingScreen` before the import screen: product story, why, 3-step how-it-
   works, feature grid, and an "Open the workspace" CTA. The logo/home button now
   returns there. Intended to give judges/evaluators context on a live deployment.
+
+### D-035 Phone camera via explicit LAN HTTP MJPEG source — 2026-10-18
+- Owner requested a phone camera while keeping the laptop usable. Rig setup accepts an
+  explicit HTTP MJPEG URL from a phone camera app; no phone browser camera permissions,
+  HTTPS hosting, public tunnel, or platform-specific virtual webcam driver is required.
+- CameraSource receives frames with host receive timestamps; preview and existing ArUco
+  estimation reuse that interface. A fresh source ID requires calibration after reconnect.
+- Restrict URLs to literal RFC1918 IPv4; refuse credentials/query/fragment, redirects,
+  environment proxies, and non-HTTP schemes. Compressed buffers are capped, reads time out,
+  stale frames are unavailable after 5 seconds, and reconnection is explicit.
+- Camera transport does not implement LED brightness evaluation or change servo acceptance
+  criteria. Real phone/app interoperability remains to be verified on the owner's LAN.
+- Local LED notes were renumbered D-034 after the pull introduced upstream D-028–D-033.

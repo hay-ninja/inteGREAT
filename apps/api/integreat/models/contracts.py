@@ -849,7 +849,8 @@ class SerialConnectRequest(Model):
 
 
 class CameraConnectRequest(Model):
-    index: int = Field(ge=0, le=16)
+    index: int = Field(default=0, ge=0, le=16)
+    stream_url: str | None = Field(default=None, min_length=1, max_length=512)
 
 
 class CalibrateRequest(Model):

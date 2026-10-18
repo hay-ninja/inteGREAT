@@ -180,6 +180,15 @@ not just a structural prior; SimRig doubles as a digital shadow queried diagnost
   output budget raised to 8192 and the orchestrator got `INTEGREAT_ORCHESTRATOR_TIMEOUT_S` (120).
 
 ## Next (in order)
+LED bench preparation (2026-10-18): added `fixtures/esp32_led_fade/esp32_led_fade.ino`
+and `fixtures/manifests/esp32_led_fade.yaml` (two LEDs, two assumed 330-ohm series resistors,
+no B10K; all wiring unverified). Manifest reviewed against the schema; runtime validation
+unavailable locally because the venv is absent and the Python launcher is inaccessible.
+The sketch drives two external LEDs on GPIO18/19, each fading up/down in turn. Source reviewed against
+Arduino-ESP32 analogWrite documentation; not compiled (arduino-cli unavailable), flashed,
+or hardware-verified. App expectations and adapters still target servo angles; this sketch
+alone does not implement an LED investigation flow (D-034).
+
 Portable handoff: [AI context brief](ai-context-brief.md) summarizes features, architecture, UX goals,
 and the later live-provider validation status separately from outstanding hardware checks.
 
@@ -227,3 +236,15 @@ What remains is hardware validation.
 - Re-verified: `tsc -b` clean; headless walkthrough updated for the landing step —
   rail labels, layers, timeline, Activity, Devices→setup, repair dialog all pass;
   zero console errors; no 800px overflow.
+
+## Phone camera input — 2026-10-18 (D-035)
+- Pulled main through `2319948`, preserving the local LED sketch/manifest/notes.
+- Rig setup now offers Phone / network camera with an HTTP MJPEG URL. Bounded LAN stream
+  adapter feeds existing preview and CV; timeout/errors/release are supported, stale frames
+  become unavailable, and invalid/redirect/public/credential URLs are refused.
+- Setup guide: `docs/phone-camera.md`. Phone app must serve MJPEG on the same trusted LAN.
+- Frontend typecheck, 17 frontend tests, and production build pass. Backend regression:
+  126 passed; two subsequently added API connect/preview/release tests also pass
+  (19 phone-camera tests total). Only the dependency's Starlette/httpx deprecation warning.
+- No real phone camera tested. LED brightness evaluation remains unimplemented; live test
+  readiness/calibration still follows the servo-marker contract.

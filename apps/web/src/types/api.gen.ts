@@ -918,8 +918,13 @@ export interface components {
         };
         /** CameraConnectRequest */
         CameraConnectRequest: {
-            /** Index */
+            /**
+             * Index
+             * @default 0
+             */
             index: number;
+            /** Stream Url */
+            stream_url?: string | null;
         };
         /** CameraStatus */
         CameraStatus: {

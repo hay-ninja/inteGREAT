@@ -125,6 +125,12 @@ class CameraManager:
         self.release()
         self.source = OpenCVCamera(index)
 
+    def connect_phone(self, url: str) -> None:
+        from .network_camera import NetworkCamera
+        candidate = NetworkCamera(url)
+        self.release()
+        self.source = candidate
+
     def release(self) -> None:
         if self.source is not None:
             self.source.release()

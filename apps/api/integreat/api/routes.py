@@ -352,7 +352,10 @@ async def camera_probe():
 async def camera_connect(req: CameraConnectRequest, request: Request):
     d = svc(request).devices
     try:
-        await asyncio.to_thread(d.camera.connect, req.index)
+        if req.stream_url is not None:
+            await asyncio.to_thread(d.camera.connect_phone, req.stream_url)
+        else:
+            await asyncio.to_thread(d.camera.connect, req.index)
     except CameraError as e:
         raise ServiceError(409, "camera_error", str(e)) from e
     return d.status()
