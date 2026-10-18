@@ -18,6 +18,7 @@ import { TextInput } from "@astryxdesign/core/TextInput";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { Switch } from "@astryxdesign/core/Switch";
 import { Spinner } from "@astryxdesign/core/Spinner";
+import { TabList, Tab } from "@astryxdesign/core/TabList";
 import {
   api,
   type AgentStatus,
@@ -253,6 +254,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
   const { view } = p;
+  const [tab, setTab] = useState<"overview" | "causes" | "ai">("overview");
   const evById = new Map(view.evidence.map((e) => [e.id, e]));
   const [top] = view.hypotheses;
   const primary = nextCheck(view);
@@ -280,9 +282,6 @@ function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
     : [];
   return (
     <VStack gap={3}>
-      {failedVerify?.result && failedVerify.result.outcome !== "pass" && (
-        <Notice tone="warning" title={failedVerify.result.outcome === "inconclusive" ? "Fix not yet verified — measurement unavailable" : "The repair did not pass verification"} />
-      )}
       <VStack gap={1}>
         <Eyebrow num="03">Debug — the incident</Eyebrow>
         <HStack hAlign="between" vAlign="center" wrap="wrap">
@@ -292,17 +291,42 @@ function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
         {result && <Text type="supporting">{result.final_valid_value == null ? "No valid measurement is available." : p.expectation?.unit === "state" ? `Expected ${noun(p.expectation)} ${p.expectation?.target === 1 ? "on" : "off"}, camera saw ${result.final_valid_value === 1 ? "on" : "off"}` : `Expected ${noun(p.expectation)} at ${p.expectation?.target ?? "?"}° ± ${p.expectation?.tolerance ?? "?"}°, camera measured ${result.final_valid_value.toFixed(1)}°`}</Text>}
         {result && inPlainTerms(result, p.expectation) && <Text type="body" color="secondary">{inPlainTerms(result, p.expectation)}</Text>}
       </VStack>
-      {result && <Facts result={result} />}
-      {view.causal_chain.length > 0 && <CausalChain steps={view.causal_chain} />}
-      <Divider />
 
-      {result?.outcome === "pass" ? (
-        <VStack gap={2}>
-          <Text type="body">The latest repeat meets the expectation. Run verification to close this incident with a passing verification record.</Text>
-          <VerifyLauncher {...p} label="Verify this result" emphasis="primary" />
-          <EvidenceList title="Latest result" ids={[result.evidence_id]} evById={evById} onInspect={p.onEvidence} />
+      <TabList role="tablist" value={tab} onChange={(v) => setTab(v as typeof tab)} size="sm" hasDivider>
+        <Tab value="overview" label="Overview" panelId="dbg-overview" />
+        <Tab value="causes" label="Potential causes" panelId="dbg-causes"
+             endContent={view.hypotheses.length ? <Text type="supporting">{view.hypotheses.length}</Text> : undefined} />
+        <Tab value="ai" label="AI analysis" panelId="dbg-ai" />
+      </TabList>
+
+      {/* Panels stay mounted (hidden, not unmounted) so the primary action keeps
+          working from Space and collapsible state survives tab switches. */}
+      <div id="dbg-overview" role="tabpanel" hidden={tab !== "overview"}>
+        <VStack gap={3}>
+          {failedVerify?.result && failedVerify.result.outcome !== "pass" && (
+            <Notice tone="warning" title={failedVerify.result.outcome === "inconclusive" ? "Fix not yet verified — measurement unavailable" : "The repair did not pass verification"} />
+          )}
+          {result && <Facts result={result} />}
+          {view.causal_chain.length > 0 && (
+            <Collapsible defaultIsOpen={false} trigger={<Text type="supporting">The full evidence chain ({view.causal_chain.length} steps)</Text>}>
+              <CausalChain steps={view.causal_chain} />
+            </Collapsible>
+          )}
+          {result?.outcome === "pass" && (
+            <VStack gap={2}>
+              <Text type="body">The latest repeat meets the expectation. Run verification to close this incident with a passing verification record.</Text>
+              <VerifyLauncher {...p} label="Verify this result" emphasis="primary" />
+              <EvidenceList title="Latest result" ids={[result.evidence_id]} evById={evById} onInspect={p.onEvidence} />
+            </VStack>
+          )}
         </VStack>
-      ) : top ? (
+      </div>
+
+      <div id="dbg-causes" role="tabpanel" hidden={tab !== "causes"}>
+        <VStack gap={3}>
+          {result?.outcome === "pass" ? (
+            <Notice tone="success" title="Latest repeat passed" body="No open causes to rank — verify to close the incident." />
+          ) : top ? (
           <VStack gap={2}>
             <HStack hAlign="between" vAlign="center">
               <Eyebrow>{top.fault_code === "CAMERA_MEASUREMENT_UNAVAILABLE" ? "Observation issue" : tied.length > 1 ? "Possible causes · tied" : "Leading hypothesis"}</Eyebrow>
@@ -353,30 +377,34 @@ function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
               </VStack>
             </Collapsible>
           </VStack>
-      ) : (
-        <Notice tone="neutral" title="No rule matched" body="Evidence is not enough to rank causes. Try a manual check or ask the agents." />
-      )}
+          ) : (
+            <Notice tone="neutral" title="No rule matched" body="Evidence is not enough to rank causes. Try a manual check or ask the agents." />
+          )}
+          {!checkDone && result?.outcome !== "pass" && <VerifyLauncher {...p} label="I made a repair — verify it" emphasis="secondary" />}
+          {view.hypotheses.length > 1 && (
+            <Collapsible defaultIsOpen={false} trigger={<Text type="label">All hypotheses ({view.hypotheses.length})</Text>}>
+              <VStack gap={2}>
+                {view.hypotheses.map((h) => <OtherHypothesis key={h.id} h={h} {...p} />)}
+              </VStack>
+            </Collapsible>
+          )}
+        </VStack>
+      </div>
 
-      {view.incident.agent_summary && (
-        <Card padding={3} variant="muted">
-          <VStack gap={1}>
-            <Eyebrow>AI agents (inference, not measurement)</Eyebrow>
-            <Text type="body">{view.incident.agent_summary}</Text>
-          </VStack>
-        </Card>
-      )}
-
-      {!checkDone && <VerifyLauncher {...p} label="I made a repair — verify it" emphasis="secondary" />}
-      <AIReview {...p} />
-
-      {view.hypotheses.length > 1 && (
-        <Collapsible defaultIsOpen={false} trigger={<Text type="label">All hypotheses ({view.hypotheses.length})</Text>}>
-          <VStack gap={2}>
-            {view.hypotheses.map((h) => <OtherHypothesis key={h.id} h={h} {...p} />)}
-          </VStack>
-        </Collapsible>
-      )}
-      <MoreTools {...p} />
+      <div id="dbg-ai" role="tabpanel" hidden={tab !== "ai"}>
+        <VStack gap={3}>
+          {view.incident.agent_summary && (
+            <Card padding={3} variant="muted">
+              <VStack gap={1}>
+                <Eyebrow>AI agents (inference, not measurement)</Eyebrow>
+                <Text type="body">{view.incident.agent_summary}</Text>
+              </VStack>
+            </Card>
+          )}
+          <AIReview {...p} />
+          <MoreTools {...p} />
+        </VStack>
+      </div>
     </VStack>
   );
 }

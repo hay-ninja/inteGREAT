@@ -467,3 +467,16 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
 - 404 semantics split: a 404 on *create* = org/config error (`DevinUnavailable` with the
   response body surfaced, secrets redacted); a 404 on *poll* = `SessionGone` → the job
   fails cleanly so the engineer can retry instead of hanging on a dead session.
+
+### D-039 Debug chapter split into Overview / Potential causes / AI analysis — 2026-10-18
+- User asked for clickable tabs because the incident step had become a scroll of facts,
+  chain, hypotheses, evidence, AI review, and tools. `InvestigateStep` now renders an
+  Astryx `TabList` (`role="tablist"`) under the incident heading: **Overview** (the
+  run story — badge, expected-vs-measured, "In short", facts, collapsed evidence chain,
+  pass-state verify), **Potential causes** (leading hypothesis card, suggested check,
+  alternatives, all-hypotheses list, count badge on the tab), **AI analysis** (agent
+  summary, AI evidence review, more tools/permissions).
+- Panels stay mounted with `hidden` rather than unmounting: the `.flow-primary` Space
+  shortcut still reaches the suggested check from any tab, and Collapsible open state
+  survives switching. The causal chain moved behind a collapsible since it largely
+  restates the three headline facts.

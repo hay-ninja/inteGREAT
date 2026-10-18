@@ -174,6 +174,13 @@ this adds context without changing P0 scope.
 - Not replayed (honest `hosted_demo` errors): real imports, netlist preview, rescan,
   save-replay, device connects, AI diagnose, repair job creation.
 
+## Debug panel tabs (D-039) — done 2026-10-18
+- Incident step split into clickable tabs (Astryx `TabList`): **Overview** (run story +
+  facts + collapsed evidence chain), **Potential causes** (hypothesis card, suggested
+  check, all-hypotheses, tab count badge), **AI analysis** (agent summary, AI review,
+  more tools). Panels stay mounted via `hidden` so Space/primary and collapsible state
+  are preserved. Verified headless: all three tabs render, zero console errors.
+
 ## Projects hub home (D-035) — done 2026-10-18
 - Import screen is now a Canva-style projects page: left demo rail, big `INTEGREAT`
   wordmark + tagline, "+ New project" opens the import form as a modal (fields labeled
