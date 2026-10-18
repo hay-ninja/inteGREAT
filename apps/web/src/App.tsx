@@ -405,7 +405,13 @@ export default function App() {
     scopeRef.current = sid;
     setFocusSub(sid);
     if (!project) return;
-    if (!sid) { setFocusIds(null); setFitKey(`all-${Date.now()}`); return; }
+    // A scope id that isn't a subsystem of THIS project (stale focus after switching
+    // projects, or a selector reconciling an out-of-options value) clears focus —
+    // never fire the request: the backend would rightly 404 "node not in graph".
+    if (!sid || !subsystems.some((s) => s.id === sid)) {
+      if (sid) { scopeRef.current = ""; setFocusSub(""); }
+      setFocusIds(null); setFitKey(`all-${Date.now()}`); return;
+    }
     setExpanded((e) => new Set([...e, sid]));
     try {
       const scoped = await api.graph(project.id, sid);
