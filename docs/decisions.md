@@ -365,3 +365,34 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
 - New `LandingScreen` before the import screen: product story, why, 3-step how-it-
   works, feature grid, and an "Open the workspace" CTA. The logo/home button now
   returns there. Intended to give judges/evaluators context on a live deployment.
+
+### D-034 Hosted site = replay-only demo; full app stays local — 2026-10-18
+- Deployment intent (user): the live website only needs a demo; the functional app
+  runs on the engineer's computer. So the built static site must be self-contained.
+- `scripts/capture_demo_replay.py` drives a running local API through both demo
+  stories (fault A: GPIO mismatch → inspect → verify; fault B: tied hypotheses →
+  manual check → verify) and records every request/response the frontend can
+  send into `apps/web/public/replay/demo.json` — ~90 routes + an id-keyed
+  evidence map. POST responses are keyed by a canonical SHA-1 body hash so the
+  same route can serve different bodies (sim vs replay source, approve-once).
+- `apps/web/src/lib/api.ts` probes `/api/v1/health` on boot and requires a
+  parseable `{ok:true}` JSON — static hosts that SPA-rewrite to a 200 index.html
+  do not count as a backend. Unreachable → the bundle is fetched and every `req`
+  is served from it (`replayReq`). Anything not recorded gets an honest
+  `hosted_demo` ApiError ("download inteGREAT locally for this action") instead
+  of silently returning wrong data.
+- The websocket is replaced by synthesized `IntegreatEvent`s (`replaySubs`):
+  `test.started/serial/observation/completed` are emitted from the recorded run
+  detail, `action.completed` and `incident.resolved` from execute POSTs, so the
+  app's normal event handlers drive busy/serial/incident state unchanged.
+- Incident views are state-gated: the plain `GET /investigations/{iid}` route
+  returns the *open* view; a `...#resolved` sibling route is served only after a
+  verify_fix execute whose body hash is listed in the bundle's `resolves` map —
+  the open → verify → resolved arc stays intact for judges.
+- Provenance unchanged: run results still carry `SourceBadge` ("Simulated ·
+  connected", "Synthetic replay · good") and a "Hosted demo" banner is shown on
+  the landing/import screens. Nothing replayed is presented as live hardware.
+- Rejected alternatives: hosting the FastAPI backend (works, but adds ops cost
+  and turns a judge-clickable URL into a service to babysit); Pyodide/WASM
+  backend (slow, fragile); a second fake implementation (duplicate code to keep
+  honest).

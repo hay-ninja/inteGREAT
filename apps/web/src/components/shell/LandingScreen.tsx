@@ -9,7 +9,7 @@ import { Text } from "@astryxdesign/core/Text";
 import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
 import { Grid } from "@astryxdesign/core/Grid";
-import { Eyebrow } from "../flow/common";
+import { Eyebrow, HostedDemoBanner } from "../flow/common";
 
 const STEPS = [
   { n: "1", title: "Map it", body: "Point inteGREAT at your ESP32 project. It reads the code and your wiring notes, then draws a map of what depends on what — modules, pins, parts, power." },
@@ -38,6 +38,7 @@ export function LandingScreen({ onEnter }: { onEnter: () => void }) {
     } content={
       <LayoutContent>
         <VStack gap={8} paddingBlock={10}>
+          <HostedDemoBanner />
           <VStack gap={3} maxWidth={760}>
             <Eyebrow>Graph-first debugging for physical projects</Eyebrow>
             <Heading level={1} type="display-1">Your code said move the servo. The arm didn't move. Now what?</Heading>

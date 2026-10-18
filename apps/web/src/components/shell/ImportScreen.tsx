@@ -14,7 +14,7 @@ import { Grid } from "@astryxdesign/core/Grid";
 import { ClickableCard } from "@astryxdesign/core/ClickableCard";
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
 import { api, type DemoFixture, type NetlistPreview, type Project } from "../../lib/api";
-import { Eyebrow } from "../flow/common";
+import { Eyebrow, HostedDemoBanner } from "../flow/common";
 
 type Mapping = {
   mcu_ref: string;
@@ -70,6 +70,7 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
     <Layout contentWidth={1040} content={
       <LayoutContent>
         <VStack gap={6} paddingBlock={8}>
+          <HostedDemoBanner />
           <VStack gap={2} maxWidth={720}>
             <Eyebrow>Graph-first hardware debugging</Eyebrow>
             <Heading level={1} type="display-1">Why isn't your hardware doing what the code says?</Heading>

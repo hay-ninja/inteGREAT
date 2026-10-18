@@ -5,7 +5,9 @@ import { Text } from "@astryxdesign/core/Text";
 import { StatusDot } from "@astryxdesign/core/StatusDot";
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Selector } from "@astryxdesign/core/Selector";
-import type { CausalStep, Evidence, ExpectationResult, SourceOptions, TestRun } from "../../lib/api";
+import { useEffect, useState } from "react";
+import { Banner } from "@astryxdesign/core/Banner";
+import { apiMode, type CausalStep, type Evidence, type ExpectationResult, type SourceOptions, type TestRun } from "../../lib/api";
 
 
 const KIND_LABEL: Record<string, string> = {
@@ -77,6 +79,18 @@ export function CausalChain({ steps }: { steps: CausalStep[] }) {
 export function Eyebrow({ num, children }: { num?: string; children: React.ReactNode }) {
   return (
     <span className="eyebrow">{num && <span className="num">{num}</span>}{children}</span>
+  );
+}
+
+/** Shown when the static hosted build is serving the recorded demo bundle (D-034)
+    instead of a live backend — the honest "this is a replay" disclosure. */
+export function HostedDemoBanner() {
+  const [hosted, setHosted] = useState(false);
+  useEffect(() => { apiMode().then((m) => setHosted(m === "replay")); }, []);
+  if (!hosted) return null;
+  return (
+    <Banner status="info" collapsible={false} title="Hosted demo — a recorded session"
+            description="Everything here replays real captured data from a live session. Run inteGREAT locally for your own imports, live hardware, and AI review." />
   );
 }
 

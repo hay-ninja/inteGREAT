@@ -137,6 +137,32 @@ this adds context without changing P0 scope.
   overflow. The run→result wait was raised to 150s because live AI diagnosis (StepFun +
   Gemini) now runs in that window.
 
+## Hosted demo = replay bundle (D-034) — done 2026-10-18
+- Intent: the deployed site is demo-only; the full workflow runs locally. `npm run build`
+  output is now self-contained — `apps/web/public/replay/demo.json` (≈700 kB, recorded by
+  `scripts/capture_demo_replay.py` driving the real API through both demo stories) holds
+  ~90 routes + all evidence records.
+- `api.ts` probes `/api/v1/health` and requires parseable `{ok:true}` JSON (SPA fallbacks
+  returning 200 index.html don't count). No backend → replay mode: every `req` is served
+  from the bundle, unrecorded calls get an honest `hosted_demo` error. POSTs are matched
+  by canonical body hash. `subscribeProject` swaps the websocket for synthesized events
+  (`test.started/serial/observation/completed`, `action.completed`, `incident.resolved`).
+- Incident views are state-gated: `GET /investigations/{iid}` serves the open view; a
+  `#resolved` sibling is served only after the recorded passing `verify_fix` body —
+  judges see the real open → verify → resolved arc. Run POSTs fall back to the project's
+  single recorded run (badge still labels the true source).
+- UI: "Hosted demo — a recorded session" banner on landing + import; `GET /agents/status`
+  is rewritten to `available:false` with an honest reason in the bundle.
+- Verified on a plain static server (`python -m http.server` on `dist/`, no `/api`):
+  landing → banner → demo card → context modal → graph → layer switching → run →
+  incident with hypothesis + causal chain → inspect dialog → verify (replay:good) →
+  resolved Verify chapter; second demo → tied hypotheses → manual check → hypothesis
+  supported; Timeline view; no overflow at 800px. Only console noise is the expected
+  health-check 404. `apps/web/replay_test.mjs` drives the pass; rerun capture with
+  `apps/api/.venv/Scripts/python scripts/capture_demo_replay.py` (API on :8000).
+- Not replayed (honest `hosted_demo` errors): real imports, netlist preview, rescan,
+  save-replay, device connects, AI diagnose, repair job creation.
+
 ## DSG agent architecture (D-028–D-031) — done on `feature/dsg-agent-arch`, 2026-10-18
 Plan: [dsg-agent-architecture.md](dsg-agent-architecture.md). The graph is now a state overlay,
 not just a structural prior; SimRig doubles as a digital shadow queried diagnostically.

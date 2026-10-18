@@ -48,7 +48,121 @@ export class ApiError extends Error {
   }
 }
 
+// ---------------------------------------------------------------- hosted-demo replay (D-034)
+// The built static site can run without a backend: a recorded bundle of the demo
+// click-path is served from /replay/demo.json. When /api/v1/health is unreachable
+// the client switches to replay mode — canned responses for the recorded routes,
+// honest errors for anything else. Everything it returns is real recorded data;
+// the UI's Simulated/Replay labelling still applies.
+
+type ReplayBundle = {
+  routes: Record<string, unknown>;
+  evidence: Record<string, unknown>;
+  /** iid -> body hashes of verify_fix executes that resolve it (captured). */
+  resolves?: Record<string, string[]>;
+};
+let replay: ReplayBundle | null = null;
+let modePromise: Promise<"api" | "replay"> | null = null;
+// Incidents flip to their captured resolved view only after the recorded
+// passing verify_fix execute — judges see the real open → verify → resolved arc.
+const resolvedIncidents = new Set<string>();
+const replaySubs = new Set<(e: IntegreatEvent) => void>();
+let replaySeq = 0;
+
+export function apiMode(): Promise<"api" | "replay"> {
+  modePromise ??= (async () => {
+    try {
+      const r = await fetch("/api/v1/health", { signal: AbortSignal.timeout(2500) });
+      // Static hosts often SPA-rewrite unknown paths to index.html with a 200 — only
+      // a parseable health payload counts as a real backend.
+      if (r.ok) {
+        const j = await r.json().catch(() => null) as { ok?: boolean } | null;
+        if (j?.ok === true) return "api";
+      }
+    } catch { /* unreachable — try the replay bundle */ }
+    try {
+      replay = await (await fetch("/replay/demo.json")).json() as ReplayBundle;
+      return "replay";
+    } catch { replay = null; return "api"; }
+  })();
+  return modePromise;
+}
+
+export const isHostedDemo = () => replay != null;
+
+const canonical = (v: unknown): string => JSON.stringify(v, (_k, x) =>
+  x && typeof x === "object" && !Array.isArray(x)
+    ? Object.keys(x).sort().reduce((o: Record<string, unknown>, k) => (o[k] = x[k], o), {})
+    : x);
+
+async function bodyKey(method: string, path: string, body: unknown): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(canonical(body)));
+  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${method} ${path}::${hex.slice(0, 12)}`;
+}
+
+const emitReplay = (ev: Record<string, unknown>) =>
+  queueMicrotask(() => replaySubs.forEach((cb) => cb({ seq: ++replaySeq, ...ev } as IntegreatEvent)));
+
+/** Re-create the websocket lifecycle for a recorded run so busy/spinner state resolves. */
+function emitRunLifecycle(detail: { run?: TestRun; serial?: SerialEvent[]; observations?: unknown[] } | undefined, fallback?: TestRun) {
+  const run = detail?.run ?? fallback;
+  if (!run?.id) return;
+  emitReplay({ type: "test.started", test_run_id: run.id, payload: { ...run, state: "running" } });
+  for (const s of detail?.serial ?? []) emitReplay({ type: "test.serial", test_run_id: run.id, payload: s });
+  for (const o of detail?.observations ?? []) emitReplay({ type: "test.observation", test_run_id: run.id, payload: o });
+  emitReplay({ type: "test.completed", test_run_id: run.id, payload: run });
+}
+
+async function replayReq<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const bundle = replay!;
+  // /evidence?ids=… is resolved dynamically — judges can inspect any cited record.
+  const ev = method === "GET" ? path.match(/^\/projects\/[^/]+\/evidence\?(.*)$/) : null;
+  if (ev) {
+    const ids = new URLSearchParams(ev[1]).getAll("ids");
+    return ids.map((id) => bundle.evidence[id]).filter(Boolean) as T;
+  }
+  const key = body === undefined ? `${method} ${path}` : await bodyKey(method, path, body);
+  // Investigation GETs serve the open-state view until a resolving verify run.
+  const invGet = method === "GET" ? path.match(/^\/investigations\/([^/]+)$/) : null;
+  const rkey = `${key}#resolved`;
+  if (invGet && resolvedIncidents.has(decodeURIComponent(invGet[1])) && rkey in bundle.routes) {
+    return bundle.routes[rkey] as T;
+  }
+  let hit = bundle.routes[key];
+  if (hit === undefined && method === "POST" && /^\/projects\/[^/]+\/tests$/.test(path)) {
+    // Each demo project recorded exactly one run — serve it whatever scenario the
+    // judge picked; the result's SourceBadge still labels the recording honestly.
+    const prefix = `${method} ${path}::`;
+    const alts = Object.keys(bundle.routes).filter((k) => k.startsWith(prefix));
+    if (alts.length === 1) hit = bundle.routes[alts[0]];
+  }
+  if (hit === undefined) {
+    throw new ApiError(503, "hosted_demo",
+      "The hosted site replays a recorded session — download inteGREAT locally for this action.");
+  }
+  // Synthesize the events the app normally gets over the websocket.
+  const runMatch = method === "POST" && path.match(/^\/projects\/[^/]+\/tests$/);
+  const actionMatch = method === "POST" && path.match(/^\/investigations\/([^/]+)\/actions\/([^/]+)\/execute$/);
+  if (runMatch) {
+    emitRunLifecycle(bundle.routes[`GET /tests/${encodeURIComponent((hit as TestRun).id)}`] as never, hit as TestRun);
+  } else if (actionMatch) {
+    const iid = decodeURIComponent(actionMatch[1]);
+    const tid = ((hit as { result?: { test_run_id?: string } }).result)?.test_run_id;
+    if (tid) emitRunLifecycle(bundle.routes[`GET /tests/${encodeURIComponent(tid)}`] as never);
+    emitReplay({ type: "action.completed", investigation_id: iid,
+                 payload: { investigation_id: iid, action_id: decodeURIComponent(actionMatch[2]) } });
+    const hash = key.split("::")[1] ?? "";
+    if (bundle.resolves?.[iid]?.includes(hash)) {
+      resolvedIncidents.add(iid);
+      emitReplay({ type: "incident.resolved", investigation_id: iid, payload: { investigation_id: iid } });
+    }
+  }
+  return hit as T;
+}
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  if ((await apiMode()) === "replay") return replayReq<T>(method, path, body);
   const r = await fetch(`/api/v1${path}`, {
     method,
     headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
@@ -133,7 +247,9 @@ export const api = {
   refreshRepair: (jobId: string) => req<RepairJob>("POST", `/repairs/${enc(jobId)}/refresh`),
 };
 
-/** Subscribe to the project event stream. Reconnects with catch-up from the last seen seq. */
+/** Subscribe to the project event stream. Reconnects with catch-up from the last seen seq.
+    In hosted-demo mode there is no socket — the callback registers for synthesized
+    replay events (run lifecycle) instead. */
 export function subscribeProject(pid: string, onEvent: (e: IntegreatEvent) => void): () => void {
   let lastSeq = 0;
   let ws: WebSocket | null = null;
@@ -151,9 +267,14 @@ export function subscribeProject(pid: string, onEvent: (e: IntegreatEvent) => vo
       if (!closed) retry = window.setTimeout(connect, 1000);
     };
   };
-  connect();
+  apiMode().then((m) => {
+    if (closed) return;
+    if (m === "replay") replaySubs.add(onEvent);
+    else connect();
+  });
   return () => {
     closed = true;
+    replaySubs.delete(onEvent);
     window.clearTimeout(retry);
     ws?.close();
   };
