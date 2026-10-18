@@ -853,6 +853,11 @@ class CameraConnectRequest(Model):
     stream_url: str | None = Field(default=None, min_length=1, max_length=512)
 
 
+class BrowserCameraPairing(Model):
+    url: str
+    expires_in_seconds: int
+
+
 class CalibrateRequest(Model):
     known_angle_deg: float = Field(ge=-90, le=270)
 

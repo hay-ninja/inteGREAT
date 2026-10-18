@@ -21,6 +21,24 @@
     }
    }
   },
+  "/api/v1/devices/camera/browser/pair": {
+   "post": {
+    "summary": "Pair Browser Camera",
+    "operationId": "pair_browser_camera_api_v1_devices_camera_browser_pair_post",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BrowserCameraPairing"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/v1/demo-fixtures": {
    "get": {
     "summary": "Demo Fixtures",
@@ -2158,6 +2176,25 @@
      "stages"
     ],
     "title": "AgentStatus"
+   },
+   "BrowserCameraPairing": {
+    "properties": {
+     "url": {
+      "type": "string",
+      "title": "Url"
+     },
+     "expires_in_seconds": {
+      "type": "integer",
+      "title": "Expires In Seconds"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "url",
+     "expires_in_seconds"
+    ],
+    "title": "BrowserCameraPairing"
    },
    "CalibrateRequest": {
     "properties": {

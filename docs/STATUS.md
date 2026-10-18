@@ -248,3 +248,18 @@ What remains is hardware validation.
   (19 phone-camera tests total). Only the dependency's Starlette/httpx deprecation warning.
 - No real phone camera tested. LED brightness evaluation remains unimplemented; live test
   readiness/calibration still follows the servo-marker contract.
+
+## iPhone browser camera — 2026-10-18 (D-036)
+- Rig setup adds iPhone / Safari (no app) pairing, copyable revocable link, and polling
+  until frames arrive. Existing webcam and MJPEG app modes remain available.
+- Restricted HTTPS capture gateway + bounded JPEG upload CameraSource; explicit Start/Stop,
+  rear-camera preference, no audio, foreground-only capture, permission/error recovery,
+  expiry/release/replacement auth, stale-frame readiness, input byte/dimension/rate limits.
+- `scripts/make_phone_cert.py` creates a seven-day local demo CA/server cert; trust on
+  iPhone is manual. `scripts/phone_camera_server.py` runs loopback API + LAN capture-only
+  HTTPS listener sharing the device manager. Start Vite separately. Full steps in
+  `docs/phone-camera.md`; no public tunnel or third-party camera app needed.
+- Validation: 135 backend tests, 17 frontend tests, frontend typecheck and production build
+  pass; certificate generation and CLI checked. Chromium synthetic-camera walkthrough
+  verifies capture/upload/stop and token removal; real Safari/certificate trust/LAN still
+  need owner-device validation. LED brightness evaluation remains unimplemented.

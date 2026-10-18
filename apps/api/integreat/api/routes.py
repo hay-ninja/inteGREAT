@@ -13,6 +13,7 @@ from ..models import (
     AgentStatus,
     CalibrateRequest,
     CameraConnectRequest,
+    BrowserCameraPairing,
     DemoFixture,
     DeviceStatus,
     EventFlow,
@@ -54,6 +55,20 @@ from ..service import Service, ServiceError
 from ..tools.registry import RISKY_CATEGORIES, list_tools
 
 router = APIRouter(prefix="/api/v1")
+
+
+@router.post("/devices/camera/browser/pair", response_model=BrowserCameraPairing)
+async def pair_browser_camera(request: Request):
+    base = getattr(request.app.state, "phone_camera_url", None)
+    if not base:
+        raise ServiceError(409, "phone_https_required",
+            "Start the API using scripts/phone_camera_server.py with your LAN IP and trusted certificate. See docs/phone-camera.md.")
+    from ..observations.browser_camera import BrowserCamera
+    manager = svc(request).devices.camera
+    await asyncio.to_thread(manager.release)
+    camera = BrowserCamera()
+    manager.source = camera
+    return BrowserCameraPairing(url=f"{base}/phone#{camera.token}", expires_in_seconds=7200)
 
 
 def svc(request: Request) -> Service:
