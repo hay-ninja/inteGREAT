@@ -4,6 +4,8 @@ import { VStack } from "@astryxdesign/core/VStack";
 import { HStack } from "@astryxdesign/core/HStack";
 import { Text } from "@astryxdesign/core/Text";
 import { Button } from "@astryxdesign/core/Button";
+import { IconButton } from "@astryxdesign/core/IconButton";
+import { X } from "lucide-react";
 import { CodeBlock } from "@astryxdesign/core/CodeBlock";
 import { Card } from "@astryxdesign/core/Card";
 import { TextArea } from "@astryxdesign/core/TextArea";
@@ -33,11 +35,32 @@ export function RepeatTestDialog(p: {
   </Dialog>;
 }
 
+/** Side-docked panel (not a modal): the graph stays visible and interactive while a
+    node/edge is inspected, and tall content scrolls inside the panel instead of
+    overflowing a dialog. Positioned absolutely inside the canvas LayoutContent. */
 export function GraphInspector({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
-  return <Dialog isOpen={open} onOpenChange={(o) => !o && onClose()} width={680}>
-    <DialogHeader title="Graph evidence" subtitle="Inspect provenance and confirm physical connections." onOpenChange={(o) => !o && onClose()} />
-    <VStack padding={4} gap={2}>{children}</VStack>
-  </Dialog>;
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <aside className="graph-inspector" role="dialog" aria-label="Graph evidence">
+      <HStack hAlign="between" vAlign="start" gap={2} paddingInline={3} paddingBlock={2}
+              style={{ borderBottom: "1px solid var(--color-border)", flex: "none" }}>
+        <VStack gap={0.5}>
+          <Text type="label">Graph evidence</Text>
+          <Text type="supporting" color="secondary">Inspect provenance and confirm physical connections.</Text>
+        </VStack>
+        <IconButton label="Close inspector" size="sm" variant="ghost" icon={<X size={15} />} onClick={onClose} />
+      </HStack>
+      <div className="graph-inspector-body">
+        <VStack gap={2} padding={3}>{children}</VStack>
+      </div>
+    </aside>
+  );
 }
 
 export function EvidenceDialog({ evidence: e, onClose }: { evidence: Evidence | null; onClose: () => void }) {

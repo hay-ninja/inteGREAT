@@ -178,7 +178,7 @@ function Inner(p: Props) {
     labelShowBg: true,
     labelBgPadding: [4, 2] as [number, number],
     labelBgBorderRadius: 3,
-    animated: e.highlight?.style === "observed" || e.emphasized,
+    animated: e.highlight?.style === "observed" || e.highlight?.style === "failed_expectation" || e.emphasized,
     style: edgeStyle(e),
     markerEnd: e.relation === "contains" ? undefined
       : { type: MarkerType.ArrowClosed, width: 10, height: 10, color: (edgeStyle(e).stroke as string) },

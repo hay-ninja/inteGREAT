@@ -417,3 +417,15 @@ What remains is hardware validation.
 - Verified: 174/174 pytest (11 new LED-CV tests incl. locator units, keyed
   estimators, both gating directions), 17/17 vitest, `tsc -b`, `vite build`.
   **Not run on real hardware** — all verification is synthetic frames/loop serial.
+
+## Side inspector + failure-path trace (D-048) — done 2026-10-18
+- Graph-inspect modal → side panel docked inside the canvas (scrollable body,
+  Escape/× close, graph stays interactive behind it).
+- Failed expectations now light the whole signal path (deterministic BFS, no AI):
+  controlling code → MCU pin → wiring through series parts → component → power.
+  Rails/junctions (pins with 2+ wires, e.g. shared GND) are marked but not
+  traversed; terminals (mcu/subsystem/module/function/power) stop expansion.
+  Observed/conflict marks keep precedence; path edges animate.
+- Verified: 174 pytest, tsc clean, 17/17 vitest; `inspector_test.mjs` +
+  `trace_test.mjs` headless — path red+animated, sibling circuit unaffected,
+  panel docks right and scrolls.

@@ -39,6 +39,7 @@ from .models import (
     DemoFixture,
     DiagnosticAction,
     EdgeOrigin,
+    EdgeRelation,
     Epistemic,
     EventFlow,
     Evidence,
@@ -853,7 +854,60 @@ class Service:
             for fid in se.matched_function_ids:
                 out.setdefault(fid, Highlight(element_id=fid, style="observed",
                                               reason=f'Serial log line "{se.raw}" matches a print in this function'))
+        # Failure path last: observed/conflict marks are more specific than
+        # membership in the path, so they keep their colour while the rest of
+        # the signal chain lights up.
+        if run.result and run.result.outcome == ExpectationOutcome.failed and inc.state != IncidentState.resolved:
+            g = self.store.get(K_GRAPH, inc.project_id, GraphSnapshot)
+            if g:
+                for el in self._failure_path(g, exp.component_id):
+                    out.setdefault(el, Highlight(
+                        element_id=el, style="failed_expectation",
+                        reason="On the signal path of the failed expectation — the fault is somewhere along it"))
         return list(out.values())
+
+    # Nodes reached by the trace but never expanded further — expanding the MCU's
+    # containment would light up every wired pin on the board.
+    _TRACE_TERMINALS = {"mcu", "subsystem", "source_module", "function", "power_source"}
+    _TRACE_RELS = {EdgeRelation.contains, EdgeRelation.connected_to, EdgeRelation.powered_by,
+                   EdgeRelation.controls, EdgeRelation.configures}
+
+    def _failure_path(self, g: GraphSnapshot, component_id: str) -> set[str]:
+        """Every node/edge on the signal path feeding a failed component: the code
+        that controls it, the MCU pin it configures, the wiring chain to the
+        component (through intermediate parts like resistors), and power.
+        Deterministic BFS over dependency edges — no AI — so it works with
+        providers down."""
+        kinds = {n.id: n.kind for n in g.nodes}
+        # A pin touched by 2+ connected_to wires is a shared rail/junction (e.g. the
+        # board's GND pin) — mark it, but don't walk through it into other circuits.
+        wire_degree: dict[str, int] = {}
+        for e in g.edges:
+            if e.relation == EdgeRelation.connected_to:
+                wire_degree[e.source_id] = wire_degree.get(e.source_id, 0) + 1
+                wire_degree[e.target_id] = wire_degree.get(e.target_id, 0) + 1
+
+        def expandable(nid: str) -> bool:
+            return kinds.get(nid) not in self._TRACE_TERMINALS and wire_degree.get(nid, 0) < 2
+
+        ids: set[str] = {component_id}
+        frontier = {component_id}
+        for _ in range(8):  # GPIO → series parts → component → ground is ~6 hops
+            nxt: set[str] = set()
+            for e in g.edges:
+                if e.relation not in self._TRACE_RELS:
+                    continue
+                if e.source_id in frontier or e.target_id in frontier:
+                    ids.add(e.id)
+                    for nid in (e.source_id, e.target_id):
+                        if nid not in ids:
+                            ids.add(nid)
+                            if expandable(nid):
+                                nxt.add(nid)
+            if not nxt:
+                break
+            frontier = nxt
+        return ids
 
     # ------------------------------------------------------------------ actions & tools
 

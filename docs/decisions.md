@@ -658,3 +658,30 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   registry, so agents can't reach it.
 - Not done: persistent calibration storage, marker-board multi-LED coordinate maps, and any
   ML/LLM locator (PRD §5 keeps CV deterministic).
+
+### D-048 Side-docked graph inspector + deterministic failure-path trace — 2026-10-18
+- **Problem:** the node/edge inspector was a centered modal (`Dialog`, 680px) that
+  overflowed on tall content and hid the graph it described. On failure, only the
+  measured component went red — "one red line", nothing about *where along the
+  signal chain* the fault could live.
+- **Inspector:** `GraphInspector` is now a side panel (`<aside>`) absolutely
+  docked inside the canvas `LayoutContent` — the graph stays visible/interactive,
+  tall content scrolls inside `.graph-inspector-body` (`overscroll-behavior:
+  contain`), Escape/× close. Not a modal; no backdrop.
+- **Failure path (NOT an AI feature):** `_failure_path` in `service.py` does a
+  bounded BFS over `contains`/`connected_to`/`powered_by`/`controls`/`configures`
+  edges from the failed component — code → configured MCU pin → wiring chain
+  through intermediate parts (series resistors) → the component → power. Works
+  with providers down; provenance is pure graph structure.
+  - **Bounds:** `mcu`/`subsystem`/`source_module`/`function`/`power_source` are
+    terminals (marked, never expanded — otherwise the MCU's containment would
+    light the whole board). A pin touched by 2+ `connected_to` wires is a
+    rail/junction (e.g. shared GND) — marked but not traversed, so sibling
+    circuits on the same rail don't get implicated.
+  - Applied via `setdefault` *after* observed/conflict marks — a serial-matched
+    function keeps "observed" (we saw it run), the rest of the chain glows
+    `failed_expectation`. Failed-path edges are animated in GraphView so the
+    trace visibly flows.
+- Verified: 174 pytest, tsc clean, 17/17 vitest; headless screenshot shows the
+  GPIO18→resistor→LED1→GND chain red+animated while LED2's circuit stays
+  neutral; inspector panel docks right, scrolls, Escape closes.
