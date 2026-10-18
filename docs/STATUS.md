@@ -404,3 +404,6 @@ What remains is hardware validation.
 - Final owner-selected button options: moved button to GPIO4 (from GPIO32). Sketch,
   YAML, wiring notes and host test agree; debounce test passes. GPIO0/2/15 avoided
   because they are classic ESP32 strapping pins. ESP32 compilation passes.
+- Manifest clarified with an explicit two-LED/button wiring summary, active levels,
+  and the firmware's 35 ms button debounce. Loader and endpoint validation pass
+  (7 components, 11 connections). Physical wiring verification remains outstanding.

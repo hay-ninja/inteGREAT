@@ -1,4 +1,10 @@
-# Proposed passive-piezo circuit; GPIO4 momentary button to GND.
+# Halloween demo: two LEDs, a playback button, and a passive piezo.
+# LED 1: GPIO18 -> 330-ohm resistor -> anode; cathode -> GND.
+# LED 2: GPIO21 -> 330-ohm resistor -> anode; cathode -> GND.
+# Button: normally open momentary switch between GPIO4 and GND (INPUT_PULLUP).
+# Starts OFF; each press toggles lights/music. This does not disconnect power.
+# Piezo: GPIO19 -> 1-kilohm resistor -> positive; negative -> GND.
+# Proposed wiring only; physical connections remain unverified.
 schema: integreat-manifest/v1
 board:
   id: esp32
@@ -24,12 +30,16 @@ components:
   pins:
   - anode
   - cathode
+  attributes:
+    on_level: HIGH
 - id: led_2
   type: led
   label: LED 2 (GPIO21)
   pins:
   - anode
   - cathode
+  attributes:
+    on_level: HIGH
 - id: resistor_1
   type: resistor
   label: LED 1 series resistor (330 ohm)
@@ -73,6 +83,9 @@ components:
     mode: normally open momentary
     pull: ESP32 INPUT_PULLUP
     boot_state: playback off
+    active_level: LOW
+    debounce_ms: 35
+    action: toggle lights and music playback
 power_sources: []
 connections:
 - id: led_1_gpio
