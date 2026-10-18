@@ -34,6 +34,7 @@ _SECRET = re.compile(r"(?i)(pass(word|wd)?|secret|token|api[_-]?key|ssid)(\s*[=:
 
 # Which prefetched tools each agent gets (all read-only, all registry tools).
 AGENT_TOOLS: dict[AgentName, list[tuple[str, dict]]] = {
+    AgentName.orchestrator: [("read_test_events", {}), ("read_cv_measurements", {})],
     AgentName.code: [("inspect_gpio_config", {"component_id": "$component"}), ("read_project_metadata", {})],
     AgentName.hardware: [("read_netlist_connections", {"component_id": "$component"}),
                          ("expand_scope", {"scope_node_id": "$component", "depth": 3})],
@@ -41,6 +42,8 @@ AGENT_TOOLS: dict[AgentName, list[tuple[str, dict]]] = {
                                ("read_serial_buffer", {"max_lines": 40})],
 }
 AGENT_EDGES = {
+    AgentName.orchestrator: {EdgeRelation.configures, EdgeRelation.controls, EdgeRelation.connected_to,
+                             EdgeRelation.powered_by, EdgeRelation.calls},
     AgentName.code: {EdgeRelation.configures, EdgeRelation.controls, EdgeRelation.calls},
     AgentName.hardware: {EdgeRelation.connected_to, EdgeRelation.powered_by, EdgeRelation.configures},
     AgentName.runtime_vision: {EdgeRelation.controls, EdgeRelation.configures},

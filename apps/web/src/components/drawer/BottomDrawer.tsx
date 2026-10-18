@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { HStack } from "@astryxdesign/core/HStack";
 import { VStack } from "@astryxdesign/core/VStack";
 import { TabList, Tab } from "@astryxdesign/core/TabList";
-import { IconButton } from "@astryxdesign/core/IconButton";
 import { Button } from "@astryxdesign/core/Button";
 import { Text } from "@astryxdesign/core/Text";
 import { Table, pixel } from "@astryxdesign/core/Table";
@@ -12,7 +11,6 @@ import { Selector } from "@astryxdesign/core/Selector";
 import { NumberInput } from "@astryxdesign/core/NumberInput";
 import { StatusDot } from "@astryxdesign/core/StatusDot";
 import { Card } from "@astryxdesign/core/Card";
-import { ChevronDown, ChevronUp } from "lucide-react";
 import {
   api,
   type DeviceStatus,
@@ -47,7 +45,7 @@ interface Props {
 export function BottomDrawer(p: Props) {
   return (
     <VStack gap={0} height={p.open ? 260 : undefined}>
-      <HStack hAlign="between" vAlign="center" gap={2} paddingInline={2}>
+      <HStack hAlign="between" vAlign="center" gap={2} paddingInline={2} wrap="wrap">
         <TabList value={p.tab} size="sm" onChange={(t) => { p.onTab(t as DrawerTab); p.onOpen(true); }}>
           <Tab value="angle" label="Angle" />
           <Tab value="serial" label="Serial" />
@@ -61,8 +59,7 @@ export function BottomDrawer(p: Props) {
             <Button label="Save as replay" size="sm" variant="ghost" tooltip="Keep this run for offline demos"
                     onClick={() => p.onSaveReplay(p.run!.id)} />
           )}
-          <IconButton label={p.open ? "Hide panel" : "Show panel"} size="sm" variant="ghost"
-                      icon={p.open ? <ChevronDown size={16} /> : <ChevronUp size={16} />} onClick={() => p.onOpen(!p.open)} />
+          <Button label={p.open ? "Focus graph" : "Show measurements"} size="sm" variant="ghost" onClick={() => p.onOpen(!p.open)} />
         </HStack>
       </HStack>
       {p.open && (
@@ -70,7 +67,7 @@ export function BottomDrawer(p: Props) {
           {p.tab === "angle" && <AnglePlot obs={p.observations} exp={p.expectation} />}
           {p.tab === "serial" && <SerialLog serial={p.serial} />}
           {p.tab === "timeline" && <Timeline events={p.events} />}
-          {p.tab === "devices" && <Devices status={p.devices} onStatus={p.onDevices} onError={p.onError} />}
+          {p.tab === "devices" && <DeviceControls status={p.devices} onStatus={p.onDevices} onError={p.onError} />}
           {p.tab === "audit" && <Audit calls={p.toolCalls} />}
         </VStack>
       )}
@@ -171,7 +168,7 @@ function Audit({ calls }: { calls: ToolCall[] }) {
   );
 }
 
-function Devices({ status, onStatus, onError }: { status: DeviceStatus | null; onStatus: (s: DeviceStatus) => void; onError: (m: string) => void }) {
+export function DeviceControls({ status, onStatus, onError }: { status: DeviceStatus | null; onStatus: (s: DeviceStatus) => void; onError: (m: string) => void }) {
   const [port, setPort] = useState("");
   const [cams, setCams] = useState<number[] | null>(null);
   const [cam, setCam] = useState("0");
@@ -190,16 +187,16 @@ function Devices({ status, onStatus, onError }: { status: DeviceStatus | null; o
             <Text type="supporting">{s.connected ? `${s.port} · ${s.baud}` : "not connected"}</Text>
           </HStack>
           {s.connected ? (
-            <Button label="Release port" tooltip="Free the port so the Arduino IDE can flash" onClick={() => run(api.serialRelease())} />
+            <Button label="Release port" tooltip="Free the port so the Arduino IDE can flash" clickAction={() => run(api.serialRelease())} />
           ) : (
             <HStack gap={1} vAlign="end">
               <Selector label="Port" size="sm" value={port} onChange={setPort} width={220} placeholder="No ports found"
                         options={s.ports.map((x) => ({ value: x.port, label: x.port, description: x.description }))} />
-              <Button label="Connect" variant="primary" size="sm" isDisabled={!port} onClick={() => run(api.serialConnect(port))} />
+              <Button label="Connect ESP32" size="sm" isDisabled={!port} clickAction={() => run(api.serialConnect(port))} />
             </HStack>
           )}
           {s.last_error && <Text type="supporting" color="secondary">{s.last_error}</Text>}
-          <Text type="supporting">Opened with reset lines held low, so the board doesn't reboot.</Text>
+          <Text type="supporting">Reset lines are held low on open. Verify that your board stays running. Release the port before reflashing.</Text>
         </VStack>
       </Card>
       <Card padding={3} width={380}>
@@ -218,17 +215,18 @@ function Devices({ status, onStatus, onError }: { status: DeviceStatus | null; o
               <HStack gap={1} vAlign="end">
                 <Selector label="Camera" size="sm" value={cam} onChange={setCam} width={160} placeholder="None found"
                           options={cams.map((i) => ({ value: String(i), label: `Camera ${i}` }))} />
-                <Button label="Connect" variant="primary" size="sm" isDisabled={!cams.length} onClick={() => run(api.cameraConnect(+cam))} />
+                <Button label="Connect camera" size="sm" isDisabled={!cams.length} clickAction={() => run(api.cameraConnect(+cam))} />
               </HStack>
             )
           ) : (
             <HStack gap={1} vAlign="end">
               <NumberInput label="Servo is at" size="sm" units="°" value={angle} onChange={setAngle} width={130} />
-              <Button label="Calibrate" size="sm" variant={c.calibrated ? "secondary" : "primary"} onClick={() => run(api.cameraCalibrate(angle))} />
-              <Button label="Release" size="sm" variant="ghost" onClick={() => run(api.cameraRelease())} />
+              <Button label="Calibrate" size="sm" clickAction={() => run(api.cameraCalibrate(angle))} />
+              <Button label="Release" size="sm" variant="ghost" clickAction={() => run(api.cameraRelease())} />
             </HStack>
           )}
           <Text type="supporting">ArUco id 1 on the horn, id 0 beside the servo.</Text>
+          <Text type="supporting">Missing markers mean measurement unavailable. Calibrate at a known angle before a live test.</Text>
         </VStack>
       </Card>
       {c.connected && <img className="camera-preview" src="/api/v1/devices/camera/stream.mjpg" alt="Live camera preview" />}

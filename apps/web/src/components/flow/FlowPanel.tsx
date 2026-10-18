@@ -3,7 +3,6 @@
  * Rule of thumb: each step shows ONE primary button. Alternatives and advanced tools are collapsed.
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { Stepper, Step } from "@astryxdesign/core/Stepper";
 import { VStack } from "@astryxdesign/core/VStack";
 import { HStack } from "@astryxdesign/core/HStack";
 import { Text } from "@astryxdesign/core/Text";
@@ -11,7 +10,7 @@ import { Heading } from "@astryxdesign/core/Heading";
 import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
 import { StatusDot } from "@astryxdesign/core/StatusDot";
-import { Badge } from "@astryxdesign/core/Badge";
+import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
 import { Collapsible } from "@astryxdesign/core/Collapsible";
 import { Divider } from "@astryxdesign/core/Divider";
 import { NumberInput } from "@astryxdesign/core/NumberInput";
@@ -31,7 +30,8 @@ import {
   type SourceOptions,
   type TestRun,
 } from "../../lib/api";
-import { EvidenceList, Facts, SourceBadge, SourcePicker } from "./common";
+import { EvidenceList, Eyebrow, Facts, SourceBadge, SourcePicker } from "./common";
+import { latestRun, nextCheck } from "./flowState";
 
 const STEPS = ["Setup", "Run", "Debug", "Verify"] as const;
 
@@ -58,6 +58,9 @@ export interface FlowProps {
   onReveal: (ids: string[]) => void;
   onNewTest: () => void;
   onError: (m: string) => void;
+  onOpenDevices: () => void;
+  onEvidence: (e: Evidence) => void;
+  projectReview: ReactNode;
 }
 
 export function autoStep(p: Pick<FlowProps, "expectation" | "view">): number {
@@ -73,16 +76,24 @@ export function FlowPanel(p: FlowProps) {
 
   return (
     <VStack gap={4}>
-      <Stepper activeStep={auto} label="Debugging steps" density="compact"
-               horizontalOptions={{ minimumStepWidth: 72, collapsedVariant: "withLabel" }}
-               onStepClick={(i) => setViewing(i <= auto ? (i === auto ? null : i) : viewing)}>
-        {STEPS.map((s, i) => (
-          <Step key={s} step={i} label={s} isDisabled={i > auto}
-                status={i === 2 && p.view && p.view.incident.state !== "resolved" ? "error"
-                  : i === 3 && p.view?.incident.state === "resolved" ? "success" : undefined} />
-        ))}
-      </Stepper>
-      {step === 0 && <SetupStep {...p} />}
+      <div className="chapters" role="tablist" aria-label="Debugging steps">
+        {STEPS.map((s, i) => {
+          const state =
+            i === 2 && p.view && p.view.incident.state !== "resolved" && latestRun(p.view).result?.outcome === "fail" ? "error"
+            : i === 3 && p.view?.incident.state === "resolved" ? "done"
+            : i < auto ? "done" : i === auto ? "active" : "locked";
+          return (
+            <button key={s} type="button" role="tab" className="chapter" data-state={state}
+                    aria-selected={step === i} disabled={i > auto || (!!p.view && i < auto)}
+                    onClick={() => setViewing(i <= auto ? (i === auto ? null : i) : viewing)}>
+              <span className="cnum">{String(i + 1).padStart(2, "0")}</span>
+              <span className="cname">{s}</span>
+              <span className="cbar" />
+            </button>
+          );
+        })}
+      </div>
+      {step === 0 && <>{p.projectReview}<SetupStep {...p} /></>}
       {step === 1 && <RunStep {...p} />}
       {step === 2 && p.view && <InvestigateStep {...p} view={p.view} />}
       {step === 3 && p.view && <VerifyStep {...p} view={p.view} />}
@@ -97,7 +108,7 @@ export function Notice({ tone, title, body, end }: {
   return (
     <Card padding={3} variant="muted">
       <VStack gap={1}>
-        <HStack gap={1.5} vAlign="center" hAlign="between">
+        <HStack gap={1.5} vAlign="center" hAlign="between" wrap="wrap">
           <HStack gap={1.5} vAlign="center">
             <StatusDot variant={tone} label={tone} />
             <Text type="body" weight="semibold">{title}</Text>
@@ -125,7 +136,8 @@ function SetupStep(p: FlowProps) {
   if (!exp) {
     return (
       <VStack gap={3}>
-        <Heading level={2}>What should happen?</Heading>
+        <Eyebrow num="01">Setup — define the test</Eyebrow>
+        <Heading level={2} type="display-3">What should happen?</Heading>
         <Text type="body" color="secondary">
           inteGREAT reads the firmware and suggests a test. You confirm it before it decides pass or fail.
         </Text>
@@ -138,19 +150,25 @@ function SetupStep(p: FlowProps) {
   const evById = new Map(cites.map((c) => [c.id, c]));
   return (
     <VStack gap={3}>
-      <Heading level={2}>Confirm the test</Heading>
+      <Eyebrow num="01">Setup — confirm the test</Eyebrow>
+      <Heading level={2} type="display-3">Confirm the test</Heading>
       <Text type="body" color="secondary">Send a command, then the camera checks the servo angle.</Text>
-      <TextInput label="Serial command" value={draft.trigger} onChange={(v) => setDraft({ ...draft, trigger: v })} />
-      <HStack gap={2}>
-        <NumberInput label="Target" units="°" value={draft.target} onChange={(v) => setDraft({ ...draft, target: v })} />
-        <NumberInput label="± tolerance" units="°" value={draft.tolerance} min={0} onChange={(v) => setDraft({ ...draft, tolerance: v })} />
-        <NumberInput label="Within" units="ms" value={draft.deadline_ms} min={100} step={100}
-                     onChange={(v) => setDraft({ ...draft, deadline_ms: v })} />
-      </HStack>
+      <Card padding={3} variant="muted">
+        <VStack gap={3}>
+          <Eyebrow>Test parameters</Eyebrow>
+          <TextInput label="Serial command" value={draft.trigger} onChange={(v) => setDraft({ ...draft, trigger: v })} />
+          <HStack gap={2}>
+            <NumberInput label="Target" units="°" value={draft.target} onChange={(v) => setDraft({ ...draft, target: v })} />
+            <NumberInput label="± tolerance" units="°" value={draft.tolerance} min={0} onChange={(v) => setDraft({ ...draft, tolerance: v })} />
+            <NumberInput label="Within" units="ms" value={draft.deadline_ms} min={100} step={100}
+                         onChange={(v) => setDraft({ ...draft, deadline_ms: v })} />
+          </HStack>
+        </VStack>
+      </Card>
       <Collapsible defaultIsOpen={false} trigger={<Text type="supporting">Why this test?</Text>}>
         <VStack gap={1}>
           {exp.rationale && <Text type="supporting">{exp.rationale}</Text>}
-          <EvidenceList ids={cites.map((c) => c.id)} evById={evById} />
+          <EvidenceList ids={cites.map((c) => c.id)} evById={evById} onInspect={p.onEvidence} />
         </VStack>
       </Collapsible>
       <Button label="Confirm test" variant="primary"
@@ -168,7 +186,8 @@ function RunStep(p: FlowProps) {
   const passed = p.run?.result?.outcome === "pass" && !p.view;
   return (
     <VStack gap={3}>
-      <Heading level={2}>Run the test</Heading>
+      <Eyebrow num="02">Run — collect evidence</Eyebrow>
+      <Heading level={2} type="display-3">Run the test</Heading>
       <Card padding={3} variant="muted">
         <VStack gap={0.5}>
           <Text type="code">{exp.trigger.value}</Text>
@@ -181,8 +200,9 @@ function RunStep(p: FlowProps) {
         <Notice tone="success" title="Passed" body={p.run.result.reason} end={<SourceBadge run={p.run} />} />
       )}
       <SourcePicker value={p.source} onChange={p.onSource} sources={p.sources} liveReady={p.liveReady} />
-      <Button label={p.running ? "Running…" : passed ? "Run again" : "Run test"} variant="primary"
-              isLoading={p.running} isDisabled={p.source === "live" && !p.liveReady} onClick={p.onRun} />
+      {p.source === "live" && !p.liveReady ? <Button label="Set up the live rig" variant="primary" onClick={p.onOpenDevices} /> :
+        <Button label={p.running ? "Running…" : passed ? "Run again" : "Run test"} variant="primary"
+                isLoading={p.running} onClick={p.onRun} />}
     </VStack>
   );
 }
@@ -196,59 +216,100 @@ function recommendedFor(h: Hypothesis | undefined, actions: DiagnosticAction[]):
   return options.find((a) => a.kind !== "verify_fix" && a.status === "proposed") ?? options.find((a) => a.kind !== "verify_fix");
 }
 
-const STATUS_BADGE: Record<string, { v: "success" | "info" | "neutral" | "warning"; l: string }> = {
-  supported: { v: "success", l: "supported" },
-  plausible: { v: "info", l: "plausible" },
-  unverified: { v: "neutral", l: "unverified" },
-  weakened: { v: "warning", l: "weakened" },
-  ruled_out: { v: "neutral", l: "ruled out" },
+const STATUS_LABEL: Record<string, string> = {
+  supported: "supported", plausible: "plausible", unverified: "unverified", weakened: "weakened", ruled_out: "ruled out",
 };
 
 function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
   const { view } = p;
   const evById = new Map(view.evidence.map((e) => [e.id, e]));
-  const [top, ...others] = view.hypotheses;
-  const primary = recommendedFor(top, view.actions);
+  const [top] = view.hypotheses;
+  const primary = nextCheck(view);
   // Once the suggested check is done, the next real step is "fix it, then verify" — promote that instead.
-  const checkDone = primary?.status === "completed";
-  const failedVerify = [...view.followup_runs].reverse().find((r) => r.attempt_kind === "verify");
-  const result = view.test_run.result;
+  const currentRun = latestRun(view);
+  const result = currentRun.result;
+  if (p.running || currentRun.state === "running" || currentRun.state === "configured") return (
+    <VStack gap={3}>
+      <Eyebrow num="03">Debug — collect evidence</Eyebrow>
+      <Heading level={2} type="display-3">Collecting measurements</Heading>
+      <SourceBadge run={currentRun} />
+      <Spinner label="Collecting new measurements…" />
+      <Text type="supporting">The command and pass criteria stay the same. Diagnostic actions resume when this run finishes.</Text>
+    </VStack>
+  );
+  const checkDone = primary?.status === "completed" || result?.outcome === "pass";
+  const failedVerify = currentRun.attempt_kind === "verify" ? currentRun : undefined;
+  const tied = top ? view.hypotheses.filter((h) => h.rank === top.rank) : [];
+  // Secondary recommendations on the leading hypothesis (e.g. "Prepare software fix with Devin")
+  // still need an explicit, reachable control — the primary button can't shadow them.
+  const byId = new Map(view.actions.map((a) => [a.id, a]));
+  const secondary = top
+    ? top.recommended_action_ids.map((id) => byId.get(id)).filter((a): a is DiagnosticAction =>
+        !!a && a.id !== primary?.id && a.status === "proposed" && a.kind !== "verify_fix")
+    : [];
   return (
     <VStack gap={3}>
       {failedVerify?.result && failedVerify.result.outcome !== "pass" && (
-        <Notice tone="warning" title="Still failing after your fix" body={failedVerify.result.reason} />
+        <Notice tone="warning" title={failedVerify.result.outcome === "inconclusive" ? "Fix not yet verified — measurement unavailable" : "The repair did not pass verification"} />
       )}
       <VStack gap={1}>
-        <HStack hAlign="between" vAlign="center">
-          <Heading level={2}>{view.incident.title}</Heading>
-          <SourceBadge run={view.test_run} />
+        <Eyebrow num="03">Debug — the incident</Eyebrow>
+        <HStack hAlign="between" vAlign="center" wrap="wrap">
+          <Heading level={2} type="display-3">{result?.outcome === "pass" ? "Repeat test passed" : result?.outcome === "inconclusive" ? "Measurement unavailable" : view.incident.title}</Heading>
+          <SourceBadge run={currentRun} />
         </HStack>
-        {result && <Text type="supporting">{result.reason}</Text>}
+        {result && <Text type="supporting">{result.final_valid_value == null ? "No valid angle measurement is available." : `${result.final_valid_value.toFixed(1)}° measured · target ${p.expectation?.target ?? "?"}° ± ${p.expectation?.tolerance ?? "?"}°`}</Text>}
       </VStack>
       {result && <Facts result={result} />}
       <Divider />
 
-      {top ? (
-        <Card padding={3}>
+      {result?.outcome === "pass" ? (
+        <VStack gap={2}>
+          <Text type="body">The latest repeat meets the expectation. Run verification to close this incident with a passing verification record.</Text>
+          <VerifyLauncher {...p} label="Verify this result" emphasis="primary" />
+          <EvidenceList title="Latest result" ids={[result.evidence_id]} evById={evById} onInspect={p.onEvidence} />
+        </VStack>
+      ) : top ? (
           <VStack gap={2}>
             <HStack hAlign="between" vAlign="center">
-              <Text type="label" color="secondary">Most likely cause</Text>
-              <Badge variant={STATUS_BADGE[top.status].v} label={STATUS_BADGE[top.status].l} />
+              <Eyebrow>{top.fault_code === "CAMERA_MEASUREMENT_UNAVAILABLE" ? "Observation issue" : tied.length > 1 ? "Possible causes · tied" : "Leading hypothesis"}</Eyebrow>
+              <Text type="supporting">{STATUS_LABEL[top.status]}</Text>
             </HStack>
-            <Heading level={3}>{top.title}</Heading>
-            <Text type="body" color="secondary">{top.explanation}</Text>
+            <Heading level={3}>{tied.length > 1
+              ? tied.every((h) => h.fault_code === "POSSIBLE_POWER_OR_SIGNAL_FAULT") ? "Signal or power connection" : `${tied.length} causes need a distinguishing check`
+              : top.title}</Heading>
             {primary && (
               <Button label={checkDone ? `${primary.label} again` : primary.label}
                       variant={checkDone ? "ghost" : "primary"} isLoading={p.busyActionId === primary.id}
                       tooltip={primary.rationale} onClick={() => p.onAction(primary)} />
             )}
+            {checkDone && <VerifyLauncher {...p} label="I made a repair — verify it" emphasis="primary" />}
+            {secondary.length > 0 && (
+              <HStack gap={1} wrap="wrap">
+                {secondary.map((a) => (
+                  <Button key={a.id} label={a.label} size="sm" variant="ghost" tooltip={a.rationale}
+                          isLoading={p.busyActionId === a.id} onClick={() => p.onAction(a)} />
+                ))}
+              </HStack>
+            )}
+            <Text type="supporting">{top.fault_code === "CAMERA_MEASUREMENT_UNAVAILABLE"
+              ? "Check marker visibility and calibration, then repeat with valid measurements. Servo behavior is unknown until the camera can measure it."
+              : primary?.rationale ?? top.explanation}</Text>
+            {tied.length > 1 && <Text type="supporting">These causes have equal rank. The next check gathers evidence to distinguish them.</Text>}
+            <Collapsible defaultIsOpen={false} trigger={<Text type="supporting">Why this check?</Text>}>
+              <VStack gap={2}>
+                <Text type="supporting">{top.explanation}</Text>
+                {primary?.expected_outcomes.map((o) => <Text key={o.result} type="supporting">{o.result}: {o.interpretation}</Text>)}
+              </VStack>
+            </Collapsible>
+            <EvidenceList title="Supporting evidence — select to inspect" ids={top.supporting_evidence_ids.slice(0, 2)} evById={evById} onInspect={p.onEvidence} />
             <Collapsible defaultIsOpen={false} trigger={<Text type="supporting">Evidence and unknowns</Text>}>
               <VStack gap={2}>
-                <EvidenceList title="Supports it" ids={top.supporting_evidence_ids} evById={evById} />
-                <EvidenceList title="Against it" ids={top.contradicting_evidence_ids} evById={evById} />
+                <EvidenceList title="Supports it" ids={top.supporting_evidence_ids} evById={evById} onInspect={p.onEvidence} />
+                <EvidenceList title="Against it" ids={top.contradicting_evidence_ids} evById={evById} onInspect={p.onEvidence} />
                 {top.unknowns.length > 0 && (
                   <VStack gap={0.5}>
-                    <Text type="label" color="secondary">Not measured / unknown</Text>
+                    <Eyebrow>Not measured / unknown</Eyebrow>
                     {top.unknowns.map((u) => <Text key={u} type="supporting">• {u}</Text>)}
                   </VStack>
                 )}
@@ -258,7 +319,6 @@ function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
               </VStack>
             </Collapsible>
           </VStack>
-        </Card>
       ) : (
         <Notice tone="neutral" title="No rule matched" body="Evidence is not enough to rank causes. Try a manual check or ask the agents." />
       )}
@@ -266,18 +326,19 @@ function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
       {view.incident.agent_summary && (
         <Card padding={3} variant="muted">
           <VStack gap={1}>
-            <Text type="label" color="secondary">AI agents (inference, not measurement)</Text>
+            <Eyebrow>AI agents (inference, not measurement)</Eyebrow>
             <Text type="body">{view.incident.agent_summary}</Text>
           </VStack>
         </Card>
       )}
 
-      <VerifyLauncher {...p} label="I fixed it — verify" emphasis={checkDone ? "primary" : "secondary"} />
+      {!checkDone && <VerifyLauncher {...p} label="I made a repair — verify it" emphasis="secondary" />}
+      <AIReview {...p} />
 
-      {others.length > 0 && (
-        <Collapsible defaultIsOpen={false} trigger={<Text type="label">Other possibilities ({others.length})</Text>}>
+      {view.hypotheses.length > 1 && (
+        <Collapsible defaultIsOpen={false} trigger={<Text type="label">All hypotheses ({view.hypotheses.length})</Text>}>
           <VStack gap={2}>
-            {others.map((h) => <OtherHypothesis key={h.id} h={h} {...p} />)}
+            {view.hypotheses.map((h) => <OtherHypothesis key={h.id} h={h} {...p} />)}
           </VStack>
         </Collapsible>
       )}
@@ -289,16 +350,14 @@ function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
 function OtherHypothesis(p: FlowProps & { h: Hypothesis; view: InvestigationView }) {
   const a = recommendedFor(p.h, p.view.actions);
   return (
-    <Card padding={2} variant="muted">
       <VStack gap={1}>
         <HStack hAlign="between" vAlign="center">
           <Text type="body" weight="medium">{p.h.title}</Text>
-          <Badge variant={STATUS_BADGE[p.h.status].v} label={STATUS_BADGE[p.h.status].l} />
+          <Text type="supporting">{STATUS_LABEL[p.h.status]}</Text>
         </HStack>
         <Text type="supporting" maxLines={3}>{p.h.explanation}</Text>
         {a && <Button label={a.label} size="sm" isLoading={p.busyActionId === a.id} onClick={() => p.onAction(a)} />}
       </VStack>
-    </Card>
   );
 }
 
@@ -306,20 +365,63 @@ function VerifyLauncher(p: FlowProps & { view: InvestigationView; label: string;
   const [open, setOpen] = useState(false);
   const verify = p.view.actions.find((a) => a.kind === "verify_fix");
   if (!verify) return null;
-  if (!open) return <Button label={p.label} variant={p.emphasis} onClick={() => setOpen(true)} />;
   return (
-    <Card padding={3}>
-      <VStack gap={2}>
+    <>
+      <Button label={p.label} variant={p.emphasis} onClick={() => setOpen(true)} />
+      <Dialog isOpen={open} onOpenChange={setOpen} width={500} purpose="form">
+        <DialogHeader title="Verify the repair" subtitle="The same command and acceptance criteria will be used." onOpenChange={setOpen} />
+      <VStack gap={3} padding={4}>
+        {p.expectation && <VStack gap={0.5}><Text type="code">{p.expectation.trigger.value}</Text><Text type="supporting">{p.expectation.target}° ± {p.expectation.tolerance}° within {p.expectation.deadline_ms} ms</Text></VStack>}
+        <Text type="supporting">Apply the repair outside inteGREAT. Release the serial port before flashing, then reconnect and rescan the repository.</Text>
         <Text type="label">Re-run the same test with</Text>
         <SourcePicker value={p.source} onChange={p.onSource} sources={p.sources} liveReady={p.liveReady} />
+        {p.source.split(":")[0] !== p.view.test_run.source.kind && <Notice tone="warning" title="Observation source changed" body="Verification applies to the selected source. A simulated or replay pass does not verify a live hardware repair." />}
         <HStack gap={1}>
           <Button label="Run verification" variant="primary" isLoading={p.busyActionId === verify.id}
-                  isDisabled={p.source === "live" && !p.liveReady} onClick={() => p.onAction(verify)} />
+                  isDisabled={p.source === "live" && !p.liveReady} onClick={() => { setOpen(false); p.onAction(verify); }} />
+          {p.source === "live" && !p.liveReady && <Button label="Set up rig" onClick={() => { setOpen(false); p.onOpenDevices(); }} />}
           <Button label="Cancel" variant="ghost" onClick={() => setOpen(false)} />
         </HStack>
       </VStack>
-    </Card>
+      </Dialog>
+    </>
   );
+}
+
+function AIReview(p: FlowProps & { view: InvestigationView }) {
+  const rounds = p.view.incident.agent_rounds_used;
+  const unavailable = !p.agentStatus?.available;
+  const reason = unavailable ? p.agentStatus?.reason ?? "Provider not configured" : rounds >= 2 ? "Two investigation rounds used" : "";
+  const evById = new Map(p.view.evidence.map((e) => [e.id, e]));
+  return <VStack gap={2}>
+    <Divider />
+    <Eyebrow>AI evidence review</Eyebrow>
+    <Text type="supporting">Code, hardware, and runtime specialists can review this investigation and recommend an existing diagnostic action.</Text>
+    {reason && <Text type="supporting">{reason}. Deterministic checks remain available.</Text>}
+    <Button label={p.diagnosing ? "Reviewing evidence…" : rounds ? "Review new evidence" : "Ask AI to review evidence"}
+            size="sm" isLoading={p.diagnosing} isDisabled={!!reason} onClick={p.onDiagnose} />
+    {p.agentStatus?.available && <Text type="supporting">{p.agentStatus.provider} · {p.agentStatus.model} · round {rounds}/2</Text>}
+    {p.agentStatus && p.agentStatus.stages.length > 0 && (
+      <Collapsible defaultIsOpen={false} trigger={<Text type="supporting">Provider per stage</Text>}>
+        <VStack gap={0.5}>
+          {p.agentStatus.stages.map((s) => (
+            <Text key={s.role} type="supporting">
+              {s.role}: {s.provider}{s.model ? ` · ${s.model}` : ""} — {s.available ? "available" : `unavailable (${s.reason ?? "not configured"})`}
+            </Text>
+          ))}
+        </VStack>
+      </Collapsible>
+    )}
+    {p.view.agent_runs.filter((r) => r.agent !== "orchestrator").map((r) => (
+      <Collapsible key={r.id} defaultIsOpen={false} trigger={<Text type="supporting">{r.agent.replace("_", "/")}: {r.status}{r.validation_errors.length ? ` · ${r.validation_errors.length} rejected` : ""}</Text>}>
+        <VStack gap={2}>
+          {r.error && <Text type="supporting">{r.error}</Text>}
+          {r.report?.findings.map((f, i) => <VStack key={i} gap={1}><Text type="supporting">{f.statement}</Text><EvidenceList ids={f.supporting_evidence_ids} evById={evById} onInspect={p.onEvidence} /></VStack>)}
+          {r.validation_errors.map((e, i) => <Text key={i} type="supporting">Rejected: {e}</Text>)}
+        </VStack>
+      </Collapsible>
+    ))}
+  </VStack>;
 }
 
 const PERMS: { id: PermissionCategory; label: string; hint: string }[] = [
@@ -334,29 +436,12 @@ function MoreTools(p: FlowProps & { view: InvestigationView }) {
   const granted = new Set(view.permissions.map((g) => g.category));
   const extra = view.actions.filter((a) => a.tool_name && a.kind !== "inspect_source");
   const [note, setNote] = useState("");
-  const rounds = view.incident.agent_rounds_used;
-  const aiReason = !p.agentStatus?.available ? `AI unavailable: ${p.agentStatus?.reason ?? "no provider"}`
-    : rounds >= 2 ? "Agent budget used (2 rounds)" : "";
   return (
-    <Collapsible defaultIsOpen={false} trigger={<Text type="label">More tools</Text>}>
+    <Collapsible defaultIsOpen={false} trigger={<Eyebrow>More tools</Eyebrow>}>
       <VStack gap={3}>
-        <VStack gap={1}>
-          <Text type="label" color="secondary">Ask the AI agents</Text>
-          <HStack gap={1} vAlign="center">
-            <Button label={p.diagnosing || view.incident.state === "investigating" ? "Agents investigating…" : rounds ? "Ask again" : "Ask agents"}
-                    size="sm" isLoading={p.diagnosing} isDisabled={!!aiReason} tooltip={aiReason || undefined} onClick={p.onDiagnose} />
-            <Text type="supporting">round {rounds}/2</Text>
-          </HStack>
-          {view.agent_runs.filter((r) => r.agent !== "orchestrator").map((r) => (
-            <Text key={r.id} type="supporting">
-              {r.agent.replace("_", "/")} agent: {r.status}{r.report ? ` · ${r.report.findings.length} finding(s)` : ""}
-              {r.validation_errors.length ? ` · ${r.validation_errors.length} rejected` : ""}
-            </Text>
-          ))}
-        </VStack>
         {extra.length > 0 && (
           <VStack gap={1}>
-            <Text type="label" color="secondary">Read-only tools</Text>
+            <Eyebrow>Read-only tools</Eyebrow>
             <HStack gap={1} wrap="wrap">
               {extra.map((a) => (
                 <Button key={a.id} label={a.label} size="sm" tooltip={a.rationale}
@@ -366,7 +451,7 @@ function MoreTools(p: FlowProps & { view: InvestigationView }) {
           </VStack>
         )}
         <VStack gap={1}>
-          <Text type="label" color="secondary">Permissions for this investigation</Text>
+          <Eyebrow>Permissions for this investigation</Eyebrow>
           {PERMS.map((c) => (
             <Switch key={c.id} size="sm" label={c.label} description={c.hint} value={granted.has(c.id)}
                     labelSpacing="spread" width="100%" onChange={(v) => p.onPermission(c.id, v)} />
@@ -393,17 +478,23 @@ function VerifyStep(p: FlowProps & { view: InvestigationView }) {
   if (inc.state === "verifying") {
     return (
       <VStack gap={3} hAlign="center">
+        <Eyebrow num="04">Verify — same test again</Eyebrow>
         <Spinner size="lg" label="Re-running the same test…" />
         <Text type="supporting">Same command, same pass criteria.</Text>
       </VStack>
     );
   }
   const v = view.followup_runs.find((r) => r.id === inc.resolved_by_test_run_id);
+  const title = v?.source.kind === "sim" ? "Verified on the simulated rig"
+    : v?.source.kind === "replay" ? `Verified on ${v.synthetic ? "synthetic" : "recorded"} replay`
+    : v?.source.kind === "live" ? "Fixed — verified on live hardware" : "Verification record unavailable";
   return (
     <VStack gap={3}>
-      <Notice tone="success" title="Fixed — verified by measurement"
+      <Eyebrow num="04">Verify — closed loop</Eyebrow>
+      <Notice tone="success" title={title}
               body={v?.result?.reason ?? "The same test now passes."} end={v ? <SourceBadge run={v} /> : undefined} />
       {v?.synthetic && <Text type="supporting">Verified on synthetic data, not live hardware.</Text>}
+      {v?.result && <Facts result={v.result} />}
       <Text type="body" color="secondary">Was: {view.hypotheses[0]?.title ?? inc.title}</Text>
       <Button label="Start a new test" variant="primary" onClick={p.onNewTest} />
     </VStack>

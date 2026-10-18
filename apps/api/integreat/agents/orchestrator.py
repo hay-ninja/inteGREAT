@@ -1,9 +1,13 @@
-"""Bounded triage orchestrator (PRD FR-07, §11).
+"""Bounded triage orchestrator (PRD FR-07, §11, D-023).
+
+Routing: StepFun performs orchestration — triage (which specialists, what question each resolves)
+and synthesis — while Gemini supplies the Code / Hardware / Runtime-Vision specialists. Either
+provider can be unavailable independently; deterministic dispatch/ranking is always the fallback.
 
 Per incident: at most 2 rounds (initial fan-out + one evidence-driven follow-up). Per round:
-  triage (LLM, constrained to 3 agent names; deterministic fallback) → specialist agents in parallel
-  with timeouts → validation against the evidence/action catalogs → synthesis (LLM; deterministic
-  fallback). No recursion, no tool calls by agents, no arbitrary output reaches the UI unvalidated.
+  triage → specialist agents in parallel with timeouts → validation against the evidence/action
+  catalogs → synthesis. No recursion, no tool calls by agents, no arbitrary output reaches the UI
+  unvalidated.
 
 Agent text can never grant permissions, change trust status, or alter rule-based ranks. Agent-proposed
 hypotheses are added as `unverified` with origin="agent" and must cite at least one valid evidence id.
@@ -135,10 +139,13 @@ class Orchestrator:
                    for r in self.svc.runs_for_incident(inc.id) if r.id != inc.test_run_id)
 
     def check_can_run(self, inc: Incident) -> None:
-        if not self.svc.llm.available:
-            raise DiagnosisRefused(503, "model_unavailable",
-                                   f"AI agents unavailable: {getattr(self.svc.llm, 'reason', 'no provider configured')}. "
-                                   "Rules, graph, tests and tools still work.")
+        if not (self.svc.orchestrator_llm.available or self.svc.specialist_llm.available):
+            raise DiagnosisRefused(
+                503, "model_unavailable",
+                "AI agents unavailable: "
+                f"orchestrator ({getattr(self.svc.orchestrator_llm, 'reason', 'not configured')}); "
+                f"specialists ({getattr(self.svc.specialist_llm, 'reason', 'not configured')}). "
+                "Rules, graph, tests and tools still work.")
         if inc.state in (IncidentState.resolved, IncidentState.inconclusive):
             raise DiagnosisRefused(409, "incident_closed", f"incident is {inc.state.value}")
         if inc.state == IncidentState.investigating:
@@ -165,29 +172,38 @@ class Orchestrator:
         runs: list[AgentRun] = []
         t_round = time.perf_counter()
         try:
-            # 1) triage
+            # 1) triage — orchestration provider (StepFun), deterministic fallback
             triage_run = AgentRun(id=f"agentrun:{uuid.uuid4().hex[:10]}", incident_id=inc.id, project_id=inc.project_id,
-                                  round=rnd, agent=AgentName.orchestrator, status="completed", model=svc.llm.model)
+                                  round=rnd, agent=AgentName.orchestrator, status="completed",
+                                  model=svc.orchestrator_llm.model, provider=svc.orchestrator_llm.name)
             dispatch = default_dispatch(inc)
+            questions: dict[AgentName, str] = {}
             try:
-                t = await svc.llm.generate_structured(
+                t = await svc.orchestrator_llm.generate_structured(
                     system="You are the triage orchestrator for an embedded debugging tool. Choose which specialist "
-                           "agents to consult (1-3). " + RULES,
+                           "agents to consult (1-3) — only the ones whose expertise the fault codes need — and "
+                           "state the question each should resolve. " + RULES,
                     prompt=f"<data>\nIncident: {inc.title}\nFault codes: {[c.value for c in inc.fault_codes]}\n"
-                           f"Default plan: {[a.value for a in dispatch]}\n</data>\nChoose agents.",
+                           f"Default plan: {[a.value for a in dispatch]}\n</data>\nChoose agents and questions.",
                     schema=TriageOut, timeout_s=s.agent_timeout_s)
                 dispatch = [AgentName(a) for a in dict.fromkeys(t.agents)]
+                questions = {AgentName(q.agent): q.question for q in t.questions if AgentName(q.agent) in dispatch}
                 triage_run.summary = t.rationale
-            except (LLMUnavailable, LLMInvalidOutput, asyncio.TimeoutError) as e:
+            except (LLMUnavailable, LLMInvalidOutput, asyncio.TimeoutError, ValueError) as e:
                 triage_run.validation_errors.append(f"triage fell back to rules: {type(e).__name__}")
+            if not svc.specialist_llm.available:
+                dispatch = []
+                triage_run.validation_errors.append(
+                    f"specialist provider unavailable ({getattr(svc.specialist_llm, 'reason', 'not configured')}); "
+                    "no specialists dispatched")
             triage_run.dispatched = dispatch
             svc.store.put(K_AGENT_RUN, triage_run, parent_id=inc.id)
             runs.append(triage_run)
             svc._emit("agent.started", inc.project_id, {"agents": [a.value for a in dispatch], "round": rnd},
                       investigation_id=inc.id)
 
-            # 2) specialists in parallel
-            pairs = await asyncio.gather(*(self._run_agent(inc, a, rnd) for a in dispatch))
+            # 2) specialists in parallel — specialist provider (Gemini)
+            pairs = await asyncio.gather(*(self._run_agent(inc, a, rnd, questions.get(a)) for a in dispatch))
             results = [r for r, _ in pairs]
             runs += results
 
@@ -219,18 +235,21 @@ class Orchestrator:
                       "duration_ms": int((time.perf_counter() - t_round) * 1000)}, investigation_id=inc.id)
         return runs
 
-    async def _run_agent(self, inc: Incident, agent: AgentName, rnd: int) -> tuple[AgentRun, list[dict]]:
+    async def _run_agent(self, inc: Incident, agent: AgentName, rnd: int,
+                         question: str | None = None) -> tuple[AgentRun, list[dict]]:
         svc, s = self.svc, self.svc.settings
         run = AgentRun(id=f"agentrun:{uuid.uuid4().hex[:10]}", incident_id=inc.id, project_id=inc.project_id,
-                       round=rnd, agent=agent, status="completed", model=svc.llm.model)
+                       round=rnd, agent=agent, status="completed", model=svc.specialist_llm.model,
+                       provider=svc.specialist_llm.name)
         t0 = time.perf_counter()
         proposed: list[dict] = []
         try:
             packet = await build_packet(svc, inc, agent, s.max_context_tokens)
             run.context = packet.summary
-            raw = await svc.llm.generate_structured(
+            ask = f"\nQuestion to resolve (from the orchestrator): {question}\n" if question else "\n"
+            raw = await svc.specialist_llm.generate_structured(
                 system=f"{AGENT_ROLES[agent]}\n{RULES}",
-                prompt=f"<data>\n{packet.text}\n</data>\n\nReport findings, unknowns, proposed next action ids "
+                prompt=f"<data>\n{packet.text}\n</data>\n{ask}Report findings, unknowns, proposed next action ids "
                        "and (only if well supported) new hypotheses.",
                 schema=AgentReportOut, timeout_s=s.agent_timeout_s)
             report, proposed, errors = validate_report(agent, inc, raw, packet.evidence_ids, packet.action_ids,
@@ -251,9 +270,12 @@ class Orchestrator:
         return run, proposed
 
     async def _synthesize(self, inc: Incident, rnd: int, reports: list[AgentRun]) -> AgentRun:
+        """Orchestration provider (StepFun) reconciles specialist reports — or the deterministic
+        evidence alone when no specialists ran — into a short explanation + one safe next check."""
         svc, s = self.svc, self.svc.settings
         run = AgentRun(id=f"agentrun:{uuid.uuid4().hex[:10]}", incident_id=inc.id, project_id=inc.project_id,
-                       round=rnd, agent=AgentName.orchestrator, status="completed", model=svc.llm.model)
+                       round=rnd, agent=AgentName.orchestrator, status="completed",
+                       model=svc.orchestrator_llm.model, provider=svc.orchestrator_llm.name)
         hyps = svc.store.get_many("hypothesis", inc.hypothesis_ids, Hypothesis)
         actions = [a.id for a in svc.store.get_many("action", inc.action_ids, DiagnosticAction)]
         lines = [f"{h.id} | rank {h.rank} | {h.status.value} | {h.title}" for h in hyps]
@@ -261,27 +283,36 @@ class Orchestrator:
             for f in r.report.findings:
                 lines.append(f"[{r.agent.value}] {f.statement} (evidence: {', '.join(f.supporting_evidence_ids)})")
             lines += [f"[{r.agent.value}] unknown: {u}" for u in r.report.unknowns]
+        if not reports:
+            lines.append("NOTE: no specialist reports are available; synthesize only from the "
+                         "deterministic rules, evidence catalog and hypotheses below.")
         t0 = time.perf_counter()
         try:
-            if not reports:
-                raise LLMUnavailable("no valid agent reports to synthesize")
-            out = await svc.llm.generate_structured(
-                system="You are the triage orchestrator. Merge specialist findings into a short explanation for "
-                       "the engineer and pick the single most useful next action. Preserve contradictions and "
-                       "unknowns; do not force a single root cause. " + RULES,
-                prompt="<data>\n" + "\n".join(lines) + f"\nACTION IDS: {actions}\n</data>",
+            packet = await build_packet(svc, inc, AgentName.orchestrator, s.max_context_tokens)
+            run.context = packet.summary
+            out = await svc.orchestrator_llm.generate_structured(
+                system="You are the triage orchestrator. Reconcile specialist findings (or, if none, the "
+                       "deterministic evidence) into a short explanation for the engineer and pick the single "
+                       "safest, lowest-effort next check that distinguishes the leading hypotheses. Explain "
+                       "what each outcome would establish. Preserve contradictions and unknowns; do not force "
+                       "a single root cause. " + RULES,
+                prompt="<data>\n" + packet.text + "\n\nSPECIALIST REPORTS:\n" + "\n".join(lines)
+                       + f"\nACTION IDS: {actions}\n</data>",
                 schema=SynthesisOut, timeout_s=s.agent_timeout_s)
             if out.recommended_action_id not in actions:
                 run.validation_errors.append(f"recommended unknown action {out.recommended_action_id}; ignored")
                 out.recommended_action_id = ""
-            run.summary = out.summary + (("\nContradictions: " + "; ".join(out.contradictions))
-                                         if out.contradictions else "")
+            run.summary = out.summary
+            if out.contradictions:
+                run.summary += "\nContradictions: " + "; ".join(out.contradictions)
+            if out.outcome_explanation:
+                run.summary += f"\nWhat the recommended check shows: {out.outcome_explanation}"
             inc = svc.incident(inc.id)
             inc.agent_summary = run.summary
             inc.agent_recommended_action_id = out.recommended_action_id or None
             svc.store.put("incident", inc)
         except (LLMUnavailable, LLMInvalidOutput, asyncio.TimeoutError) as e:
-            run.status = "failed" if not isinstance(e, asyncio.TimeoutError) else "timeout"
+            run.status = "timeout" if isinstance(e, asyncio.TimeoutError) else "failed"
             run.error = f"synthesis unavailable ({type(e).__name__}); rule-based ranking stands"
         run.duration_ms = int((time.perf_counter() - t0) * 1000)
         svc.store.put(K_AGENT_RUN, run, parent_id=inc.id)

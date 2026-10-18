@@ -17,7 +17,9 @@ cd apps/web; npm install; cd ../..
 apps/api/.venv/Scripts/python scripts/dev.py
 ```
 
-Open http://localhost:5173, pick a demo fixture, click **Propose test from code → Confirm → Run Test**.
+Open http://localhost:5173, pick a demo fixture, click **Suggest a test from the code → Confirm test → Run test**.
+Use **Rig setup** in the header to connect real devices. Select graph nodes/connections or supporting
+evidence to inspect them; **Focus graph** closes the measurement drawer without interrupting the investigation.
 
 Observation sources (top bar): **Sim** (simulated rig through the real CV pipeline), **Replay** (recorded or
 synthetic files), **Live rig** (real ESP32 + camera — see [`docs/hardware-setup.md`](docs/hardware-setup.md)).

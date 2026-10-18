@@ -2,7 +2,6 @@ import { List, ListItem } from "@astryxdesign/core/List";
 import { HStack } from "@astryxdesign/core/HStack";
 import { VStack } from "@astryxdesign/core/VStack";
 import { Text } from "@astryxdesign/core/Text";
-import { Badge } from "@astryxdesign/core/Badge";
 import { StatusDot } from "@astryxdesign/core/StatusDot";
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Selector } from "@astryxdesign/core/Selector";
@@ -21,13 +20,14 @@ export function cite(e: Evidence): string {
 }
 
 /** Compact evidence list: what it says, what kind of fact it is, where it came from. */
-export function EvidenceList({ ids, evById, title }: { ids: string[]; evById: Map<string, Evidence>; title?: string }) {
+export function EvidenceList({ ids, evById, title, onInspect }: { ids: string[]; evById: Map<string, Evidence>; title?: string; onInspect?: (e: Evidence) => void }) {
   const items = ids.map((id) => evById.get(id)).filter(Boolean) as Evidence[];
   if (!items.length) return null;
   return (
-    <List density="compact" header={title ? <Text type="label" color="secondary">{title}</Text> : undefined}>
+    <List density="compact" header={<Text type="label" color="secondary">{title ?? "Evidence"}</Text>}>
       {items.map((e) => (
         <ListItem key={e.id} label={e.summary}
+                  onClick={onInspect ? () => onInspect(e) : undefined}
                   description={[KIND_LABEL[e.kind] ?? e.kind, cite(e)].filter(Boolean).join(" · ")} />
       ))}
     </List>
@@ -36,13 +36,14 @@ export function EvidenceList({ ids, evById, title }: { ids: string[]; evById: Ma
 
 /** The three facts PRD §5.3 says must never be conflated. */
 export function Facts({ result }: { result: ExpectationResult }) {
+  const labels = { command_sent: "Command sent", command_acknowledged: "Firmware ACK (serial)", physical_motion: "Motion observed (camera)" };
   return (
     <VStack gap={1}>
       {result.facts.map((f) => (
         <HStack key={f.key} gap={1.5} vAlign="center">
           <StatusDot variant={f.value === "yes" ? "success" : f.value === "no" ? "error" : "neutral"}
                      label={`${f.label}: ${f.value}`} tooltip={f.note ?? undefined} />
-          <Text type="body" color={f.value === "unknown" ? "secondary" : "primary"}>{f.label}</Text>
+          <Text type="body" color={f.value === "unknown" ? "secondary" : "primary"}>{labels[f.key]}</Text>
           <Text type="supporting">{f.value === "yes" ? "yes" : f.value === "no" ? "no" : "unknown"}</Text>
         </HStack>
       ))}
@@ -50,11 +51,19 @@ export function Facts({ result }: { result: ExpectationResult }) {
   );
 }
 
+/** Numbered category label — the reference's "01 · SENSING" eyebrows, on the dark theme. */
+export function Eyebrow({ num, children }: { num?: string; children: React.ReactNode }) {
+  return (
+    <span className="eyebrow">{num && <span className="num">{num}</span>}{children}</span>
+  );
+}
+
 export function SourceBadge({ run }: { run: TestRun }) {
   const s = run.source;
-  if (s.kind === "live") return <Badge variant="success" label="Live hardware" />;
-  if (s.kind === "sim") return <Badge variant="purple" label={`Simulated · ${s.scenario}`} />;
-  return <Badge variant="warning" label={`${run.synthetic ? "Synthetic replay" : "Recorded replay"} · ${s.scenario}`} />;
+  const scenario = (s.scenario ?? "").replaceAll("_", " ");
+  const label = s.kind === "live" ? "Live hardware" : s.kind === "sim" ? `Simulated · ${scenario}`
+    : `${run.synthetic ? "Synthetic replay" : "Recorded replay"} · ${scenario}`;
+  return <HStack gap={1} vAlign="center"><StatusDot variant={s.kind === "live" ? "success" : "neutral"} label={label} /><Text type="supporting">{label}</Text></HStack>;
 }
 
 /** Where test data comes from: two small choices instead of one long list. */
@@ -85,7 +94,7 @@ export function SourcePicker({ value, onChange, sources, liveReady }: {
                                               description: r.description }))} />
       ) : (
         <Text type="supporting">
-          {liveReady ? "ESP32 and calibrated camera are connected." : "Connect the ESP32 and calibrate the camera under More → Devices."}
+          {liveReady ? "ESP32 and calibrated camera are connected." : "Open Rig setup to connect the ESP32 and calibrate the camera."}
         </Text>
       )}
     </VStack>

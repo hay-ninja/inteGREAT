@@ -33,6 +33,13 @@ export type NetlistPreview = S["NetlistPreview"];
 export type SourceOptions = S["SourceOptions"];
 export type Incident = S["Incident"];
 export type PermissionCategory = S["PermissionUpdate"]["category"];
+export type EventFlow = S["EventFlow"];
+export type FlowEvent = S["FlowEvent"];
+export type FlowLane = S["FlowLane"];
+export type RepairJob = S["RepairJob"];
+export type RepairPreflight = S["RepairPreflight"];
+export type ProviderStatus = S["ProviderStatus"];
+export type GraphLayer = "combined" | "hardware" | "software";
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string, public details: Record<string, unknown> = {}) {
@@ -117,6 +124,12 @@ export const api = {
     }),
   manualResult: (iid: string, action_id: string, result: string, note?: string) =>
     req<InvestigationView>("POST", `/investigations/${enc(iid)}/manual-results`, { action_id, result, note }),
+  testFlow: (runId: string) => req<EventFlow>("GET", `/tests/${enc(runId)}/flow`),
+  repairPreflight: (iid: string) => req<RepairPreflight>("GET", `/investigations/${enc(iid)}/repairs/preflight`),
+  repairs: (iid: string) => req<RepairJob[]>("GET", `/investigations/${enc(iid)}/repairs`),
+  requestRepair: (iid: string, acknowledge_uncommitted = false) =>
+    req<RepairJob>("POST", `/investigations/${enc(iid)}/repairs`, { acknowledge_uncommitted }),
+  refreshRepair: (jobId: string) => req<RepairJob>("POST", `/repairs/${enc(jobId)}/refresh`),
 };
 
 /** Subscribe to the project event stream. Reconnects with catch-up from the last seen seq. */

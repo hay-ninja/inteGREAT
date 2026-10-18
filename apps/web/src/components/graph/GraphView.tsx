@@ -25,8 +25,21 @@ import { HStack } from "@astryxdesign/core/HStack";
 import { VStack } from "@astryxdesign/core/VStack";
 import { Text } from "@astryxdesign/core/Text";
 import { StatusDot } from "@astryxdesign/core/StatusDot";
-import type { GraphSnapshot, Highlight } from "../../lib/api";
-import { HW_KINDS, buildVisibleGraph, type VEdge, type VNode } from "./visibleGraph";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
+import { Layout, LayoutContent, LayoutHeader } from "@astryxdesign/core/Layout";
+import type { GraphLayer, GraphSnapshot, Highlight } from "../../lib/api";
+import {
+  HW_KINDS,
+  buildVisibleGraph,
+  edgeLabel,
+  hiddenByLayer,
+  nodeLabel,
+  relatedSelection,
+  type Region,
+  type VEdge,
+  type VNode,
+} from "./visibleGraph";
 
 const KIND_ICON: Record<string, ReactNode> = {
   mcu: <Cpu size={13} />,
@@ -50,27 +63,41 @@ function GraphNodeView({ data }: NodeProps<Node<NodeData>>) {
   const hl = v.highlight ?? v.inheritedHighlight;
   const hw = HW_KINDS.has(n.kind);
   const cls = ["gn", `k-${n.kind}`, `v-${n.verification}`, hw ? "hw" : "code",
+    v.boundary ? "boundary" : "", v.emphasized ? "emph" : "",
     hl ? `hl-${hl.style}` : "", v.inheritedHighlight && !v.highlight ? "inherited" : "",
     v.dimmed ? "dimmed" : "", v.matched ? "matched" : ""].join(" ");
-  const title = [n.label, n.kind.replace("_", " "), n.verification, hl ? `${hl.style.replace("_", " ")}: ${hl.reason}` : ""]
+  const title = [n.label, v.subtitle, n.kind.replace("_", " "), n.verification,
+    v.boundary ? "hardware reference — shown because code touches it" : "",
+    hl ? `${hl.style.replace("_", " ")}: ${hl.reason}` : ""]
     .filter(Boolean).join(" · ");
   return (
     <span className={cls} title={title}
           onDoubleClick={(e) => { if (v.expandable) { e.stopPropagation(); onToggle(n.id); } }}>
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={Position.Top} />
       {hw ? <span className="gn-kind">{KIND_ICON[n.kind]}</span> : <span className="gn-dot" />}
-      <span className="gn-label">{n.label}</span>
+      <span className="gn-stack">
+        <span className="gn-label">{nodeLabel(n)}</span>
+        {v.subtitle && hw && <span className="gn-sub">{v.subtitle}{v.boundary ? " · reference" : ""}</span>}
+      </span>
       {hw && hl && <span className="gn-mark">{MARK[hl.style]}</span>}
       {hw && !hl && n.verification === "verified" && n.kind !== "mcu" && n.kind !== "pin" && (
         <span className="gn-mark"><CircleCheck size={11} color="var(--color-text-disabled)" /></span>
       )}
       {v.expandable && !v.expanded && <span className="gn-count">+{v.childCount}</span>}
-      <Handle type="source" position={Position.Right} />
+      <Handle type="source" position={Position.Bottom} />
     </span>
   );
 }
 
-const nodeTypes = { trace: GraphNodeView };
+function RegionView({ data }: NodeProps<Node<{ r: Region }>>) {
+  return (
+    <span className="graph-region">
+      <span className="graph-region-label">{data.r.label}</span>
+    </span>
+  );
+}
+
+const nodeTypes = { trace: GraphNodeView, region: RegionView };
 
 const HL_STROKE: Record<string, string> = {
   conflict: "var(--color-error)",
@@ -89,8 +116,38 @@ function edgeStyle(e: VEdge): CSSProperties {
   if (e.verification === "unverified") s.strokeDasharray = "1.5 4";
   if (e.verification === "conflicting") { s.stroke = "var(--color-error)"; s.strokeWidth = 2; }
   if (e.highlight) { s.stroke = HL_STROKE[e.highlight.style]; s.strokeWidth = 2; }
+  if (e.emphasized) { s.stroke = "var(--color-accent)"; s.strokeWidth = 2; }
   if (e.dimmed) s.opacity = 0.12;
   return s;
+}
+
+export type CanvasMode = "deps" | "flow";
+
+/** Shared chrome for the two main visualizations: which view, which layer, what's hidden. */
+export function CanvasToggles({ mode, onMode, layer, onLayer, hiddenNote }: {
+  mode: CanvasMode;
+  onMode: (m: CanvasMode) => void;
+  layer: GraphLayer;
+  onLayer: (l: GraphLayer) => void;
+  hiddenNote?: string | null;
+}) {
+  return (
+    <HStack gap={3} vAlign="center" wrap="wrap">
+      <SegmentedControl label="Main view" value={mode} onChange={(v) => onMode(v as CanvasMode)} size="sm">
+        <SegmentedControlItem value="deps" label="Dependencies" />
+        <SegmentedControlItem value="flow" label="Event flow" />
+      </SegmentedControl>
+      <SegmentedControl label="Graph layer" value={layer} onChange={(v) => onLayer(v as GraphLayer)} size="sm">
+        <SegmentedControlItem value="combined" label="Combined" />
+        <SegmentedControlItem value="hardware" label="Hardware" />
+        <SegmentedControlItem value="software" label="Software" />
+      </SegmentedControl>
+      {hiddenNote && (
+        <Button label={`${hiddenNote} — show everything`} size="sm" variant="ghost"
+                onClick={() => onLayer("combined")} />
+      )}
+    </HStack>
+  );
 }
 
 interface Props {
@@ -99,9 +156,13 @@ interface Props {
   highlights: Highlight[];
   focusIds: Set<string> | null;
   selectedId: string | null;
+  layer: GraphLayer;
+  mode: CanvasMode;
+  onMode: (m: CanvasMode) => void;
+  onLayer: (l: GraphLayer) => void;
   onToggle: (id: string) => void;
   onSelect: (id: string | null) => void;
-  onEdgeSelect: (edgeIds: string[]) => void;
+  onEdgeSelect: (edgeIds: string[], lifted: boolean) => void;
   onExpandAll: () => void;
   onCollapseAll: () => void;
   onClearFocus: (() => void) | null;
@@ -110,53 +171,95 @@ interface Props {
 
 function Inner(p: Props) {
   const { fitView } = useReactFlow();
+  const canvasRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
-  const vg = useMemo(() => buildVisibleGraph(p.graph, p.expanded, p.highlights, p.focusIds, search),
-    [p.graph, p.expanded, p.highlights, p.focusIds, search]);
+  const rel = useMemo(() => relatedSelection(p.graph, p.selectedId), [p.graph, p.selectedId]);
+  const vg = useMemo(() => buildVisibleGraph(p.graph, p.expanded, p.highlights, p.focusIds, search, p.layer, rel),
+    [p.graph, p.expanded, p.highlights, p.focusIds, search, p.layer, rel]);
+  const hidden = hiddenByLayer(p.graph, p.layer);
+  const hiddenNote = hidden.sw ? `${hidden.sw} source item${hidden.sw === 1 ? "" : "s"} hidden`
+    : hidden.hw ? `${hidden.hw} hardware item${hidden.hw === 1 ? "" : "s"} hidden` : null;
 
   // Controlled nodes: React Flow keeps handle positions only if we pass back each node's `measured`
   // size; dropping it hides nodes/edges after a re-layout.
-  const [nodes, setNodes] = useState<Node<NodeData>[]>([]);
+  const [nodes, setNodes] = useState<Node[]>([]);
   const { onToggle } = p;
   useEffect(() => {
     setNodes((prev) => {
       const old = new Map(prev.map((n) => [n.id, n]));
-      return vg.nodes.map((v) => ({
-        id: v.id, type: "trace", position: { x: v.x, y: v.y }, data: { v, onToggle },
-        selected: v.id === p.selectedId, measured: old.get(v.id)?.measured,
+      const regionNodes = vg.regions.map((r): Node => ({
+        id: r.id, type: "region", position: { x: r.x, y: r.y }, data: { r },
+        style: { width: r.w, height: r.h }, selectable: false, draggable: false, focusable: false,
       }));
+      return [
+        ...regionNodes,
+        ...vg.nodes.map((v): Node => ({
+          id: v.id, type: "trace", position: { x: v.x, y: v.y }, data: { v, onToggle },
+          selected: v.id === p.selectedId, measured: old.get(v.id)?.measured,
+        })),
+      ];
     });
   }, [vg, onToggle, p.selectedId]);
 
   const edges: Edge[] = vg.edges.map((e) => ({
     id: e.id, source: e.source, target: e.target,
-    label: e.relation === "contains" || !e.highlight ? undefined : e.label,
-    animated: e.highlight?.style === "observed",
+    label: e.relation === "contains" ? undefined : edgeLabel(e),
+    labelStyle: { fontSize: 9 },
+    animated: e.highlight?.style === "observed" || e.emphasized,
     style: edgeStyle(e),
     markerEnd: e.relation === "contains" ? undefined
       : { type: MarkerType.ArrowClosed, width: 10, height: 10, color: (edgeStyle(e).stroke as string) },
-    data: { edgeIds: e.edgeIds },
+    data: { edgeIds: e.edgeIds, lifted: e.lifted },
   }));
 
   // Fit only once React Flow has measured every node; fitting earlier silently does nothing.
   const initialized = useNodesInitialized();
   const lastFit = useRef("");
   useEffect(() => {
-    const key = `${p.fitKey}|${vg.nodes.length}`;
+    const key = `${p.fitKey}|${p.layer}|${vg.nodes.length}`;
     if (!initialized || lastFit.current === key) return;
     lastFit.current = key;
-    requestAnimationFrame(() => fitView({ padding: 0.15, duration: 300 }));
-  }, [initialized, p.fitKey, vg.nodes.length, fitView]);
+    requestAnimationFrame(() => fitView({ padding: 0.14, maxZoom: 1.25, duration: 250 }));
+  }, [initialized, p.fitKey, p.layer, vg.nodes.length, fitView]);
+  useEffect(() => {
+    if (!initialized || !canvasRef.current) return;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => fitView({ padding: 0.14, maxZoom: 1.25, duration: 200 }));
+    });
+    observer.observe(canvasRef.current);
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); };
+  }, [initialized, fitView]);
+
+  const layerEmpty = p.layer === "hardware"
+    ? { title: "No hardware in this project", body: "Import a hardware manifest or KiCad netlist to see the physical rig." }
+    : p.layer === "software"
+      ? { title: "No source code in this scope", body: "The current scope has no modules — import a firmware repository." }
+      : { title: "Empty project", body: "Nothing has been imported yet." };
 
   return (
+    <Layout header={<LayoutHeader padding={2} hasDivider>
+      <HStack gap={2} vAlign="center" wrap="wrap">
+        <CanvasToggles mode={p.mode} onMode={p.onMode} layer={p.layer} onLayer={p.onLayer} hiddenNote={hiddenNote} />
+        <TextInput label="Search nodes in this view" isLabelHidden size="sm" value={search} onChange={setSearch}
+                   placeholder="Search…" startIcon="search" hasClear width={200} />
+        <Button label="Expand all" size="sm" variant="ghost" onClick={p.onExpandAll} />
+        <Button label="Collapse" size="sm" variant="ghost" onClick={p.onCollapseAll} />
+        {p.onClearFocus && <Button label="Whole system" size="sm" variant="ghost" onClick={p.onClearFocus} />}
+      </HStack>
+    </LayoutHeader>} content={<LayoutContent padding={0} isScrollable={false} ref={canvasRef}>
+    {vg.nodes.length === 0 ? (
+      <EmptyState title={layerEmpty.title} description={layerEmpty.body} />
+    ) : (
     <ReactFlow
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
-      onNodesChange={(changes) => setNodes((ns) => applyNodeChanges(changes, ns) as Node<NodeData>[])}
-      onNodeClick={(_, n) => p.onSelect(n.id)}
+      onNodesChange={(changes) => setNodes((ns) => applyNodeChanges(changes, ns) as Node[])}
+      onNodeClick={(_, n) => { if (n.type !== "region") p.onSelect(n.id); }}
       onPaneClick={() => p.onSelect(null)}
-      onEdgeClick={(_, e) => p.onEdgeSelect((e.data?.edgeIds as string[]) ?? [e.id])}
+      onEdgeClick={(_, e) => p.onEdgeSelect((e.data?.edgeIds as string[]) ?? [e.id], !!e.data?.lifted)}
       nodesDraggable={false}
       className="graph-canvas"
       colorMode="dark"
@@ -164,18 +267,11 @@ function Inner(p: Props) {
       proOptions={{ hideAttribution: true }}
     >
       <Background gap={28} size={1} />
-      <Panel position="top-right">
-        <HStack gap={1} vAlign="center">
-          <TextInput label="Search nodes" isLabelHidden size="sm" value={search} onChange={setSearch}
-                     placeholder="Search…" startIcon="search" hasClear width={200} />
-          <Button label="Expand all" size="sm" variant="ghost" onClick={p.onExpandAll} />
-          <Button label="Collapse" size="sm" variant="ghost" onClick={p.onCollapseAll} />
-          {p.onClearFocus && <Button label="Show everything" size="sm" variant="ghost" onClick={p.onClearFocus} />}
-        </HStack>
-      </Panel>
-      <Panel position="bottom-left"><Legend /></Panel>
+      <Panel position="bottom-left"><Legend layer={p.layer} /></Panel>
       <Controls showInteractive={false} position="bottom-right" />
     </ReactFlow>
+    )}
+    </LayoutContent>} />
   );
 }
 
@@ -187,7 +283,7 @@ export function GraphView(p: Props) {
   );
 }
 
-function Legend() {
+function Legend({ layer }: { layer: GraphLayer }) {
   const [open, setOpen] = useState(false);
   if (!open) return <Button label="Legend" size="sm" variant="ghost" onClick={() => setOpen(true)} />;
   return (
@@ -197,13 +293,16 @@ function Legend() {
           <Text type="label">Legend</Text>
           <IconButton label="Close legend" size="sm" variant="ghost" icon={<CircleX size={14} />} onClick={() => setOpen(false)} />
         </HStack>
-        <Text type="supporting">Solid line: verified · dashed: from code · dotted: declared, unchecked</Text>
+        <Text type="supporting">Solid: verified · dashed: from code · dotted: declared, unchecked (from the schematic — not physically checked)</Text>
+        <Text type="supporting">Accent outline: related to your selection · dashed border pill: hardware reference</Text>
         <HStack gap={2} wrap="wrap">
           <HStack gap={1} vAlign="center"><StatusDot variant="error" label="Conflict or failed" /><Text type="supporting">conflict / failed</Text></HStack>
           <HStack gap={1} vAlign="center"><StatusDot variant="warning" label="Suspected" /><Text type="supporting">suspected</Text></HStack>
           <HStack gap={1} vAlign="center"><StatusDot variant="accent" label="Observed" /><Text type="supporting">observed</Text></HStack>
         </HStack>
-        <Text type="supporting">Double-click a dot to expand · click a line to verify wiring</Text>
+        <Text type="supporting">{layer === "combined" ? "Regions group software and hardware — lines crossing the gap are code/hardware links."
+          : layer === "hardware" ? "Code is hidden — select a part to see which code controls it."
+          : "Only hardware the code touches is shown, as dashed references."} Double-click a node to expand · click a line to inspect.</Text>
       </VStack>
     </Card>
   );

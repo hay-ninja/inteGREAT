@@ -160,7 +160,9 @@ def test_agent_timeout_and_failures_are_isolated():
         statuses = sorted(x["status"] for x in v["agent_runs"] if x["agent"] != "orchestrator")
         assert statuses == ["failed", "timeout"]
         assert v["incident"]["state"] == "awaiting_engineer"  # investigation continues
-        assert v["incident"]["agent_summary"] is None  # nothing valid to synthesize
+        # D-023: the orchestrator still synthesizes the deterministic evidence when every
+        # specialist fails — specialist failures stay isolated, never crash the round.
+        assert v["incident"]["agent_summary"] == "s"
 
 
 def test_invalid_triage_falls_back_to_rules(agent_client):

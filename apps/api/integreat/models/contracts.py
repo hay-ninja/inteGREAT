@@ -78,6 +78,14 @@ class EdgeOrigin(StrEnum):
     inferred_dependency = "inferred_dependency"
 
 
+class GraphLayer(StrEnum):
+    """Projection of the ONE canonical graph (D-023). Ids/provenance are unchanged per layer."""
+
+    combined = "combined"
+    hardware = "hardware"
+    software = "software"
+
+
 class EvidenceKind(StrEnum):
     source_excerpt = "source_excerpt"
     manifest_entry = "manifest_entry"
@@ -309,6 +317,140 @@ class SerialEvent(Model):
     matched_function_ids: list[str] = Field(default_factory=list)  # D-007 log-literal matching
 
 
+# ---------------------------------------------------------------- event flow (D-024)
+
+
+class FlowLane(StrEnum):
+    """Chronological lanes for one test run. Lanes describe *what kind of record* an event is,
+    not a fictional execution DAG (D-024)."""
+
+    command = "command"      # host test command / external trigger
+    software = "software"    # serial traffic and other software-side records
+    hardware = "hardware"    # camera observations
+    result = "result"        # evaluation, incidents, verification
+
+
+class FlowEventKind(StrEnum):
+    command_sent = "command_sent"
+    external_trigger = "external_trigger"
+    serial_rx = "serial_rx"
+    missing_ack = "missing_ack"
+    cv_segment = "cv_segment"          # aggregated consecutive camera samples
+    evaluation = "evaluation"
+    incident_opened = "incident_opened"
+    run_completed = "run_completed"
+
+
+class FlowEvent(Model):
+    """One item on the persisted chronological Event flow. Derived deterministically from
+    persisted records (D-024); ids stay stable across reloads."""
+
+    id: str
+    test_run_id: str
+    lane: FlowLane
+    kind: FlowEventKind
+    label: str
+    detail: str | None = None
+    timestamp_utc: datetime | None = None   # None = host never recorded one
+    elapsed_ms: int | None = None           # None = unknown; `order` is the fallback sort
+    elapsed_end_ms: int | None = None       # end of an aggregated segment
+    order: int                              # stable secondary ordering; never claims precision
+    state: Literal["observed", "expected", "inferred"] = "observed"
+    quality: str | None = None              # e.g. valid / marker_not_found / fail
+    evidence_ids: list[str] = Field(default_factory=list)
+    related_node_ids: list[str] = Field(default_factory=list)
+    aggregated_ids: list[str] = Field(default_factory=list)  # underlying obs/serial record ids
+    note: str | None = None
+
+
+class EventFlow(Model):
+    run_id: str
+    project_id: str
+    attempt_kind: Literal["initial", "repeat", "verify"]
+    run_state: TestRunState
+    source: ObservationSourceSpec
+    synthetic: bool
+    correlation: str  # honest timing semantics, e.g. "host-clock correlated (not synchronized)"
+    deadline_ms: int
+    lanes: list[FlowLane]
+    events: list[FlowEvent]
+    gaps: list[str] = Field(default_factory=list)  # e.g. "no firmware acknowledgement observed"
+
+
+# ---------------------------------------------------------------- remote repair (Devin) — D-025
+
+
+class RepairState(StrEnum):
+    """Local lifecycle mapped from Devin session states. `uncertain` = create timed out; the
+    session may exist remotely but we cannot know without a session id."""
+
+    preparing = "preparing"
+    queued = "queued"
+    working = "working"
+    needs_input = "needs_input"
+    ready_for_review = "ready_for_review"
+    failed = "failed"
+    uncertain = "uncertain"
+
+
+class RepoSnapshot(Model):
+    """What the repair was based on (D-025). `dirty_files` are NOT included in the remote session."""
+
+    repo_root: str
+    git_toplevel: str | None = None          # enclosing git repo if repo_root is nested
+    remote_url: str | None = None
+    repo_ref: str | None = None              # "owner/name" derived from remote_url or configured
+    base_revision: str | None = None         # commit SHA
+    relative_path: str | None = None         # repo_root path inside git_toplevel, if nested
+    dirty_files: list[str] = Field(default_factory=list)
+    checked_at_utc: datetime = Field(default_factory=utcnow)
+
+
+class RepairResult(Model):
+    """Remote result, reviewable. Never treated as a hardware fix (D-025)."""
+
+    pull_requests: list[str] = Field(default_factory=list)
+    structured_output: dict[str, Any] | None = None
+    acus_consumed: float | None = None
+    session_status_detail: str | None = None
+
+
+class RepairJob(Model):
+    id: str
+    project_id: str
+    incident_id: str
+    attempt: int = 1
+    state: RepairState = RepairState.preparing
+    snapshot: RepoSnapshot
+    devin_session_id: str | None = None
+    session_url: str | None = None
+    brief_text: str                          # exact prompt sent — audit of "what data was sent"
+    brief_evidence_ids: list[str] = Field(default_factory=list)
+    requested_by: Literal["engineer"] = "engineer"
+    warnings: list[str] = Field(default_factory=list)
+    error: str | None = None
+    result: RepairResult | None = None
+    created_at_utc: datetime = Field(default_factory=utcnow)
+    updated_at_utc: datetime = Field(default_factory=utcnow)
+
+
+class RepairPreflight(Model):
+    """What `POST .../repairs` would need to succeed — precise missing prerequisites, not guessing."""
+
+    ready: bool
+    devin_configured: bool
+    unavailable_reason: str | None = None
+    issues: list[str] = Field(default_factory=list)    # blocking prerequisites
+    warnings: list[str] = Field(default_factory=list)  # non-blocking
+    snapshot: RepoSnapshot | None = None
+    software_evidence: bool = False                    # incident has evidence of a software issue
+    active_job_id: str | None = None                   # a non-terminal job already exists
+
+
+class RepairRequest(Model):
+    acknowledge_uncommitted: bool = False  # required when snapshot has dirty files
+
+
 # ---------------------------------------------------------------- incidents, hypotheses, actions
 
 
@@ -364,6 +506,7 @@ class ActionKind(StrEnum):
     inspect_connection = "inspect_connection"
     verify_fix = "verify_fix"
     ask_clarification = "ask_clarification"
+    prepare_software_fix = "prepare_software_fix"  # remote Devin proposal workflow (D-025)
 
 
 class ExpectedOutcome(Model):
@@ -425,6 +568,7 @@ class InvestigationView(Model):
     tool_calls: list[ToolCall] = Field(default_factory=list)  # audit trail, newest last
     messages: list[Evidence] = Field(default_factory=list)  # engineer free-text inputs
     agent_runs: list["AgentRun"] = Field(default_factory=list)
+    repair_jobs: list[RepairJob] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------- API payloads
@@ -624,6 +768,7 @@ class AgentRun(Model):
     started_at_utc: datetime = Field(default_factory=utcnow)
     duration_ms: int = 0
     model: str | None = None
+    provider: str | None = None  # "stepfun" | "gemini" | None (deterministic fallback)
     context: ContextPacketSummary | None = None
     report: AgentReport | None = None
     summary: str | None = None  # orchestrator synthesis text
@@ -632,11 +777,23 @@ class AgentRun(Model):
     error: str | None = None
 
 
-class AgentStatus(Model):
+class ProviderStatus(Model):
+    """Per-stage provider attribution (D-023): orchestration may come from a different
+    provider than the specialists."""
+
+    role: str  # "orchestrator" | "specialists"
+    provider: str  # "stepfun" | "gemini" | "none"
+    model: str | None
     available: bool
-    provider: str
+    reason: str | None = None
+
+
+class AgentStatus(Model):
+    available: bool  # at least one stage has a live provider
+    provider: str  # short label for the header chip, e.g. "stepfun+gemini" / "deterministic"
     model: str | None
     reason: str | None = None
+    stages: list[ProviderStatus] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------- devices (PRD FR-06)

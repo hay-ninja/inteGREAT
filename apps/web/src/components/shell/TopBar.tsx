@@ -3,6 +3,7 @@ import { Text } from "@astryxdesign/core/Text";
 import { Selector } from "@astryxdesign/core/Selector";
 import { StatusDot } from "@astryxdesign/core/StatusDot";
 import { MoreMenu } from "@astryxdesign/core/MoreMenu";
+import { Button } from "@astryxdesign/core/Button";
 import type { AgentStatus, DeviceStatus, Project, Subsystem } from "../../lib/api";
 
 /** Minimal chrome: where you are, what you're focused on, are devices ready. Everything else is in "More". */
@@ -14,6 +15,7 @@ export function TopBar(p: {
   devices: DeviceStatus | null;
   agents: AgentStatus | null;
   onRescan: () => void;
+  onRigSetup: () => void;
   onOpenDrawer: (tab: "devices" | "audit" | "timeline") => void;
   onProjects: () => void;
 }) {
@@ -22,7 +24,7 @@ export function TopBar(p: {
   return (
     <HStack hAlign="between" vAlign="center" gap={3} width="100%">
       <HStack gap={2} vAlign="center">
-        <Text type="body" weight="bold">inteGREAT</Text>
+        <span className="brand">inteGREAT</span>
         <Text type="supporting" maxLines={1}>{p.project.name}</Text>
       </HStack>
       <Selector label="Focus" isLabelHidden variant="ghost" size="sm" width={220} value={p.focus || "all"}
@@ -30,6 +32,7 @@ export function TopBar(p: {
                 options={[{ value: "all", label: "Whole system" },
                           ...p.subsystems.map((s) => ({ value: s.id, label: s.label }))]} />
       <HStack gap={3} vAlign="center">
+        <Button label="Rig setup" size="sm" onClick={p.onRigSetup} />
         <HStack gap={3} vAlign="center">
           <HStack gap={1} vAlign="center">
             <StatusDot variant={serial ? "success" : "neutral"} label="ESP32 serial"

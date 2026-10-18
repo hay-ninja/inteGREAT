@@ -985,6 +985,46 @@
     }
    }
   },
+  "/api/v1/tests/{run_id}/flow": {
+   "get": {
+    "summary": "Test Flow",
+    "description": "Chronological hardware/software event flow for one persisted run (D-024).",
+    "operationId": "test_flow_api_v1_tests__run_id__flow_get",
+    "parameters": [
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Run Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/EventFlow"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/v1/investigations/{iid}": {
    "get": {
     "summary": "Get Investigation",
@@ -1313,6 +1353,177 @@
     }
    }
   },
+  "/api/v1/investigations/{iid}/repairs/preflight": {
+   "get": {
+    "summary": "Repair Preflight",
+    "description": "What a repair request would need \u2014 precise missing prerequisites, never a guess.",
+    "operationId": "repair_preflight_api_v1_investigations__iid__repairs_preflight_get",
+    "parameters": [
+     {
+      "name": "iid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Iid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RepairPreflight"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/investigations/{iid}/repairs": {
+   "get": {
+    "summary": "Repair Jobs",
+    "operationId": "repair_jobs_api_v1_investigations__iid__repairs_get",
+    "parameters": [
+     {
+      "name": "iid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Iid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/RepairJob"
+         },
+         "title": "Response Repair Jobs Api V1 Investigations  Iid  Repairs Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "summary": "Request Repair",
+    "description": "Engineer-initiated remote repair request (Devin). Non-idempotent: never auto-retried.",
+    "operationId": "request_repair_api_v1_investigations__iid__repairs_post",
+    "parameters": [
+     {
+      "name": "iid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Iid"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RepairRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RepairJob"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/repairs/{job_id}/refresh": {
+   "post": {
+    "summary": "Refresh Repair",
+    "description": "Poll remote status (GET only \u2014 polling never creates a session).",
+    "operationId": "refresh_repair_api_v1_repairs__job_id__refresh_post",
+    "parameters": [
+     {
+      "name": "job_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Job Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RepairJob"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/v1/devices": {
    "get": {
     "summary": "Devices",
@@ -1561,7 +1772,8 @@
      "inspect_source",
      "inspect_connection",
      "verify_fix",
-     "ask_clarification"
+     "ask_clarification",
+     "prepare_software_fix"
     ],
     "title": "ActionKind"
    },
@@ -1803,6 +2015,17 @@
       ],
       "title": "Model"
      },
+     "provider": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Provider"
+     },
      "context": {
       "anyOf": [
        {
@@ -1872,6 +2095,7 @@
      "started_at_utc",
      "duration_ms",
      "model",
+     "provider",
      "context",
      "report",
      "summary",
@@ -1912,6 +2136,13 @@
        }
       ],
       "title": "Reason"
+     },
+     "stages": {
+      "items": {
+       "$ref": "#/components/schemas/ProviderStatus"
+      },
+      "type": "array",
+      "title": "Stages"
      }
     },
     "additionalProperties": false,
@@ -1920,7 +2151,8 @@
      "available",
      "provider",
      "model",
-     "reason"
+     "reason",
+     "stages"
     ],
     "title": "AgentStatus"
    },
@@ -2314,6 +2546,82 @@
     ],
     "title": "Epistemic",
     "description": "What kind of knowledge a piece of evidence is (PRD \u00a79.3)."
+   },
+   "EventFlow": {
+    "properties": {
+     "run_id": {
+      "type": "string",
+      "title": "Run Id"
+     },
+     "project_id": {
+      "type": "string",
+      "title": "Project Id"
+     },
+     "attempt_kind": {
+      "type": "string",
+      "enum": [
+       "initial",
+       "repeat",
+       "verify"
+      ],
+      "title": "Attempt Kind"
+     },
+     "run_state": {
+      "$ref": "#/components/schemas/TestRunState"
+     },
+     "source": {
+      "$ref": "#/components/schemas/ObservationSourceSpec-Output"
+     },
+     "synthetic": {
+      "type": "boolean",
+      "title": "Synthetic"
+     },
+     "correlation": {
+      "type": "string",
+      "title": "Correlation"
+     },
+     "deadline_ms": {
+      "type": "integer",
+      "title": "Deadline Ms"
+     },
+     "lanes": {
+      "items": {
+       "$ref": "#/components/schemas/FlowLane"
+      },
+      "type": "array",
+      "title": "Lanes"
+     },
+     "events": {
+      "items": {
+       "$ref": "#/components/schemas/FlowEvent"
+      },
+      "type": "array",
+      "title": "Events"
+     },
+     "gaps": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Gaps"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "run_id",
+     "project_id",
+     "attempt_kind",
+     "run_state",
+     "source",
+     "synthetic",
+     "correlation",
+     "deadline_ms",
+     "lanes",
+     "events",
+     "gaps"
+    ],
+    "title": "EventFlow"
    },
    "Evidence": {
     "properties": {
@@ -2770,6 +3078,177 @@
      "AGENT_PROPOSED"
     ],
     "title": "FaultCode"
+   },
+   "FlowEvent": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "test_run_id": {
+      "type": "string",
+      "title": "Test Run Id"
+     },
+     "lane": {
+      "$ref": "#/components/schemas/FlowLane"
+     },
+     "kind": {
+      "$ref": "#/components/schemas/FlowEventKind"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "detail": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Detail"
+     },
+     "timestamp_utc": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Timestamp Utc"
+     },
+     "elapsed_ms": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Elapsed Ms"
+     },
+     "elapsed_end_ms": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Elapsed End Ms"
+     },
+     "order": {
+      "type": "integer",
+      "title": "Order"
+     },
+     "state": {
+      "type": "string",
+      "enum": [
+       "observed",
+       "expected",
+       "inferred"
+      ],
+      "title": "State",
+      "default": "observed"
+     },
+     "quality": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Quality"
+     },
+     "evidence_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Evidence Ids"
+     },
+     "related_node_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Related Node Ids"
+     },
+     "aggregated_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Aggregated Ids"
+     },
+     "note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Note"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "test_run_id",
+     "lane",
+     "kind",
+     "label",
+     "detail",
+     "timestamp_utc",
+     "elapsed_ms",
+     "elapsed_end_ms",
+     "order",
+     "state",
+     "quality",
+     "evidence_ids",
+     "related_node_ids",
+     "aggregated_ids",
+     "note"
+    ],
+    "title": "FlowEvent",
+    "description": "One item on the persisted chronological Event flow. Derived deterministically from\npersisted records (D-024); ids stay stable across reloads."
+   },
+   "FlowEventKind": {
+    "type": "string",
+    "enum": [
+     "command_sent",
+     "external_trigger",
+     "serial_rx",
+     "missing_ack",
+     "cv_segment",
+     "evaluation",
+     "incident_opened",
+     "run_completed"
+    ],
+    "title": "FlowEventKind"
+   },
+   "FlowLane": {
+    "type": "string",
+    "enum": [
+     "command",
+     "software",
+     "hardware",
+     "result"
+    ],
+    "title": "FlowLane",
+    "description": "Chronological lanes for one test run. Lanes describe *what kind of record* an event is,\nnot a fictional execution DAG (D-024)."
    },
    "GraphEdge": {
     "properties": {
@@ -3530,6 +4009,13 @@
       },
       "type": "array",
       "title": "Agent Runs"
+     },
+     "repair_jobs": {
+      "items": {
+       "$ref": "#/components/schemas/RepairJob"
+      },
+      "type": "array",
+      "title": "Repair Jobs"
      }
     },
     "additionalProperties": false,
@@ -3545,7 +4031,8 @@
      "permissions",
      "tool_calls",
      "messages",
-     "agent_runs"
+     "agent_runs",
+     "repair_jobs"
     ],
     "title": "InvestigationView"
    },
@@ -4125,6 +4612,339 @@
     ],
     "title": "Provenance"
    },
+   "ProviderStatus": {
+    "properties": {
+     "role": {
+      "type": "string",
+      "title": "Role"
+     },
+     "provider": {
+      "type": "string",
+      "title": "Provider"
+     },
+     "model": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model"
+     },
+     "available": {
+      "type": "boolean",
+      "title": "Available"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "role",
+     "provider",
+     "model",
+     "available",
+     "reason"
+    ],
+    "title": "ProviderStatus",
+    "description": "Per-stage provider attribution (D-023): orchestration may come from a different\nprovider than the specialists."
+   },
+   "RepairJob": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "project_id": {
+      "type": "string",
+      "title": "Project Id"
+     },
+     "incident_id": {
+      "type": "string",
+      "title": "Incident Id"
+     },
+     "attempt": {
+      "type": "integer",
+      "title": "Attempt",
+      "default": 1
+     },
+     "state": {
+      "$ref": "#/components/schemas/RepairState",
+      "default": "preparing"
+     },
+     "snapshot": {
+      "$ref": "#/components/schemas/RepoSnapshot"
+     },
+     "devin_session_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Devin Session Id"
+     },
+     "session_url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Session Url"
+     },
+     "brief_text": {
+      "type": "string",
+      "title": "Brief Text"
+     },
+     "brief_evidence_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Brief Evidence Ids"
+     },
+     "requested_by": {
+      "type": "string",
+      "const": "engineer",
+      "title": "Requested By",
+      "default": "engineer"
+     },
+     "warnings": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Warnings"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error"
+     },
+     "result": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RepairResult"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "created_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Created At Utc"
+     },
+     "updated_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Updated At Utc"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "project_id",
+     "incident_id",
+     "attempt",
+     "state",
+     "snapshot",
+     "devin_session_id",
+     "session_url",
+     "brief_text",
+     "brief_evidence_ids",
+     "requested_by",
+     "warnings",
+     "error",
+     "result",
+     "created_at_utc",
+     "updated_at_utc"
+    ],
+    "title": "RepairJob"
+   },
+   "RepairPreflight": {
+    "properties": {
+     "ready": {
+      "type": "boolean",
+      "title": "Ready"
+     },
+     "devin_configured": {
+      "type": "boolean",
+      "title": "Devin Configured"
+     },
+     "unavailable_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Unavailable Reason"
+     },
+     "issues": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Issues"
+     },
+     "warnings": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Warnings"
+     },
+     "snapshot": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RepoSnapshot"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "software_evidence": {
+      "type": "boolean",
+      "title": "Software Evidence",
+      "default": false
+     },
+     "active_job_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Active Job Id"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "ready",
+     "devin_configured",
+     "unavailable_reason",
+     "issues",
+     "warnings",
+     "snapshot",
+     "software_evidence",
+     "active_job_id"
+    ],
+    "title": "RepairPreflight",
+    "description": "What `POST .../repairs` would need to succeed \u2014 precise missing prerequisites, not guessing."
+   },
+   "RepairRequest": {
+    "properties": {
+     "acknowledge_uncommitted": {
+      "type": "boolean",
+      "title": "Acknowledge Uncommitted",
+      "default": false
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "title": "RepairRequest"
+   },
+   "RepairResult": {
+    "properties": {
+     "pull_requests": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Pull Requests"
+     },
+     "structured_output": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Structured Output"
+     },
+     "acus_consumed": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Acus Consumed"
+     },
+     "session_status_detail": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Session Status Detail"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "pull_requests",
+     "structured_output",
+     "acus_consumed",
+     "session_status_detail"
+    ],
+    "title": "RepairResult",
+    "description": "Remote result, reviewable. Never treated as a hardware fix (D-025)."
+   },
+   "RepairState": {
+    "type": "string",
+    "enum": [
+     "preparing",
+     "queued",
+     "working",
+     "needs_input",
+     "ready_for_review",
+     "failed",
+     "uncertain"
+    ],
+    "title": "RepairState",
+    "description": "Local lifecycle mapped from Devin session states. `uncertain` = create timed out; the\nsession may exist remotely but we cannot know without a session id."
+   },
    "ReplayInfo": {
     "properties": {
      "id": {
@@ -4148,6 +4968,95 @@
      "synthetic"
     ],
     "title": "ReplayInfo"
+   },
+   "RepoSnapshot": {
+    "properties": {
+     "repo_root": {
+      "type": "string",
+      "title": "Repo Root"
+     },
+     "git_toplevel": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Git Toplevel"
+     },
+     "remote_url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Remote Url"
+     },
+     "repo_ref": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Repo Ref"
+     },
+     "base_revision": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Base Revision"
+     },
+     "relative_path": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Relative Path"
+     },
+     "dirty_files": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Dirty Files"
+     },
+     "checked_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Checked At Utc"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "repo_root",
+     "git_toplevel",
+     "remote_url",
+     "repo_ref",
+     "base_revision",
+     "relative_path",
+     "dirty_files",
+     "checked_at_utc"
+    ],
+    "title": "RepoSnapshot",
+    "description": "What the repair was based on (D-025). `dirty_files` are NOT included in the remote session."
    },
    "SaveReplayRequest": {
     "properties": {

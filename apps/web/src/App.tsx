@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Layout, LayoutContent, LayoutFooter, LayoutHeader, LayoutPanel } from "@astryxdesign/core/Layout";
 import { VStack } from "@astryxdesign/core/VStack";
 import { useToast } from "@astryxdesign/core/Toast";
+import { Button } from "@astryxdesign/core/Button";
 import {
   ApiError,
   api,
@@ -11,6 +12,8 @@ import {
   type DeviceStatus,
   type DiagnosticAction,
   type Expectation,
+  type Evidence,
+  type GraphLayer,
   type GraphSnapshot,
   type Highlight,
   type IntegreatEvent,
@@ -23,14 +26,18 @@ import {
   type Subsystem,
   type TestRun,
 } from "./lib/api";
-import { GraphView } from "./components/graph/GraphView";
+import { GraphView, type CanvasMode } from "./components/graph/GraphView";
+import { EventFlowView } from "./components/flow/EventFlowView";
 import { FlowPanel } from "./components/flow/FlowPanel";
 import { SelectionCard } from "./components/flow/SelectionCard";
+import { ProjectReview } from "./components/flow/ProjectReview";
+import { RigSetupDialog } from "./components/setup/RigSetupDialog";
 import { parseSource } from "./components/flow/common";
 import { BottomDrawer, type DrawerTab } from "./components/drawer/BottomDrawer";
 import { TopBar } from "./components/shell/TopBar";
 import { ImportScreen, type ImportArgs } from "./components/shell/ImportScreen";
-import { ApprovalDialog, InspectDialog, ManualCheckDialog, ToolOutputDialog } from "./components/dialogs/Dialogs";
+import { ApprovalDialog, EvidenceDialog, GraphInspector, InspectDialog, ManualCheckDialog, RepeatTestDialog, ToolOutputDialog } from "./components/dialogs/Dialogs";
+import { RepairDialog } from "./components/dialogs/RepairDialog";
 
 const LAST_PROJECT = "integreat.lastProject";
 const store = {
@@ -64,6 +71,7 @@ export default function App() {
   const [inspect, setInspect] = useState<ActionResult | null>(null);
   const [toolOutput, setToolOutput] = useState<ActionResult | null>(null);
   const [manual, setManual] = useState<DiagnosticAction | null>(null);
+  const [repeat, setRepeat] = useState<DiagnosticAction | null>(null);
   const [approval, setApproval] = useState<{ action: DiagnosticAction; category: string; tool: string } | null>(null);
   const [devices, setDevices] = useState<DeviceStatus | null>(null);
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
@@ -71,9 +79,19 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<DrawerTab>("angle");
   const [fitKey, setFitKey] = useState("init");
+  const [rigSetupOpen, setRigSetupOpen] = useState(false);
+  const [evidence, setEvidence] = useState<Evidence | null>(null);
+  const [layer, setLayer] = useState<GraphLayer>("combined");
+  const [mode, setMode] = useState<CanvasMode>("deps");
+  const [flowSeq, setFlowSeq] = useState(0);
+  const [repairOpen, setRepairOpen] = useState(false);
   const runRef = useRef<string | null>(null);
   const incidentRef = useRef<string | null>(null);
+  const projectRef = useRef<string | null>(null);
+  const scopeRef = useRef("");
+  const loadVersion = useRef(0);
   incidentRef.current = incidentId;
+  scopeRef.current = focusSub;
 
   const fail = useCallback((e: unknown) => {
     toast({ body: e instanceof Error ? e.message : String(e), type: "error" });
@@ -89,20 +107,30 @@ export default function App() {
     return () => window.clearInterval(t);
   }, []);
 
-  const refreshView = useCallback((iid: string) => { api.investigation(iid).then(setView).catch(fail); }, [fail]);
+  const refreshView = useCallback((iid: string) => {
+    api.investigation(iid).then((v) => { if (incidentRef.current === iid) setView(v); }).catch((e) => { if (incidentRef.current === iid) fail(e); });
+  }, [fail]);
 
   const loadProject = useCallback(async (p: Project, fresh: boolean) => {
+    const version = ++loadVersion.current;
     const [g, subs, exps, incs] = await Promise.all([api.graph(p.id), api.subsystems(p.id), api.expectations(p.id), api.incidents(p.id)]);
-    setProject(p); setGraph(g); setSubsystems(subs); setEvents([]); setRun(null); setObservations([]); setSerial([]);
-    setExpectation([...exps].reverse().find((e) => e.confirmed_by_engineer) ?? exps[exps.length - 1] ?? null);
+    const preferredScope = g.nodes.find((n) => n.kind === "component" && n.subsystem_id)?.subsystem_id ?? subs[0]?.id;
+    const scoped = preferredScope ? await api.graph(p.id, preferredScope) : null;
+    if (version !== loadVersion.current) return;
+    projectRef.current = p.id;
+    setProject(p); setGraph(g); setSubsystems(subs); setEvents([]); setRun(null); runRef.current = null; setObservations([]); setSerial([]);
+    setDrawerOpen(false); setDrawerTab("angle"); setBusy(false); setBusyAction(null); setDiagnosing(false);
     const lastInc = fresh ? null : incs[incs.length - 1] ?? null;
-    const open = lastInc && lastInc.state !== "resolved" ? lastInc : null;
-    setIncidentId(open?.id ?? null);
+    const open = lastInc;
+    setExpectation(exps.find((e) => e.id === open?.expectation_id)
+      ?? [...exps].reverse().find((e) => e.confirmed_by_engineer) ?? exps[exps.length - 1] ?? null);
+    incidentRef.current = open?.id ?? null; setIncidentId(open?.id ?? null);
     setView(null);
     if (open) refreshView(open.id);
     // Start one level in: subsystems expanded so modules are visible.
     setExpanded(new Set(subs.map((s) => s.id)));
-    setFocusIds(null); setFocusSub(""); setSelectedId(null); setSelectedEdgeIds([]);
+    setFocusIds(scoped ? new Set(scoped.nodes.map((n) => n.id)) : null);
+    setFocusSub(preferredScope ?? ""); setSelectedId(null); setSelectedEdgeIds([]); setEvidence(null);
     setFitKey(`${p.id}-${Date.now()}`);
     store.set(LAST_PROJECT, p.id);
   }, [refreshView]);
@@ -114,7 +142,14 @@ export default function App() {
 
   const reloadGraph = useCallback(async (pid: string) => {
     const [p, g, subs] = await Promise.all([api.project(pid), api.graph(pid), api.subsystems(pid)]);
+    const scope = scopeRef.current;
+    const scoped = scope && subs.some((s) => s.id === scope) ? await api.graph(pid, scope) : null;
+    if (projectRef.current !== pid) return;
     setProject(p); setGraph(g); setSubsystems(subs);
+    if (scopeRef.current === scope) {
+      setFocusIds(scoped ? new Set(scoped.nodes.map((n) => n.id)) : null);
+      if (scope && !scoped) { scopeRef.current = ""; setFocusSub(""); }
+    }
   }, []);
 
   // Live event stream
@@ -128,19 +163,21 @@ export default function App() {
       switch (ev.type) {
         case "test.started":
           runRef.current = ev.test_run_id ?? null;
-          setRun(p as unknown as TestRun); setObservations([]); setSerial([]);
+          setRun(p as unknown as TestRun); setObservations([]); setSerial([]); setFlowSeq((s) => s + 1);
           break;
         case "test.observation":
           if (ev.test_run_id === runRef.current) setObservations((o) => [...o, p as unknown as Observation]);
+          setFlowSeq((s) => s + 1);
           break;
         case "test.serial":
           if (ev.test_run_id === runRef.current) setSerial((s) => [...s, p as unknown as SerialEvent]);
+          setFlowSeq((s) => s + 1);
           break;
         case "test.completed": {
           const r = p as unknown as TestRun;
           if (r.id === runRef.current) setRun(r);
-          if (r.incident_id) { setIncidentId(r.incident_id); refreshView(r.incident_id); }
-          setBusy(false);
+          if (r.incident_id) { incidentRef.current = r.incident_id; setIncidentId(r.incident_id); refreshView(r.incident_id); }
+          setBusy(false); setFlowSeq((s) => s + 1);
           break;
         }
         case "graph.updated": reloadGraph(pid).catch(fail); break;
@@ -149,16 +186,31 @@ export default function App() {
           break;
         case "incident.resolved": case "action.completed": case "agent.reported": case "agent.started":
         case "permissions.updated": case "message.added": case "test.verification_completed":
+        case "repair.requested": case "repair.updated":
           if (mine) refreshView(ev.investigation_id!);
           break;
         case "error": fail(String(p.message)); setBusy(false); break;
       }
     });
-  }, [project, refreshView, reloadGraph, fail]);
+  // Graph rescans replace project metadata. Reconnecting for that would replay graph.updated
+  // from seq 0, rescan the metadata again, and create an unbounded reconnect/refetch loop.
+  }, [project?.id, refreshView, reloadGraph, fail]);
 
   useEffect(() => {
-    if (run?.state === "completed") api.test(run.id).then((d) => { setObservations(d.observations); setSerial(d.serial); }).catch(() => undefined);
+    let current = true;
+    if (run?.state === "completed") api.test(run.id).then((d) => {
+      if (current && runRef.current === run.id) { setObservations(d.observations); setSerial(d.serial); }
+    }).catch(() => undefined);
+    return () => { current = false; };
   }, [run?.id, run?.state]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!view || runRef.current) return;
+    const restored = view.followup_runs[view.followup_runs.length - 1] ?? view.test_run;
+    runRef.current = restored.id;
+    setRun(restored);
+    setSource(restored.source.kind === "live" ? "live" : `${restored.source.kind}:${restored.source.scenario}`);
+  }, [view]);
 
   // ------------------------------------------------------------------ actions
 
@@ -173,12 +225,14 @@ export default function App() {
 
   const runTest = async () => {
     if (!project || !expectation) return;
-    setBusy(true); setIncidentId(null); setView(null);
+    const pid = project.id;
+    setBusy(true); incidentRef.current = null; setIncidentId(null); setView(null);
     setDrawerTab("angle"); setDrawerOpen(true);
     try {
-      const r = await api.startTest(project.id, expectation.id, parseSource(source));
+      const r = await api.startTest(pid, expectation.id, parseSource(source));
+      if (projectRef.current !== pid) return;
       runRef.current = r.id; setRun(r); setObservations([]); setSerial([]);
-    } catch (e) { fail(e); setBusy(false); }
+    } catch (e) { if (projectRef.current === pid) { fail(e); setBusy(false); } }
   };
 
   const revealNodes = (ids: string[], focus = false) => {
@@ -190,26 +244,50 @@ export default function App() {
       while (cur?.parent_id) { exp.add(cur.parent_id); cur = byId.get(cur.parent_id); }
     }
     setExpanded(exp); setSelectedId(ids[0]); setSelectedEdgeIds([]);
-    if (focus) { setFocusIds(new Set(ids)); setFitKey(`focus-${Date.now()}`); }
+    if (focus) { setFocusIds((current) => current ? new Set([...current, ...ids]) : null); setFitKey(`focus-${Date.now()}`); }
   };
 
-  const runAction = async (a: DiagnosticAction, approveOnce = false) => {
+  const showEvidence = (e: Evidence) => {
+    setEvidence(e); setSelectedId(null); setSelectedEdgeIds([]);
+    if (!graph) return;
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+    setExpanded((current) => {
+      const next = new Set(current);
+      for (const n of graph.nodes.filter((n) => n.evidence_ids.includes(e.id))) {
+        let parent = n.parent_id;
+        while (parent) { next.add(parent); parent = byId.get(parent)?.parent_id ?? null; }
+      }
+      return next;
+    });
+  };
+
+  const runAction = async (a: DiagnosticAction, approveOnce = false, confirmedRepeat = false) => {
     if (!incidentId) return;
+    const iid = incidentId;
+    const needsSource = a.kind === "repeat_test" || a.kind === "verify_fix";
+    if (needsSource && busy) { notify("Wait for the current test to finish."); return; }
     if (a.kind === "request_manual_check") { setManual(a); return; }
+    if (a.kind === "repeat_test" && !confirmedRepeat) { setRepeat(a); return; }
+    // The Devin repair workflow is engineer-controlled and reviewable — it opens its own
+    // dialog instead of running through the action executor (D-025).
+    if (a.kind === "prepare_software_fix") { setRepairOpen(true); return; }
     setBusyAction(a.id);
+    if (needsSource) setBusy(true);
     try {
-      const needsSource = a.kind === "repeat_test" || a.kind === "verify_fix";
-      const { result } = await api.executeAction(incidentId, a.id, needsSource ? parseSource(source) : undefined, approveOnce);
+      const { result } = await api.executeAction(iid, a.id, needsSource ? parseSource(source) : undefined, approveOnce);
+      if (incidentRef.current !== iid) return;
       if (needsSource) { setDrawerTab("angle"); setDrawerOpen(true); }
       if (result.source_excerpts.length) setInspect(result);
       else if (result.node_ids.length) { revealNodes(result.node_ids, true); notify(result.summary); }
       else if (a.kind === "run_readonly_tool") setToolOutput(result);
-      refreshView(incidentId);
+      refreshView(iid);
     } catch (e) {
+      if (incidentRef.current !== iid) return;
+      if (needsSource) setBusy(false);
       if (e instanceof ApiError && e.code === "permission_required") {
         setApproval({ action: a, category: String(e.details.category), tool: String(e.details.tool) });
       } else fail(e);
-    } finally { setBusyAction(null); }
+    } finally { if (incidentRef.current === iid) setBusyAction(null); }
   };
 
   const setPermission = async (c: PermissionCategory, granted: boolean) => {
@@ -235,12 +313,14 @@ export default function App() {
   };
 
   const focusSubsystem = async (sid: string) => {
+    scopeRef.current = sid;
     setFocusSub(sid);
     if (!project) return;
     if (!sid) { setFocusIds(null); setFitKey(`all-${Date.now()}`); return; }
     setExpanded((e) => new Set([...e, sid]));
     try {
       const scoped = await api.graph(project.id, sid);
+      if (projectRef.current !== project.id || scopeRef.current !== sid) return;
       setFocusIds(new Set(scoped.nodes.map((n) => n.id))); setFitKey(`${sid}-${Date.now()}`);
     } catch (e) { fail(e); }
   };
@@ -270,6 +350,7 @@ export default function App() {
     return <ImportScreen onImport={doImport} onOpen={(p) => loadProject(p, false).catch(fail)} busy={busy} onError={(m) => fail(m)} />;
   }
 
+  const runs: TestRun[] = view ? [view.test_run, ...view.followup_runs] : run ? [run] : [];
   const conflict = project.issues.find((i) => i.code === "GPIO_CONFIG_MISMATCH")?.message ?? null;
   const liveReady = !!devices?.serial.connected && !!devices?.camera.connected && !!devices.camera.calibrated;
   const selectedNode = graph.nodes.find((n) => n.id === selectedId) ?? null;
@@ -282,19 +363,14 @@ export default function App() {
         <LayoutHeader hasDivider>
           <TopBar project={project} subsystems={subsystems} focus={focusSub} onFocus={focusSubsystem}
                   devices={devices} agents={agentStatus} onRescan={rescan}
+                  onRigSetup={() => setRigSetupOpen(true)}
                   onOpenDrawer={(t) => { setDrawerTab(t); setDrawerOpen(true); }}
-                  onProjects={() => { store.set(LAST_PROJECT, null); setProject(null); setGraph(null); setView(null); setRun(null); setExpectation(null); }} />
+                  onProjects={() => { store.set(LAST_PROJECT, null); ++loadVersion.current; projectRef.current = null; incidentRef.current = null; runRef.current = null; setIncidentId(null); setProject(null); setGraph(null); setView(null); setRun(null); setExpectation(null); setBusy(false); setBusyAction(null); setDiagnosing(false); }} />
         </LayoutHeader>
       }
       end={
         <LayoutPanel hasDivider width={420} label="Debugging steps" padding={4}>
           <VStack gap={4}>
-            <SelectionCard projectId={project.id} graph={graph} node={selectedNode} edges={selectedEdges}
-                           onClose={() => { setSelectedId(null); setSelectedEdgeIds([]); }}
-                           onVerify={async (id, v) => {
-                             try { await api.verifyWiring(project.id, id, v, v === "verified" ? "Engineer confirmed on the bench" : undefined); await reloadGraph(project.id); }
-                             catch (e) { fail(e); }
-                           }} />
             <FlowPanel projectId={project.id} conflictNote={conflict} expectation={expectation} onExpectation={setExpectation}
                        run={run} running={busy} view={view} sources={sources} source={source} onSource={setSource}
                        liveReady={liveReady} onRun={runTest} busyActionId={busyAction} onAction={(a) => runAction(a)}
@@ -302,37 +378,65 @@ export default function App() {
                        onMessage={async (t) => { if (incidentId) setView(await api.message(incidentId, t)); }}
                        agentStatus={agentStatus} diagnosing={diagnosing} onDiagnose={diagnose}
                        onReveal={(ids) => revealNodes(ids, true)}
-                       onNewTest={() => { setIncidentId(null); setView(null); setRun(null); }}
+                       onEvidence={showEvidence} onOpenDevices={() => setRigSetupOpen(true)}
+                       projectReview={<ProjectReview project={project} graph={graph} onConnection={setSelectedEdgeIds} />}
+                       onNewTest={() => { incidentRef.current = null; runRef.current = null; setIncidentId(null); setView(null); setRun(null); setObservations([]); setSerial([]); }}
                        onError={(m) => fail(m)} />
           </VStack>
         </LayoutPanel>
       }
       content={
         <LayoutContent padding={0} isScrollable={false}>
-          <VStack height="100%" gap={0}>
+          <Layout content={<LayoutContent padding={0} isScrollable={false}>
+            {mode === "flow" ? (
+              <EventFlowView runs={runs} runId={run?.id ?? runs[runs.length - 1]?.id ?? null}
+                             onRunChange={(id) => { const r = runs.find((x) => x.id === id); if (r) { runRef.current = id; setRun(r); } }}
+                             layer={layer} mode={mode} onMode={setMode} onLayer={setLayer} refreshSeq={flowSeq}
+                             onSelectNode={(id) => { setMode("deps"); revealNodes([id], true); }}
+                             onEvidence={showEvidence} />
+            ) : (
             <GraphView graph={graph} expanded={expanded} highlights={highlights} focusIds={focusIds}
-                       selectedId={selectedId} onToggle={toggle}
+                       layer={layer} mode={mode} onMode={setMode} onLayer={setLayer}
+                       selectedId={selectedId ?? graph.nodes.find((n) => evidence && n.evidence_ids.includes(evidence.id))?.id ?? null} onToggle={toggle}
                        onSelect={(id) => { setSelectedId(id); setSelectedEdgeIds([]); }}
                        onEdgeSelect={(ids) => { setSelectedEdgeIds(ids); setSelectedId(null); }}
                        onExpandAll={() => setExpanded(new Set(graph.nodes.filter((n) => n.kind === "subsystem" || n.kind === "source_module").map((n) => n.id)))}
                        onCollapseAll={() => setExpanded(new Set())}
-                       onClearFocus={focusIds ? () => { setFocusIds(null); setFocusSub(""); setFitKey(`all-${Date.now()}`); } : null}
+                       onClearFocus={focusIds ? () => { scopeRef.current = ""; setFocusIds(null); setFocusSub(""); setFitKey(`all-${Date.now()}`); } : null}
                        fitKey={`${fitKey}-${expanded.size}`} />
-          </VStack>
+            )}
+          </LayoutContent>} footer={<LayoutFooter hasDivider padding={0}>
+            <BottomDrawer open={drawerOpen} onOpen={setDrawerOpen} tab={drawerTab} onTab={setDrawerTab} run={run}
+                          observations={observations} serial={serial} expectation={expectation} events={events}
+                          toolCalls={view?.tool_calls ?? []} devices={devices} onDevices={setDevices}
+                          onSaveReplay={saveReplay} onError={(m) => fail(m)} />
+          </LayoutFooter>} />
         </LayoutContent>
       }
-      footer={
-        <LayoutFooter hasDivider>
-          <BottomDrawer open={drawerOpen} onOpen={setDrawerOpen} tab={drawerTab} onTab={setDrawerTab} run={run}
-                        observations={observations} serial={serial} expectation={expectation} events={events}
-                        toolCalls={view?.tool_calls ?? []} devices={devices} onDevices={setDevices}
-                        onSaveReplay={saveReplay} onError={(m) => fail(m)} />
-        </LayoutFooter>
-      }
     />
+      <GraphInspector open={!!selectedNode || !!selectedEdges.length} onClose={() => { setSelectedId(null); setSelectedEdgeIds([]); }}>
+        <SelectionCard projectId={project.id} graph={graph} node={selectedNode} edges={selectedEdges}
+                       onClose={() => { setSelectedId(null); setSelectedEdgeIds([]); }} hideClose onEvidence={showEvidence}
+                       layer={layer} onLayer={setLayer} onReveal={(ids) => { revealNodes(ids, true); setSelectedId(ids[0] ?? null); }}
+                       onVerify={async (id, v) => {
+                         try { await api.verifyWiring(project.id, id, v, v === "verified" ? "Engineer confirmed on the bench" : undefined); await reloadGraph(project.id); }
+                         catch (e) { fail(e); }
+                       }} />
+        {selectedNode && graph.nodes.some((n) => n.parent_id === selectedNode.id) &&
+          <Button label={expanded.has(selectedNode.id) ? "Collapse in graph" : "Expand in graph"} onClick={() => { toggle(selectedNode.id); setSelectedId(null); }} />}
+      </GraphInspector>
+      <EvidenceDialog evidence={evidence} onClose={() => setEvidence(null)} />
+      <RigSetupDialog open={rigSetupOpen} onClose={() => setRigSetupOpen(false)} devices={devices} onDevices={setDevices}
+                      onError={(m) => fail(m)} onUseSimulation={() => { setSource(`sim:${sources.sim[0]?.id ?? "connected"}`); setRigSetupOpen(false); }} />
       <InspectDialog result={inspect} onClose={() => setInspect(null)} />
       <ToolOutputDialog result={toolOutput} onClose={() => setToolOutput(null)} />
-      <ManualCheckDialog action={manual} onSubmit={submitManual} onClose={() => setManual(null)} />
+      <ManualCheckDialog action={manual} run={run ?? view?.test_run} onSubmit={submitManual} onClose={() => setManual(null)} />
+      <RepeatTestDialog action={repeat} expectation={expectation} source={source} onSource={setSource} sources={sources} liveReady={liveReady}
+                        onClose={() => setRepeat(null)} onOpenDevices={() => { setRepeat(null); setRigSetupOpen(true); }}
+                        onRepeat={() => { const action = repeat!; setRepeat(null); runAction(action, false, true); }} />
+      {repairOpen && view && (
+        <RepairDialog investigation={view} onClose={() => { setRepairOpen(false); if (incidentId) refreshView(incidentId); }} />
+      )}
       <ApprovalDialog request={approval}
                       onGrant={async () => { const a = approval!.action; const c = approval!.category; setApproval(null); await setPermission(c as PermissionCategory, true); runAction(a); }}
                       onOnce={() => { const a = approval!.action; setApproval(null); runAction(a, true); }}

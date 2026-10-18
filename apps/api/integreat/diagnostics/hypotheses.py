@@ -74,12 +74,22 @@ def build(incident_id: str, findings: list[RuleFinding], wired_pin_label: str | 
                 expected_outcomes=[
                     ExpectedOutcome(result="Pins differ", interpretation="Fix the pin in firmware (or rewire), reflash, then Verify fix"),
                     ExpectedOutcome(result="Pins match", interpretation="Mismatch ruled out; check physical connection")]))
+            fix = act(DiagnosticAction(
+                id=f"action:{incident_id}:prepare_fix", incident_id=incident_id,
+                kind=ActionKind.prepare_software_fix, label="Prepare software fix with Devin",
+                rationale=("Evidence points at firmware configuration. Devin Cloud can prepare a "
+                           "reviewable fix on an isolated branch — nothing is applied locally, "
+                           "merged, or flashed. Remote test results are software-only evidence."),
+                related_node_ids=f.nodes,
+                expected_outcomes=[
+                    ExpectedOutcome(result="Reviewable diff/PR", interpretation="Engineer reviews, applies it by hand, reflashes, then Verify fix"),
+                    ExpectedOutcome(result="No result / failed job", interpretation="Incident unchanged; fix the pin by hand")]))
             hyps.append(Hypothesis(
                 id=hid, title="Incorrect GPIO mapping", rank=1, status=HypothesisStatus.plausible,
                 explanation=(f"Firmware configures the servo on {', '.join(f.details['configured'])}, but the "
                              f"engineer-confirmed wiring connects the servo signal to {f.details['wired']}. "
                              "Commands would drive a pin the servo isn't connected to."),
-                recommended_action_ids=[a, verify], **common))
+                recommended_action_ids=[a, fix, verify], **common))
 
         elif f.code == FaultCode.POSSIBLE_POWER_OR_SIGNAL_FAULT:
             secondary = bool(f.details.get("secondary"))

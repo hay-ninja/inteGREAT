@@ -6,6 +6,7 @@ so they're testable without HTTP.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import timedelta
@@ -13,12 +14,14 @@ from pathlib import Path
 
 from .agents.orchestrator import DiagnosisRefused, Orchestrator
 from .agents.provider import GeminiProvider, LLMProvider, UnavailableProvider
+from .agents.stepfun import StepFunProvider
 from .api.ws import Hub
 from .config import Settings
 from .diagnostics import expectations as expmod
 from .diagnostics import hypotheses as hypmod
 from .diagnostics.rules import config_vs_wiring, run_rules
 from .diagnostics.state_machine import InvalidTransition, check_incident, check_test
+from .flow import build_event_flow
 from .graph.builder import build_graph, consistency_issues, src_evidence_id
 from .graph.query import scope as scope_graph
 from .ingestion.arduino_parser import parse_project
@@ -34,6 +37,7 @@ from .models import (
     DiagnosticAction,
     EdgeOrigin,
     Epistemic,
+    EventFlow,
     Evidence,
     EvidenceKind,
     Expectation,
@@ -59,7 +63,13 @@ from .models import (
     Project,
     ProjectAnalysis,
     Provenance,
+    ProviderStatus,
     ReplayInfo,
+    RepairJob,
+    RepairPreflight,
+    RepairRequest,
+    RepairResult,
+    RepairState,
     RunRecording,
     SerialEvent,
     StartTestRequest,
@@ -70,6 +80,8 @@ from .models import (
     WiringVerificationRequest,
     utcnow,
 )
+from .repair import (REPAIR_OUTPUT_SCHEMA, DevinClientProtocol, DevinUnavailable, build_brief,
+                     make_devin, map_remote_state, repo_snapshot)
 from .observations.cv_angle import ArucoAngleEstimator, render_scene
 from .observations.devices import DeviceManager
 from .observations.live import LiveStream
@@ -94,9 +106,12 @@ def _id(prefix: str) -> str:
 K_PROJECT, K_GRAPH, K_SUBSYS, K_EVIDENCE, K_ANALYSIS = "project", "graph", "subsystem", "evidence", "analysis"
 K_EXPECT, K_RUN, K_OBS, K_SERIAL = "expectation", "test_run", "observation", "serial_event"
 K_INCIDENT, K_HYP, K_ACTION, K_RECORDING = "incident", "hypothesis", "action", "run_recording"
+K_REPAIR = "repair_job"
+MAX_REPAIR_ATTEMPTS = 5
 
 
-def make_provider(settings: Settings) -> LLMProvider:
+def make_specialist_provider(settings: Settings) -> LLMProvider:
+    """Gemini supplies the Code / Hardware / Runtime-Vision specialists (D-023)."""
     if not settings.gemini_api_key:
         return UnavailableProvider("GEMINI_API_KEY not set")
     if not settings.gemini_model:
@@ -107,13 +122,34 @@ def make_provider(settings: Settings) -> LLMProvider:
         return UnavailableProvider(f"Gemini client failed to start: {e}")
 
 
+def make_orchestrator_provider(settings: Settings) -> LLMProvider:
+    """StepFun performs triage + synthesis — the orchestration roles (D-023)."""
+    if not settings.stepfun_api_key:
+        return UnavailableProvider("STEP_API_KEY not set")
+    try:
+        return StepFunProvider(settings.stepfun_api_key, settings.stepfun_model, settings.stepfun_base_url)
+    except Exception as e:  # noqa: BLE001
+        return UnavailableProvider(f"StepFun client failed to start: {e}")
+
+
+# Backwards-compat alias used by tests/scripts that build the old single-provider service.
+make_provider = make_specialist_provider
+
+
 class Service:
     def __init__(self, store: Store, settings: Settings, hub: Hub, llm: LLMProvider | None = None,
-                 devices: DeviceManager | None = None):
+                 devices: DeviceManager | None = None,
+                 orchestrator_llm: LLMProvider | None = None,
+                 specialist_llm: LLMProvider | None = None,
+                 devin: DevinClientProtocol | None = None):
         self.store, self.settings, self.hub = store, settings, hub
         self.devices = devices or DeviceManager()
         self.tools = ToolExecutor(self)
-        self.llm = llm or make_provider(settings)
+        # `llm` fills BOTH roles (test fakes); explicit role providers win (D-023).
+        self.specialist_llm = specialist_llm or llm or make_specialist_provider(settings)
+        self.orchestrator_llm = orchestrator_llm or llm or make_orchestrator_provider(settings)
+        self.llm = self.specialist_llm  # compat for older callers
+        self.devin = devin or make_devin(settings)
         self.orchestrator = Orchestrator(self)
 
     def _emit(self, type: str, project_id: str, payload: dict | None = None, **kw) -> None:
@@ -606,7 +642,8 @@ class Service:
             incident=inc, test_run=run, followup_runs=followups, hypotheses=hyps, actions=actions,
             evidence=self.evidence(ev_ids), highlights=self._highlights(inc, run, hyps),
             permissions=self.tools.permissions.active(iid), tool_calls=calls,
-            messages=[e for e in engineer if e.payload.get("message")], agent_runs=agent_runs)
+            messages=[e for e in engineer if e.payload.get("message")], agent_runs=agent_runs,
+            repair_jobs=self.store.list(K_REPAIR, RepairJob, parent_id=iid))
 
     def _highlights(self, inc: Incident, run: TestRun, hyps: list[Hypothesis]) -> list[Highlight]:
         out: dict[str, Highlight] = {}
@@ -759,8 +796,27 @@ class Service:
     # ------------------------------------------------------------------ agents
 
     def agent_status(self) -> AgentStatus:
-        return AgentStatus(available=self.llm.available, provider=self.llm.name, model=self.llm.model,
-                           reason=getattr(self.llm, "reason", None))
+        """Per-stage provider attribution (D-023): orchestration vs specialists are different providers."""
+        stages = [
+            ProviderStatus(role="orchestrator", provider=self.orchestrator_llm.name,
+                           model=self.orchestrator_llm.model, available=self.orchestrator_llm.available,
+                           reason=getattr(self.orchestrator_llm, "reason", None)),
+            ProviderStatus(role="specialists", provider=self.specialist_llm.name,
+                           model=self.specialist_llm.model, available=self.specialist_llm.available,
+                           reason=getattr(self.specialist_llm, "reason", None)),
+        ]
+        avail = [s for s in stages if s.available]
+        if len(avail) == 2:
+            provider = f"{stages[0].provider}+{stages[1].provider}"
+        elif avail:
+            provider = f"{avail[0].provider} only ({avail[0].role})"
+        else:
+            provider = "none (deterministic only)"
+        reason = None if len(avail) == 2 else "; ".join(
+            f"{s.role}: {s.reason}" for s in stages if not s.available and s.reason) or None
+        return AgentStatus(available=bool(avail), provider=provider,
+                           model="/".join(s.model or "?" for s in avail) or None,
+                           reason=reason, stages=stages)
 
     def begin_diagnosis(self, iid: str) -> Incident:
         try:
@@ -770,3 +826,187 @@ class Service:
 
     async def run_diagnosis(self, iid: str) -> list[AgentRun]:
         return await self.orchestrator.run_round(iid)
+
+    # ------------------------------------------------------------------ event flow (D-024)
+
+    def event_flow(self, run_id: str) -> EventFlow:
+        """Chronological lanes for one persisted run. Deterministic projection — reload-safe,
+        duplicate-safe (ids derived from underlying records), and honest about missing data."""
+        run = self.test_run(run_id)
+        exp = self.store.get(K_EXPECT, run.expectation_id, Expectation)
+        obs, serial = self.test_data(run_id)
+        timeline = self.store.events(run.project_id)
+        return build_event_flow(run, exp, obs, serial, timeline)
+
+    # ------------------------------------------------------------------ remote repair (D-025)
+
+    def _repair_jobs(self, iid: str) -> list[RepairJob]:
+        return self.store.list(K_REPAIR, RepairJob, parent_id=iid)
+
+    def _software_evidence(self, inc: Incident) -> bool:
+        """A remote code fix is only offered when the incident has evidence of a software issue —
+        never as a remedy for an unverified power/signal problem."""
+        if FaultCode.GPIO_CONFIG_MISMATCH not in inc.fault_codes:
+            return False
+        hyps = self.store.get_many(K_HYP, inc.hypothesis_ids, Hypothesis)
+        return any(h.fault_code == FaultCode.GPIO_CONFIG_MISMATCH
+                   and h.status != HypothesisStatus.ruled_out for h in hyps)
+
+    def repair_preflight(self, iid: str) -> RepairPreflight:
+        inc = self.incident(iid)
+        project = self.project(inc.project_id)
+        snap = repo_snapshot(project.repo_root)
+        issues: list[str] = []
+        warnings: list[str] = []
+        if not self._software_evidence(inc):
+            issues.append("this incident has no evidence of a software issue — a remote code fix "
+                          "is not offered for unverified power/signal problems")
+        if inc.state in (IncidentState.resolved, IncidentState.inconclusive):
+            issues.append(f"incident is {inc.state.value}")
+        if snap.base_revision is None:
+            issues.append("the project is not inside a git repository — Devin needs an accessible "
+                          "repository and a base commit")
+        repo_ref = self.settings.devin_repo or snap.repo_ref
+        if snap.base_revision is not None and not repo_ref:
+            issues.append("no usable git remote — Devin Cloud cannot reach a local path. Add a remote "
+                          "(e.g. origin on GitHub) or set INTEGREAT_DEVIN_REPO=owner/name")
+        if snap.dirty_files:
+            warnings.append(f"{len(snap.dirty_files)} uncommitted file(s) will NOT be visible to Devin — "
+                            "the session works from the committed base commit")
+        if snap.relative_path:
+            warnings.append(f"firmware lives in subdirectory '{snap.relative_path}' of the git repo; "
+                            "the brief tells Devin where to look")
+        if snap.git_toplevel and Path(snap.git_toplevel) != Path(project.repo_root):
+            pass  # nested repo is fine; relative_path is recorded in the snapshot
+        active = next((j for j in self._repair_jobs(iid)
+                       if j.state in (RepairState.preparing, RepairState.queued, RepairState.working,
+                                      RepairState.needs_input, RepairState.uncertain)), None)
+        if active is not None:
+            issues.append(f"a repair job is already {active.state.value} for this incident ({active.id})")
+        jobs = self._repair_jobs(iid)
+        if len(jobs) >= MAX_REPAIR_ATTEMPTS:
+            issues.append(f"repair request budget exhausted ({MAX_REPAIR_ATTEMPTS} attempts per incident)")
+        configured = self.devin.available
+        return RepairPreflight(
+            ready=bool(issues == [] and configured),
+            devin_configured=configured,
+            unavailable_reason=None if configured else getattr(self.devin, "reason", "not configured"),
+            issues=issues, warnings=warnings, snapshot=snap,
+            software_evidence=self._software_evidence(inc),
+            active_job_id=active.id if active else None)
+
+    async def request_repair(self, iid: str, req: RepairRequest) -> RepairJob:
+        """Create ONE remote Devin session for this incident. Engineer-initiated only; session
+        creation is non-idempotent so we never retry automatically."""
+        inc = self.incident(iid)
+        project = self.project(inc.project_id)
+        pre = self.repair_preflight(iid)
+        if not pre.devin_configured:
+            raise ServiceError(503, "devin_unavailable",
+                               f"Devin is not configured: {pre.unavailable_reason}")
+        if not self._software_evidence(inc):
+            raise ServiceError(409, "no_software_evidence",
+                               "a remote code fix needs evidence of a software issue — "
+                               "unverified power/signal problems are diagnosed on the bench")
+        if pre.active_job_id:
+            raise ServiceError(409, "repair_active",
+                               f"a repair job is already active ({pre.active_job_id}); "
+                               "wait for it or deliberately request a new attempt after it ends")
+        blocking = [i for i in pre.issues if "uncommitted" not in i]
+        if blocking:
+            raise ServiceError(409, "repair_unavailable", "; ".join(blocking),
+                             {"issues": pre.issues, "warnings": pre.warnings})
+        if pre.snapshot and pre.snapshot.dirty_files and not req.acknowledge_uncommitted:
+            raise ServiceError(409, "uncommitted_changes",
+                               "uncommitted changes are not visible to Devin — acknowledge that the "
+                               "session works from the committed base revision")
+        snap = pre.snapshot
+        repo_ref = self.settings.devin_repo or snap.repo_ref
+        hyps = hypmod.rerank(self.store.get_many(K_HYP, inc.hypothesis_ids, Hypothesis))
+        run = self.test_run(inc.test_run_id)
+        exp = self.store.get(K_EXPECT, inc.expectation_id, Expectation)
+        ev_ids = sorted({i for h in hyps for i in h.supporting_evidence_ids})
+        evidence_lines = [f"{e.id} [{e.kind.value}/{e.epistemic.value}] {e.summary[:180]}"
+                          for e in self.evidence(ev_ids)]
+        brief = build_brief(project, inc, exp, run, hyps, evidence_lines, snap, repo_ref)
+        job = RepairJob(id=_id("repair"), project_id=inc.project_id, incident_id=iid,
+                        attempt=len(self._repair_jobs(iid)) + 1, snapshot=snap,
+                        brief_text=brief, brief_evidence_ids=ev_ids, warnings=list(pre.warnings))
+        self.store.put(K_REPAIR, job, parent_id=iid)
+        self._emit("repair.requested", inc.project_id,
+                   {"job_id": job.id, "repo_ref": repo_ref, "base_revision": snap.base_revision,
+                    "attempt": job.attempt}, investigation_id=iid)
+        # Audit: who requested it and what was sent (PRD §13 audit; no secrets in the brief).
+        self.store.put(K_EVIDENCE, Evidence(
+            id=f"evidence:engineer:{iid}:repair:{job.id}", project_id=inc.project_id,
+            kind=EvidenceKind.engineer_assertion, epistemic=Epistemic.observed,
+            summary=(f"Engineer requested a Devin repair session for {repo_ref} "
+                     f"@ {str(snap.base_revision)[:8]} (brief {len(brief)} chars, "
+                     f"{len(ev_ids)} evidence refs)"),
+            provenance=Provenance(source_id="engineer", captured_at_utc=utcnow()),
+            payload={"incident_id": iid, "job_id": job.id, "repo_ref": repo_ref,
+                     "base_revision": snap.base_revision}))
+        try:
+            session = await self.devin.create_session(
+                prompt=brief, repos=[repo_ref] if repo_ref else [],
+                title=f"inteGREAT repair: {inc.title[:80]}",
+                tags=["integreat", f"incident:{iid[-8:]}", f"job:{job.id[-8:]}"],
+                max_acu_limit=self.settings.devin_max_acu,
+                structured_output_schema=REPAIR_OUTPUT_SCHEMA, timeout_s=45.0)
+            job.devin_session_id = session.session_id or None
+            job.session_url = session.url or None
+            job.state = map_remote_state(session.status, session.status_detail)
+        except asyncio.TimeoutError:
+            job.state = RepairState.uncertain
+            job.error = ("Session creation timed out — the session may exist in Devin Cloud but we "
+                         "have no session id. It is NOT retried automatically; check the Devin "
+                         "dashboard, then request a new attempt deliberately.")
+        except DevinUnavailable as e:
+            job.state = RepairState.failed
+            job.error = str(e)
+        job.updated_at_utc = utcnow()
+        self.store.put(K_REPAIR, job, parent_id=iid)
+        self._emit("repair.updated", inc.project_id,
+                   {"job_id": job.id, "state": job.state.value, "session_url": job.session_url},
+                   investigation_id=iid)
+        return job
+
+    async def refresh_repair(self, job_id: str) -> RepairJob:
+        """Poll remote status. GET only — polling NEVER creates a session."""
+        job = self.store.get(K_REPAIR, job_id, RepairJob)
+        if job is None:
+            raise ServiceError(404, "not_found", f"repair job {job_id} not found")
+        terminal = (RepairState.ready_for_review, RepairState.failed)
+        if job.state in terminal or not job.devin_session_id:
+            return job
+        try:
+            session = await self.devin.get_session(job.devin_session_id)
+        except asyncio.TimeoutError:
+            job.error = "status check timed out; will retry on next refresh"
+            job.updated_at_utc = utcnow()
+            self.store.put(K_REPAIR, job, parent_id=job.incident_id)
+            return job
+        except DevinUnavailable as e:
+            job.error = str(e)
+            job.updated_at_utc = utcnow()
+            self.store.put(K_REPAIR, job, parent_id=job.incident_id)
+            return job
+        job.state = map_remote_state(session.status, session.status_detail)
+        job.session_url = job.session_url or session.url or None
+        job.error = None
+        if job.state == RepairState.ready_for_review:
+            job.result = RepairResult(pull_requests=session.pull_requests,
+                                      structured_output=session.structured_output,
+                                      acus_consumed=session.acus_consumed,
+                                      session_status_detail=session.status_detail)
+        job.updated_at_utc = utcnow()
+        self.store.put(K_REPAIR, job, parent_id=job.incident_id)
+        self._emit("repair.updated", job.project_id,
+                   {"job_id": job.id, "state": job.state.value,
+                    "prs": len(job.result.pull_requests) if job.result else 0},
+                   investigation_id=job.incident_id)
+        return job
+
+    def repair_jobs(self, iid: str) -> list[RepairJob]:
+        self.incident(iid)
+        return self._repair_jobs(iid)

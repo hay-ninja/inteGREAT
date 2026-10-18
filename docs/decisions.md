@@ -143,3 +143,104 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
     the SVG angle plot (a canvas library and a chart need their own markup); they use theme tokens only.
   - Astryx agent notes live in `apps/web/ASTRYX.md` (written by `astryx init --agent-docs-path`), not in
     our AGENTS.md.
+
+### D-022 Astryx UX refinement and investigation continuity — 2026-10-17 — owner requested UX work and extended verification
+- Retain D-021's guided right panel and theme. Implement real React UI with Astryx Layout, Dialog,
+  List, Selector, Button, Stepper, and typography components; the conversation mockups remain proposals.
+- Put import first, show netlist errors inline, and let a supplied manifest recover a failed netlist
+  preview. Preview results are discarded if their inputs change before the request completes.
+- Expose Rig setup in the header and from unavailable live-run controls. Device connections remain
+  deliberate actions; existing camera/serial endpoints and permission boundaries still apply.
+- Default to the component subsystem. Filter the focused graph before layout, retain its ancestors,
+  and keep Whole system available. Use compact top-down layout and shorten visible board labels while
+  preserving full identity/provenance in the inspector. Scope is refreshed after rescans.
+- Graph/evidence inspection uses Astryx dialogs, including a discoverable Expand in graph action.
+  It no longer pushes the investigation's next action down the panel. Put measurement/log drawers
+  under the graph only; keep the investigation panel's height independent of those drawers.
+- Keep one primary next step, show tied hypotheses as tied, expose expected outcomes and citations,
+  and require an explicit manual-result choice plus Record. AI evidence review is visible and names
+  only the configured provider; StepFun synthesis remains a proposal, not a shipped integration.
+- Repeat asks for an observation source while retaining the expectation. Show current follow-up
+  measurements rather than the original run. A passing repeat remains open until Verify; completion
+  explicitly names live/simulated/replay evidence. Active incidents cannot edit criteria through past
+  step buttons. Reload restores the incident's expectation, latest run, serial/CV data, and resolved state.
+- **Reliability fix found during browser QA:** depend on `project.id`, not the project metadata object,
+  for the WebSocket subscription. Rescan metadata replacements otherwise reconnected from seq 0,
+  replayed graph.updated, and caused a reconnect/refetch loop. Ignore stale async investigation/data
+  responses after changing projects and block overlapping test actions in the UI.
+- **Validation:** build/typecheck, 80 backend + 10 frontend tests; actual-browser synthetic Fault A/B,
+  permission cancel/allow, failed then passing verification, marker-loss recovery via Repeat + Verify,
+  source-change/live-readiness gating, evidence/expansion, reload and repeated rescans, 1024/1280px.
+  No real hardware or live model calls were validated. Revisit layout after testing on the physical rig.
+
+### D-023 One canonical graph, three layer projections — 2026-10-18 — Hardware/Software/Combined views
+- The three dependency views are a **projection of one graph**, not three copies. Node/edge ids,
+  verification state, evidence ids, focus scope, search, and expand/collapse are shared across
+  modes; switching layers never rewrites provenance.
+- Filtering is honest: hiding an intermediate node never invents a direct edge. Lifted edges keep
+  the original edge ids, carry a `summary` explaining the substitution, and take the least-certain
+  verification state of the collapsed path (unchanged from D-022's behaviour, now layer-aware).
+- **Hardware view** shows only physical kinds (mcu/pin/component/power/interface); code is hidden
+  and the inspector offers the route back ("show the code that touches this"). **Software view**
+  shows code plus a small explicit *boundary*: hardware the visible code configures/controls/reads,
+  plus one hop of wiring context, rendered dashed as "reference". **Combined view** lays software
+  and hardware out in two labelled regions so cross-layer links are visible at a glance.
+- Beginner-readable roles (`nodeRole`) are derived only from imported structure — component type,
+  pin parentage, wiring neighbours — never guessed by a model. Unknown roles say so ("role not
+  declared"). Full identity (part numbers, file:line, pin ids) stays in the inspector.
+- Edge verbs (`calls`, `configures pin`, `connected to`, `powered by`, `observed by camera`) carry
+  a provenance suffix: declared wiring reads "declared, unchecked" until an engineer verifies it.
+- Elements hidden by a layer are counted in the header ("N source items hidden — show everything")
+  and explained per-node in the inspector, both with a one-click reveal back to Combined.
+
+### D-024 Event Flow is a persisted projection, not an execution tree — 2026-10-18
+- `integreat/flow.py` derives the chronological view from persisted run records only: host commands,
+  serial events, CV observations, expectation results, incident/timeline events. No LLM, no
+  fabricated ordering, no fictional dependency DAG forced onto records.
+- Lanes describe *what kind of record* an event is: command / software-serial / hardware /
+  result. Ordering is host-clock correlated and labelled as such in the UI; ordering alone is
+  never presented as causation.
+- Dense camera samples aggregate into segments for rendering (`cv_segment`, `aggregated_ids`) —
+  underlying observation/evidence ids are preserved and linked, nothing is deleted. Missing
+  timestamps keep a stable secondary `order` and are labelled "time unknown".
+- Stepping/scrubbing is a **replay of recorded events** — the UI states this and issues no
+  commands. Each event keeps evidence ids + related graph ids; "In the graph" switches back to
+  the Dependencies view with the node revealed.
+- The graph layer choice stays meaningful: hardware layer dims the software lane and vice versa.
+
+### D-025 StepFun orchestrates, Gemini supplies specialists, Devin proposes remote fixes — 2026-10-18
+- Provider routing per stage, not per app: the orchestrator LLM (StepFun `step-5-preview`,
+  `STEP_API_KEY`, global endpoint) performs triage and synthesis; the specialist LLM (configurable
+  Gemini model) answers code/hardware/runtime-vision questions. `GET /agents/status` reports
+  per-stage provider/model/availability. Deterministic dispatch and rule hypotheses remain the
+  fallback whenever a stage is unavailable; nothing is silently substituted.
+- **Separate remote repair workflow (narrow addition to the no-auto-patching rule):** the
+  `prepare_software_fix` action opens an engineer-controlled dialog, never the action executor.
+  `POST /investigations/{id}/repairs` builds a typed brief (repo identity, exact base commit,
+  evidence ids, confirmed expectation, repro, constraints, test commands) and creates ONE Devin v3
+  org-scoped session. Devin may modify its isolated branch; inteGREAT still never patches the local
+  checkout, merges, flashes, or verifies.
+- Snapshot honesty: a Windows-local path is not a repo Devin Cloud can reach. Preflight reports the
+  exact missing prerequisites (no `DEVIN_API_KEY`, no git remote, uncommitted files are excluded,
+  firmware subdirectory is named in the brief). `acknowledge_uncommitted` is required when the
+  working tree is dirty — we never silently send a stale base revision.
+- Lifecycle is persisted (`RepairJob`: preparing → queued → working → ready_for_review / failed /
+  needs_input / uncertain), one active job per incident+revision, polling only refreshes state and
+  never re-creates a session. A remote "finished" is not a fix: missing PR/diff/test output stays
+  "unavailable", and remote test results are labelled remote software checks, not hardware
+  verification. Budget: max attempts per incident enforced server-side.
+
+### D-026 Chaptered dark redesign (user-approved direction) — 2026-10-18
+- Visual direction after user review of a reference image: **keep the Obsidian dark theme,
+  adopt the reference's typography and structure** — numbered chapter strip
+  (`01 SETUP · 02 RUN · 03 DEBUG · 04 VERIFY`), monospace uppercase eyebrows
+  (`NN · CATEGORY`), display-scale headings, and boxed sections (Astryx `Card`s + hairline
+  borders). Same canvas + right-panel split, balanced density.
+- Implementation is intentionally mixed (user-chosen): Astryx components keep owning controls,
+  dialogs, lists and cards; app-layer token-based CSS (`styles.css` @layer app, `--color-*`/
+  `--font-*`/`--spacing-*` tokens only) provides `.eyebrow`, `.chapters`, `.brand`. This is a
+  documented extension of the D-021 custom-CSS exception (graph canvas, event-flow lanes,
+  chaptered typography) — no new design system, no palette overrides, no new dependencies.
+- The Stepper is replaced by the chapter strip; step gating is unchanged (forward chapters stay
+  locked until reached, completed chapters clickable, debug chapter shows error state bar).
+- Import screen reordered to match intent: demo → reopen → import your own (boxed form).

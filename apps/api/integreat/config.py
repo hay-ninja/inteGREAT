@@ -32,6 +32,16 @@ class Settings:
     replay_speed: float = 1.0  # 1.0 = real time; 0 = instant (tests)
     gemini_api_key: str | None = None
     gemini_model: str | None = None
+    # StepFun runs triage + synthesis (D-023); the sponsor-required default model is step-5-preview.
+    stepfun_api_key: str | None = None
+    stepfun_model: str = "step-5-preview"
+    stepfun_base_url: str = "https://api.stepfun.ai/v1"  # global endpoint; China region differs
+    # Devin Cloud: remote, reviewable software-fix proposals only (D-025). v3 org-scoped API.
+    devin_api_key: str | None = None
+    devin_org_id: str | None = None
+    devin_repo: str | None = None  # optional "owner/name" override when the git remote can't be parsed
+    devin_api_base: str = "https://api.devin.ai"
+    devin_max_acu: float = 10.0    # resource cap sent as max_acu_limit per repair session
     agent_timeout_s: float = 30.0
     max_context_tokens: int = 6000
 
@@ -48,6 +58,14 @@ def load_settings() -> Settings:
         replay_speed=float(os.environ.get("INTEGREAT_REPLAY_SPEED", "1.0")),
         gemini_api_key=os.environ.get("GEMINI_API_KEY") or os.environ.get("INTEGREAT_GEMINI_API_KEY") or None,
         gemini_model=os.environ.get("INTEGREAT_GEMINI_MODEL") or None,
+        stepfun_api_key=os.environ.get("STEP_API_KEY") or os.environ.get("INTEGREAT_STEPFUN_API_KEY") or None,
+        stepfun_model=os.environ.get("INTEGREAT_STEPFUN_MODEL", "step-5-preview"),
+        stepfun_base_url=os.environ.get("INTEGREAT_STEPFUN_BASE_URL", "https://api.stepfun.ai/v1"),
+        devin_api_key=os.environ.get("DEVIN_API_KEY") or os.environ.get("INTEGREAT_DEVIN_API_KEY") or None,
+        devin_org_id=os.environ.get("INTEGREAT_DEVIN_ORG_ID") or os.environ.get("DEVIN_ORG_ID") or None,
+        devin_repo=os.environ.get("INTEGREAT_DEVIN_REPO") or None,
+        devin_api_base=os.environ.get("INTEGREAT_DEVIN_API_BASE", "https://api.devin.ai"),
+        devin_max_acu=float(os.environ.get("INTEGREAT_DEVIN_MAX_ACU", "10")),
         agent_timeout_s=float(os.environ.get("INTEGREAT_AGENT_TIMEOUT_S", "30")),
         max_context_tokens=int(os.environ.get("INTEGREAT_MAX_CONTEXT_TOKENS", "6000")),
     )

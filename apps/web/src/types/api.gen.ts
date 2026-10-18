@@ -449,6 +449,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tests/{run_id}/flow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Test Flow
+         * @description Chronological hardware/software event flow for one persisted run (D-024).
+         */
+        get: operations["test_flow_api_v1_tests__run_id__flow_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/investigations/{iid}": {
         parameters: {
             query?: never;
@@ -546,6 +566,67 @@ export interface paths {
         put?: never;
         /** Diagnose */
         post: operations["diagnose_api_v1_investigations__iid__diagnose_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/investigations/{iid}/repairs/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Repair Preflight
+         * @description What a repair request would need — precise missing prerequisites, never a guess.
+         */
+        get: operations["repair_preflight_api_v1_investigations__iid__repairs_preflight_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/investigations/{iid}/repairs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Repair Jobs */
+        get: operations["repair_jobs_api_v1_investigations__iid__repairs_get"];
+        put?: never;
+        /**
+         * Request Repair
+         * @description Engineer-initiated remote repair request (Devin). Non-idempotent: never auto-retried.
+         */
+        post: operations["request_repair_api_v1_investigations__iid__repairs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repairs/{job_id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Repair
+         * @description Poll remote status (GET only — polling never creates a session).
+         */
+        post: operations["refresh_repair_api_v1_repairs__job_id__refresh_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -717,7 +798,7 @@ export interface components {
          * ActionKind
          * @enum {string}
          */
-        ActionKind: "run_readonly_tool" | "request_manual_check" | "repeat_test" | "expand_scope" | "inspect_source" | "inspect_connection" | "verify_fix" | "ask_clarification";
+        ActionKind: "run_readonly_tool" | "request_manual_check" | "repeat_test" | "expand_scope" | "inspect_source" | "inspect_connection" | "verify_fix" | "ask_clarification" | "prepare_software_fix";
         /** ActionResult */
         ActionResult: {
             /** Action Id */
@@ -804,6 +885,8 @@ export interface components {
             duration_ms: number;
             /** Model */
             model: string | null;
+            /** Provider */
+            provider: string | null;
             context: components["schemas"]["ContextPacketSummary"] | null;
             report: components["schemas"]["AgentReport"] | null;
             /** Summary */
@@ -825,6 +908,8 @@ export interface components {
             model: string | null;
             /** Reason */
             reason: string | null;
+            /** Stages */
+            stages: components["schemas"]["ProviderStatus"][];
         };
         /** CalibrateRequest */
         CalibrateRequest: {
@@ -959,6 +1044,32 @@ export interface components {
          * @enum {string}
          */
         Epistemic: "observed" | "verified" | "inferred" | "unknown";
+        /** EventFlow */
+        EventFlow: {
+            /** Run Id */
+            run_id: string;
+            /** Project Id */
+            project_id: string;
+            /**
+             * Attempt Kind
+             * @enum {string}
+             */
+            attempt_kind: "initial" | "repeat" | "verify";
+            run_state: components["schemas"]["TestRunState"];
+            source: components["schemas"]["ObservationSourceSpec-Output"];
+            /** Synthetic */
+            synthetic: boolean;
+            /** Correlation */
+            correlation: string;
+            /** Deadline Ms */
+            deadline_ms: number;
+            /** Lanes */
+            lanes: components["schemas"]["FlowLane"][];
+            /** Events */
+            events: components["schemas"]["FlowEvent"][];
+            /** Gaps */
+            gaps: string[];
+        };
         /** Evidence */
         Evidence: {
             /** Id */
@@ -1131,6 +1242,59 @@ export interface components {
          * @enum {string}
          */
         FaultCode: "GPIO_CONFIG_MISMATCH" | "NO_PHYSICAL_MOTION" | "MISSING_SERIAL_ACK" | "CAMERA_MEASUREMENT_UNAVAILABLE" | "POSSIBLE_POWER_OR_SIGNAL_FAULT" | "AGENT_PROPOSED";
+        /**
+         * FlowEvent
+         * @description One item on the persisted chronological Event flow. Derived deterministically from
+         *     persisted records (D-024); ids stay stable across reloads.
+         */
+        FlowEvent: {
+            /** Id */
+            id: string;
+            /** Test Run Id */
+            test_run_id: string;
+            lane: components["schemas"]["FlowLane"];
+            kind: components["schemas"]["FlowEventKind"];
+            /** Label */
+            label: string;
+            /** Detail */
+            detail: string | null;
+            /** Timestamp Utc */
+            timestamp_utc: string | null;
+            /** Elapsed Ms */
+            elapsed_ms: number | null;
+            /** Elapsed End Ms */
+            elapsed_end_ms: number | null;
+            /** Order */
+            order: number;
+            /**
+             * State
+             * @default observed
+             * @enum {string}
+             */
+            state: "observed" | "expected" | "inferred";
+            /** Quality */
+            quality: string | null;
+            /** Evidence Ids */
+            evidence_ids: string[];
+            /** Related Node Ids */
+            related_node_ids: string[];
+            /** Aggregated Ids */
+            aggregated_ids: string[];
+            /** Note */
+            note: string | null;
+        };
+        /**
+         * FlowEventKind
+         * @enum {string}
+         */
+        FlowEventKind: "command_sent" | "external_trigger" | "serial_rx" | "missing_ack" | "cv_segment" | "evaluation" | "incident_opened" | "run_completed";
+        /**
+         * FlowLane
+         * @description Chronological lanes for one test run. Lanes describe *what kind of record* an event is,
+         *     not a fictional execution DAG (D-024).
+         * @enum {string}
+         */
+        FlowLane: "command" | "software" | "hardware" | "result";
         /** GraphEdge */
         GraphEdge: {
             /** Id */
@@ -1373,6 +1537,8 @@ export interface components {
             messages: components["schemas"]["Evidence"][];
             /** Agent Runs */
             agent_runs: components["schemas"]["AgentRun"][];
+            /** Repair Jobs */
+            repair_jobs: components["schemas"]["RepairJob"][];
         };
         /** ManualResultRequest */
         ManualResultRequest: {
@@ -1586,6 +1752,124 @@ export interface components {
             /** Monotonic Ns */
             monotonic_ns: number | null;
         };
+        /**
+         * ProviderStatus
+         * @description Per-stage provider attribution (D-023): orchestration may come from a different
+         *     provider than the specialists.
+         */
+        ProviderStatus: {
+            /** Role */
+            role: string;
+            /** Provider */
+            provider: string;
+            /** Model */
+            model: string | null;
+            /** Available */
+            available: boolean;
+            /** Reason */
+            reason: string | null;
+        };
+        /** RepairJob */
+        RepairJob: {
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Incident Id */
+            incident_id: string;
+            /**
+             * Attempt
+             * @default 1
+             */
+            attempt: number;
+            /** @default preparing */
+            state: components["schemas"]["RepairState"];
+            snapshot: components["schemas"]["RepoSnapshot"];
+            /** Devin Session Id */
+            devin_session_id: string | null;
+            /** Session Url */
+            session_url: string | null;
+            /** Brief Text */
+            brief_text: string;
+            /** Brief Evidence Ids */
+            brief_evidence_ids: string[];
+            /**
+             * Requested By
+             * @default engineer
+             * @constant
+             */
+            requested_by: "engineer";
+            /** Warnings */
+            warnings: string[];
+            /** Error */
+            error: string | null;
+            result: components["schemas"]["RepairResult"] | null;
+            /**
+             * Created At Utc
+             * Format: date-time
+             */
+            created_at_utc: string;
+            /**
+             * Updated At Utc
+             * Format: date-time
+             */
+            updated_at_utc: string;
+        };
+        /**
+         * RepairPreflight
+         * @description What `POST .../repairs` would need to succeed — precise missing prerequisites, not guessing.
+         */
+        RepairPreflight: {
+            /** Ready */
+            ready: boolean;
+            /** Devin Configured */
+            devin_configured: boolean;
+            /** Unavailable Reason */
+            unavailable_reason: string | null;
+            /** Issues */
+            issues: string[];
+            /** Warnings */
+            warnings: string[];
+            snapshot: components["schemas"]["RepoSnapshot"] | null;
+            /**
+             * Software Evidence
+             * @default false
+             */
+            software_evidence: boolean;
+            /** Active Job Id */
+            active_job_id: string | null;
+        };
+        /** RepairRequest */
+        RepairRequest: {
+            /**
+             * Acknowledge Uncommitted
+             * @default false
+             */
+            acknowledge_uncommitted: boolean;
+        };
+        /**
+         * RepairResult
+         * @description Remote result, reviewable. Never treated as a hardware fix (D-025).
+         */
+        RepairResult: {
+            /** Pull Requests */
+            pull_requests: string[];
+            /** Structured Output */
+            structured_output: {
+                [key: string]: unknown;
+            } | null;
+            /** Acus Consumed */
+            acus_consumed: number | null;
+            /** Session Status Detail */
+            session_status_detail: string | null;
+        };
+        /**
+         * RepairState
+         * @description Local lifecycle mapped from Devin session states. `uncertain` = create timed out; the
+         *     session may exist remotely but we cannot know without a session id.
+         * @enum {string}
+         */
+        RepairState: "preparing" | "queued" | "working" | "needs_input" | "ready_for_review" | "failed" | "uncertain";
         /** ReplayInfo */
         ReplayInfo: {
             /** Id */
@@ -1594,6 +1878,31 @@ export interface components {
             description: string;
             /** Synthetic */
             synthetic: boolean;
+        };
+        /**
+         * RepoSnapshot
+         * @description What the repair was based on (D-025). `dirty_files` are NOT included in the remote session.
+         */
+        RepoSnapshot: {
+            /** Repo Root */
+            repo_root: string;
+            /** Git Toplevel */
+            git_toplevel: string | null;
+            /** Remote Url */
+            remote_url: string | null;
+            /** Repo Ref */
+            repo_ref: string | null;
+            /** Base Revision */
+            base_revision: string | null;
+            /** Relative Path */
+            relative_path: string | null;
+            /** Dirty Files */
+            dirty_files: string[];
+            /**
+             * Checked At Utc
+             * Format: date-time
+             */
+            checked_at_utc: string;
         };
         /** SaveReplayRequest */
         SaveReplayRequest: {
@@ -2597,6 +2906,37 @@ export interface operations {
             };
         };
     };
+    test_flow_api_v1_tests__run_id__flow_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventFlow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_investigation_api_v1_investigations__iid__get: {
         parameters: {
             query?: never;
@@ -2818,6 +3158,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Incident"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    repair_preflight_api_v1_investigations__iid__repairs_preflight_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepairPreflight"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    repair_jobs_api_v1_investigations__iid__repairs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepairJob"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_repair_api_v1_investigations__iid__repairs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepairRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepairJob"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_repair_api_v1_repairs__job_id__refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepairJob"];
                 };
             };
             /** @description Validation Error */

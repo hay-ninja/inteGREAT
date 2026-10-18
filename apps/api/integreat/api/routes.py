@@ -15,6 +15,7 @@ from ..models import (
     CameraConnectRequest,
     DemoFixture,
     DeviceStatus,
+    EventFlow,
     Evidence,
     ExecuteActionRequest,
     Expectation,
@@ -34,6 +35,9 @@ from ..models import (
     PermissionUpdate,
     Project,
     ReplayInfo,
+    RepairJob,
+    RepairPreflight,
+    RepairRequest,
     SaveReplayRequest,
     SerialConnectRequest,
     SerialEvent,
@@ -235,6 +239,12 @@ def save_replay(run_id: str, req: SaveReplayRequest, request: Request):
     return svc(request).save_replay(run_id, req.name)
 
 
+@router.get("/tests/{run_id}/flow", response_model=EventFlow)
+def test_flow(run_id: str, request: Request):
+    """Chronological hardware/software event flow for one persisted run (D-024)."""
+    return svc(request).event_flow(run_id)
+
+
 # ---------------------------------------------------------------- investigations
 
 
@@ -280,6 +290,32 @@ def diagnose(iid: str, request: Request, bg: BackgroundTasks):
     inc = s.begin_diagnosis(iid)
     bg.add_task(s.run_diagnosis, iid)
     return inc
+
+
+# ---------------------------------------------------------------- remote repair (D-025)
+
+
+@router.get("/investigations/{iid}/repairs/preflight", response_model=RepairPreflight)
+def repair_preflight(iid: str, request: Request):
+    """What a repair request would need — precise missing prerequisites, never a guess."""
+    return svc(request).repair_preflight(iid)
+
+
+@router.get("/investigations/{iid}/repairs", response_model=list[RepairJob])
+def repair_jobs(iid: str, request: Request):
+    return svc(request).repair_jobs(iid)
+
+
+@router.post("/investigations/{iid}/repairs", response_model=RepairJob)
+async def request_repair(iid: str, req: RepairRequest, request: Request):
+    """Engineer-initiated remote repair request (Devin). Non-idempotent: never auto-retried."""
+    return await svc(request).request_repair(iid, req)
+
+
+@router.post("/repairs/{job_id}/refresh", response_model=RepairJob)
+async def refresh_repair(job_id: str, request: Request):
+    """Poll remote status (GET only — polling never creates a session)."""
+    return await svc(request).refresh_repair(job_id)
 
 
 # ---------------------------------------------------------------- devices (global: the laptop's ports)

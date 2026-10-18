@@ -1,19 +1,18 @@
-/** Start screen: reopen a recent project, try a demo, or import your own — in that order. */
-import { useEffect, useState } from "react";
+/** Start screen: try a demo, reopen a recent project, or import your own — in that order. */
+import { useEffect, useRef, useState } from "react";
 import { Layout, LayoutContent } from "@astryxdesign/core/Layout";
 import { VStack } from "@astryxdesign/core/VStack";
 import { HStack } from "@astryxdesign/core/HStack";
 import { Heading } from "@astryxdesign/core/Heading";
 import { Text } from "@astryxdesign/core/Text";
 import { Button } from "@astryxdesign/core/Button";
-import { ClickableCard } from "@astryxdesign/core/ClickableCard";
-import { Collapsible } from "@astryxdesign/core/Collapsible";
+import { Card } from "@astryxdesign/core/Card";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { Banner } from "@astryxdesign/core/Banner";
 import { Selector } from "@astryxdesign/core/Selector";
 import { List, ListItem } from "@astryxdesign/core/List";
-import { Badge } from "@astryxdesign/core/Badge";
 import { api, type DemoFixture, type NetlistPreview, type Project } from "../../lib/api";
+import { Eyebrow } from "../flow/common";
 
 type Mapping = {
   mcu_ref: string;
@@ -39,7 +38,9 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
   const [netlist, setNetlist] = useState("");
   const [preview, setPreview] = useState<NetlistPreview | null>(null);
   const [mapping, setMapping] = useState<Mapping | null>(null);
-  const [customOpen, setCustomOpen] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const previewRequest = useRef(0);
 
   useEffect(() => {
     api.demo().then((d) => { setFixtures(d.fixtures); setDemoNetlist(d.netlist_path); }).catch(() => undefined);
@@ -47,12 +48,17 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
   }, []);
 
   const doPreview = async (nl: string, rp: string) => {
+    const request = ++previewRequest.current;
+    setPreview(null); setMapping(null); setPreviewError(""); setPreviewBusy(true);
     try {
       const pr = await api.netlistPreview(nl, rp || undefined);
+      if (request !== previewRequest.current) return;
       setPreview(pr);
       setMapping(pr.proposed_mapping as unknown as Mapping);
     } catch (e) {
-      p.onError((e as Error).message);
+      if (request === previewRequest.current) setPreviewError((e as Error).message);
+    } finally {
+      if (request === previewRequest.current) setPreviewBusy(false);
     }
   };
 
@@ -60,59 +66,63 @@ export function ImportScreen(p: { onImport: (a: ImportArgs) => void; onOpen: (pr
     <Layout contentWidth={640} content={
       <LayoutContent>
         <VStack gap={5} paddingBlock={8}>
-          <VStack gap={1}>
-            <Heading level={1}>inteGREAT</Heading>
+          <VStack gap={2}>
+            <Eyebrow>Graph-first hardware debugging</Eyebrow>
+            <Heading level={1} type="display-2">Why isn't your hardware doing what the code says?</Heading>
             <Text type="body" color="secondary">
-              Find why your hardware isn't doing what the code says. Import an ESP32 project — nothing is run or changed.
+              Import an ESP32 project — inteGREAT maps code to wiring, runs a test, and shows the evidence. Nothing is run or changed on import.
             </Text>
           </VStack>
 
-          {recent.length > 0 && (
-            <List header={<Text type="label" color="secondary">Recent</Text>} hasDividers>
-              {recent.map((r) => (
-                <ListItem key={r.id} label={r.name} description={r.repo_root} onClick={() => p.onOpen(r)}
-                          endContent={<Badge label={`v${r.graph_version}`} />} />
-              ))}
+          <VStack gap={2}>
+            <Eyebrow num="01">Explore a demo — simulated observations</Eyebrow>
+            <List density="compact" hasDividers>
+              {fixtures.map((f, i) => <ListItem key={f.repo_path} label={i === 0 ? "Wrong pin in the code" : "Disconnected servo signal"}
+                description={i === 0 ? "Inspect a GPIO mismatch, then verify a repair." : "Separate signal and power hypotheses with a manual check."}
+                isDisabled={p.busy} onClick={() => p.onImport({ repo_path: f.repo_path, manifest_path: f.manifest_path })} />)}
             </List>
+          </VStack>
+
+          {recent.length > 0 && (
+            <VStack gap={2}>
+              <Eyebrow num="02">Reopen a project</Eyebrow>
+              <List density="compact" hasDividers>
+                {recent.map((r) => <ListItem key={r.id} label={r.name} description={r.repo_root} isDisabled={p.busy}
+                  onClick={() => p.onOpen(r)} endContent={<Text type="supporting">v{r.graph_version}</Text>} />)}
+              </List>
+            </VStack>
           )}
 
           <VStack gap={2}>
-            <Text type="label" color="secondary">Try a demo</Text>
-            {fixtures.map((f, i) => (
-              <ClickableCard key={f.repo_path} label={f.label} padding={3} isDisabled={p.busy}
-                             onClick={() => p.onImport({ repo_path: f.repo_path, manifest_path: f.manifest_path })}>
-                <VStack gap={0.5}>
-                  <Text type="body" weight="semibold">{i === 0 ? "Wrong pin in the code" : "Servo comes unplugged"}</Text>
-                  <Text type="supporting">{f.label}</Text>
-                </VStack>
-              </ClickableCard>
-            ))}
-          </VStack>
-
-          <Collapsible isOpen={customOpen || !!preview} onOpenChange={setCustomOpen}
-                       trigger={<Text type="label">Import your own project</Text>}>
-            <VStack gap={3}>
-              <TextInput label="Firmware folder" value={repo} onChange={setRepo} placeholder="C:\path\to\sketch" />
-              <TextInput label="Hardware manifest (YAML)" isOptional value={manifest} onChange={setManifest}
-                         description="Used directly, or as a fallback if the netlist can't be read." />
-              <HStack gap={1} vAlign="end">
+            <Eyebrow num={recent.length ? "03" : "02"}>Import your own project</Eyebrow>
+            <Card padding={4} variant="muted">
+              <VStack gap={3}>
+                <TextInput label="Firmware folder" value={repo} onChange={(v) => {
+                  setRepo(v); ++previewRequest.current; setPreview(null); setMapping(null); setPreviewError(""); setPreviewBusy(false);
+                }} placeholder="C:\path\to\sketch" />
+                <TextInput label="Hardware manifest (YAML)" isOptional value={manifest} onChange={setManifest}
+                           description="Used directly, or as a fallback if the netlist can't be read." />
                 <TextInput label="KiCad netlist (XML)" isOptional value={netlist} width="100%"
-                           onChange={(v) => { setNetlist(v); setPreview(null); setMapping(null); }} />
-                <Button label="Read netlist" isDisabled={!netlist} onClick={() => doPreview(netlist, repo)} />
-              </HStack>
-              {fixtures[0] && demoNetlist && !netlist && (
-                <Button label="Use the demo netlist" variant="ghost" size="sm" onClick={() => {
-                  setRepo(fixtures[0].repo_path); setManifest(fixtures[0].manifest_path); setNetlist(demoNetlist);
-                  setCustomOpen(true); doPreview(demoNetlist, fixtures[0].repo_path);
-                }} />
-              )}
-              {preview && mapping && <MappingReview preview={preview} mapping={mapping} onChange={setMapping} />}
-              <Button label={netlist ? "Confirm and import" : "Import"} variant="primary" isLoading={p.busy}
-                      isDisabled={!repo || (!!netlist && !mapping)}
-                      onClick={() => p.onImport({ repo_path: repo, manifest_path: manifest || null, netlist_path: netlist || null,
-                                                  netlist_mapping: mapping ? { ...mapping, proposed: false } : null })} />
-            </VStack>
-          </Collapsible>
+                           onChange={(v) => { setNetlist(v); ++previewRequest.current; setPreview(null); setMapping(null); setPreviewError(""); setPreviewBusy(false); }} />
+                <HStack gap={2} wrap="wrap">
+                  <Button label="Read netlist" isDisabled={!netlist.trim() || p.busy} isLoading={previewBusy} onClick={() => doPreview(netlist, repo)} />
+                {fixtures[0] && demoNetlist && !netlist && (
+                  <Button label="Use the demo netlist" variant="ghost" size="sm" onClick={() => {
+                    setRepo(fixtures[0].repo_path); setManifest(fixtures[0].manifest_path); setNetlist(demoNetlist);
+                    doPreview(demoNetlist, fixtures[0].repo_path);
+                  }} />
+                )}
+                </HStack>
+                {preview && mapping && <MappingReview preview={preview} mapping={mapping} onChange={setMapping} />}
+                {previewError && <Banner status="warning" collapsible={false} title="The netlist could not be read"
+                                        description={`${previewError}${manifest.trim() ? " Import can continue using the hardware manifest." : " Add a manifest as a fallback, or remove the netlist path."}`} />}
+                <Button label={previewError && manifest.trim() ? "Import with manifest fallback" : netlist ? "Confirm mapping and import" : "Import project"} variant="primary" isLoading={p.busy}
+                        isDisabled={!repo.trim() || previewBusy || (!!netlist.trim() && !mapping && !(previewError && manifest.trim()))}
+                        onClick={() => p.onImport({ repo_path: repo, manifest_path: manifest || null, netlist_path: netlist || null,
+                                                    netlist_mapping: mapping ? { ...mapping, proposed: false } : null })} />
+              </VStack>
+            </Card>
+          </VStack>
         </VStack>
       </LayoutContent>
     } />

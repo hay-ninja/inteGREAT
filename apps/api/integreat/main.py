@@ -13,15 +13,20 @@ from .api.routes import router
 from .api.ws import Hub
 from .config import Settings, load_settings
 from .observations.devices import DeviceManager
+from .repair import DevinClientProtocol
 from .service import Service, ServiceError
 from .storage.db import Store
 
 
 def create_app(settings: Settings | None = None, llm: LLMProvider | None = None,
-               devices: DeviceManager | None = None) -> FastAPI:
+               devices: DeviceManager | None = None,
+               orchestrator_llm: LLMProvider | None = None,
+               specialist_llm: LLMProvider | None = None,
+               devin: DevinClientProtocol | None = None) -> FastAPI:
     settings = settings or load_settings()
     store = Store(settings.db_path)
-    service = Service(store, settings, Hub(store), llm=llm, devices=devices)
+    service = Service(store, settings, Hub(store), llm=llm, devices=devices,
+                      orchestrator_llm=orchestrator_llm, specialist_llm=specialist_llm, devin=devin)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
