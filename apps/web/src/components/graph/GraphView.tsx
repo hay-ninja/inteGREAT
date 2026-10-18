@@ -6,6 +6,7 @@ import {
   MarkerType,
   Panel,
   Position,
+  PanOnScrollMode,
   ReactFlow,
   ReactFlowProvider,
   applyNodeChanges,
@@ -241,6 +242,10 @@ function Inner(p: Props) {
       className="graph-canvas"
       colorMode="dark"
       minZoom={0.2}
+      panOnScroll
+      panOnScrollMode={PanOnScrollMode.Free}
+      zoomOnScroll={false}
+      zoomActivationKeyCode="Control"
       proOptions={{ hideAttribution: true }}
     >
       <Background gap={28} size={1} />
@@ -272,6 +277,7 @@ function Legend({ layer }: { layer: GraphLayer }) {
         </HStack>
         <Text type="supporting">Solid: verified · dashed: from code · dotted: declared, unchecked (from the schematic — not physically checked)</Text>
         <Text type="supporting">Accent outline: related to your selection · dashed border pill: hardware reference</Text>
+        <Text type="supporting">Scroll pans · Ctrl+scroll or pinch zooms</Text>
         <HStack gap={2} wrap="wrap">
           <HStack gap={1} vAlign="center"><StatusDot variant="error" label="Conflict or failed" /><Text type="supporting">conflict / failed</Text></HStack>
           <HStack gap={1} vAlign="center"><StatusDot variant="warning" label="Suspected" /><Text type="supporting">suspected</Text></HStack>
