@@ -298,12 +298,24 @@ What remains is hardware validation.
   zero console errors; no 800px overflow.
 
 ## Analyze view + agent progress (D-041) — done 2026-10-18
-- Flow views are now Test / Debug / Analyze; all AI lives behind Analyze behind a
-  "deterministic vs AI" explainer card.
+- Flow views are now Test / Debug / Analyze (freely switchable — the old locked
+  Setup→Run→Debug→Verify chapter progression is gone). Test merges setup+run and
+  offers "Run the test again" with an open incident (repeat_test → same incident);
+  the resolved/verified state renders inside Debug.
+- All AI lives behind Analyze behind a "deterministic vs AI" explainer card;
+  hypotheses in Debug carry AI/Rules origin badges; manual checks, tool output and
+  the Devin repair dialog carry provenance captions.
 - Agent rounds emit `agent.stage` events (triage → specialists+roster → critique →
   synthesis) — the Analyze view renders a live step checklist with per-agent ✓/… and
   the Analyze tab shows "…" while running.
 - `Incident` stores the synthesis structured (`agent_summary`, `agent_contradictions`,
   `agent_check_explanation`, `agent_recommended_action_id`) — the card renders sections,
   an "Evidence cited" chip row, and a real Run button resolved via `nextCheck`.
-- Verified: `tsc -b` clean, 17/17 vitest, 136/136 pytest, regenerated openapi/types.
+- Manual-check results are clickable `SelectableCard` buttons (per-choice
+  interpretation inline), not a dropdown; the right panel resizes to 50vw.
+- Verified: `tsc -b` clean, 17/17 vitest, 136/136 pytest, regenerated openapi/types;
+  headless pass shows Test/Debug/Analyze switching, run-again with an open incident,
+  Rules/AI origin tags, Analyze explainer, half-screen panel drag (~703px at 1440w),
+  and the hosted replay test passes end-to-end on a static server (verify arc,
+  manual-check buttons). Fixed `agent_contradictions` crash on pre-structured
+  incidents (null-guarded).

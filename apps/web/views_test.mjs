@@ -12,10 +12,9 @@ await page.goto("http://localhost:5173", { waitUntil: "networkidle" });
 const ws = page.getByRole("button", { name: "Open the workspace" });
 if (await ws.first().isVisible().catch(() => false)) { await ws.first().click(); await sleep(600); }
 
-// Open the project card named "fault_a" (has an open incident)
+// Open the esp32_servo_demo_fault_a card (has an open incident)
 await page.locator(".card-menu").first().waitFor({ timeout: 8000 });
-const card = page.locator("div").filter({ hasText: /^fault_a/ }).last();
-await page.getByText("fault_a", { exact: true }).first().click();
+await page.locator(".card-menu").first().locator("..").click({ position: { x: 60, y: 60 } });
 await sleep(800);
 const openBtn = page.getByRole("button", { name: "Open project" });
 if (await openBtn.isVisible().catch(() => false)) { await openBtn.click(); await sleep(2000); }

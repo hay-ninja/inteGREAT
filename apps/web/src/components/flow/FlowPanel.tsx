@@ -645,8 +645,10 @@ function AgentSummary(p: FlowProps & { view: InvestigationView }) {
   const inc = p.view.incident;
   const evById = new Map(p.view.evidence.map((e) => [e.id, e]));
   const action = nextCheck(p.view);
+  // Older stored incidents predate these fields — treat absent as empty, never crash.
+  const contradictions = inc.agent_contradictions ?? [];
   const cited = [...new Set(
-    [inc.agent_summary ?? "", ...inc.agent_contradictions, inc.agent_check_explanation]
+    [inc.agent_summary ?? "", ...contradictions, inc.agent_check_explanation]
       .join(" ").match(/evidence:[A-Za-z0-9_.:-]+/g) ?? [],
   )].slice(0, 10);
   return (
@@ -654,10 +656,10 @@ function AgentSummary(p: FlowProps & { view: InvestigationView }) {
       <VStack gap={2}>
         <Eyebrow>AI agents (inference, not measurement)</Eyebrow>
         <Text type="body">{inc.agent_summary}</Text>
-        {inc.agent_contradictions.length > 0 && (
+        {contradictions.length > 0 && (
           <VStack gap={0.5}>
             <Text type="label">Contradictions</Text>
-            {inc.agent_contradictions.map((c, i) => <Text key={i} type="supporting">• {c}</Text>)}
+            {contradictions.map((c, i) => <Text key={i} type="supporting">• {c}</Text>)}
           </VStack>
         )}
         {inc.agent_check_explanation && (

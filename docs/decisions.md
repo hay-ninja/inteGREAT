@@ -519,3 +519,16 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   critique → synthesis — and `agent.reported` already marked per-agent completion.
   The Analyze view renders them as a step checklist with per-agent ✓/…, and the
   Analyze chapter tab shows a "…" while a round runs.
+- Test view merges the old Setup+Run steps and stays reachable with an open incident:
+  it offers "Run the test again" via the `repeat_test` action so repeated runs stay in
+  the same investigation rather than forking a new one. The resolved/verified state
+  renders inside Debug — there is no separate locked Verify step.
+- AI provenance is surfaced, not just stored: hypotheses carry origin badges
+  (`AI` for `origin="agent"`, `Rules` otherwise), and dialogs carry captions
+  distinguishing rules-engine suggestions and fixed read-only tool output from
+  AI-generated content (Devin repair proposal is captioned as AI).
+- Manual-check results are full-width `SelectableCard` buttons (one per
+  `result_choices` entry, interpretation shown inline) instead of a Selector dropdown —
+  the engineer picks an observed outcome, not an option index.
+- The right workspace panel resizes to `50vw` (was 620px cap) so Debug/Analyze can act
+  as a real workspace beside the map.

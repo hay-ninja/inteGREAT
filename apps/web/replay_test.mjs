@@ -19,7 +19,8 @@ await page.screenshot({ path: `${shots}/r00-landing.png` });
 await page.getByRole("button", { name: "Open the workspace" }).first().click();
 await page.waitForTimeout(800);
 await page.screenshot({ path: `${shots}/r01-import.png` });
-await page.getByText("Wrong pin in the code").click();
+// first demo card in the left rail — label varies by fixture version
+await page.getByText("Simulated · ~5 minutes").first().click();
 await page.locator("dialog").getByText("Load demo").click();
 await page.waitForSelector(".graph-canvas", { timeout: 15000 });
 log("graph rendered from replay");
@@ -58,7 +59,10 @@ if (await inspect.isVisible().catch(() => false)) {
   if (dlg) await page.keyboard.press("Escape");
 }
 
-// verify the repair — replay:good resolves the incident
+// verify the repair — lives under Debug → Potential causes; replay:good resolves the incident
+await page.locator(".chapter").nth(1).click();
+await page.getByText("Potential causes").first().click();
+await page.waitForTimeout(400);
 await page.locator("button").filter({ hasText: /verify it|verify this/i }).first().click();
 await page.waitForTimeout(500);
 await page.locator("dialog").getByText("Replay", { exact: true }).click();
@@ -85,7 +89,7 @@ await page.waitForTimeout(900);
 const ws = page.getByRole("button", { name: "Open the workspace" });
 if (await ws.first().isVisible().catch(() => false)) await ws.first().click();
 await page.waitForTimeout(800);
-await page.getByText("Disconnected servo signal", { exact: false }).first().click();
+await page.getByText("Simulated · ~5 minutes").nth(1).click();
 await page.locator("dialog").getByText("Load demo").click();
 await page.waitForTimeout(1500);
 // view mode persists — return to the map
@@ -99,23 +103,25 @@ if (await runBtn2.isVisible().catch(() => false)) {
   await page.waitForSelector("text=In short", { timeout: 15000 }).catch(() => log("no fault-B incident"));
   log("fault B tied hypotheses:", await page.getByText("Signal or power connection").first().isVisible().catch(() => false));
   await page.screenshot({ path: `${shots}/r08-faultb.png` });
-  // submit a manual check result — a Selector dropdown, then "Record check result"
+  // submit a manual check result — choices are buttons now, then "Record check result"
+  await page.locator(".chapter").nth(1).click();
+  await page.waitForTimeout(300);
+  await page.getByText("Potential causes").first().click().catch(() => undefined);
+  await page.waitForTimeout(300);
   const check = page.locator("button").filter({ hasText: /Check signal|Check servo/i }).first();
   if (await check.isVisible().catch(() => false)) {
     await check.click();
     await page.waitForTimeout(600);
     await page.screenshot({ path: `${shots}/r08c-dialog.png` });
-    const pick = page.locator("dialog").getByText("Choose the result").first();
-    if (await pick.isVisible().catch(() => false)) {
-      await pick.click();
-      await page.waitForTimeout(400);
-      await page.getByRole("option", { name: /disconnected/i }).or(page.locator("dialog").getByText("Disconnected", { exact: true })).first().click();
-      await page.waitForTimeout(400);
+    const choice = page.locator("dialog").getByText("Disconnected", { exact: true }).first();
+    if (await choice.isVisible().catch(() => false)) {
+      await choice.click();
+      await page.waitForTimeout(300);
       await page.getByText("Record check result").click();
       await page.waitForTimeout(1200);
       await page.screenshot({ path: `${shots}/r09-manual.png` });
-      log("manual check submitted:", await page.getByText("Disconnected").first().isVisible().catch(() => false));
-    } else log("manual dialog picker not found");
+      log("manual check submitted:", await page.getByText("supported").first().isVisible().catch(() => false));
+    } else log("manual dialog choice buttons not found");
   }
 }
 
