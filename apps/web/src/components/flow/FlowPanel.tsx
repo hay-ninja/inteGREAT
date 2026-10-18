@@ -42,8 +42,8 @@ import { latestRun, nextCheck } from "./flowState";
  * Rule of thumb: each view shows ONE primary button. Alternatives are collapsed.
  */
 
-const VIEWS = ["Test", "Debug", "Analyze"] as const;
-type FlowView = "test" | "debug" | "analyze";
+const VIEWS = ["Test", "Debug", "Analyze", "History"] as const;
+type FlowView = "test" | "debug" | "analyze" | "history";
 
 export interface FlowProps {
   projectId: string;
@@ -71,6 +71,9 @@ export interface FlowProps {
   onError: (m: string) => void;
   onOpenDevices: () => void;
   onEvidence: (e: Evidence) => void;
+  onSelectRun: (r: TestRun) => void;
+  viewRequest: { view: FlowView; seq: number } | null;
+  flowSeq: number;
   projectReview: ReactNode;
 }
 
@@ -83,6 +86,8 @@ export function FlowPanel(p: FlowProps) {
   const auto = autoView(p);
   const [viewing, setViewing] = useState<FlowView | null>(null);
   useEffect(() => setViewing(null), [auto]);
+  const requestSeq = p.viewRequest?.seq;
+  useEffect(() => { if (p.viewRequest) setViewing(p.viewRequest.view); }, [requestSeq]); // eslint-disable-line react-hooks/exhaustive-deps
   const view = viewing ?? auto;
 
   return (
@@ -105,7 +110,9 @@ export function FlowPanel(p: FlowProps) {
         })}
       </div>
       {view === "test" && <>{p.projectReview}<TestView {...p} /></>}
-      {view === "debug" && (p.view ? <DebugView {...p} view={p.view} /> : (
+      {view === "debug" && (p.view ? <DebugView {...p} view={p.view} />
+        : p.run?.incident_id ? <Spinner label="Loading investigation…" />
+        : p.run?.result ? <RunRecord {...p} run={p.run} /> : (
         <VStack gap={3}>
           <Eyebrow>Debug</Eyebrow>
           <Heading level={2} type="display-3">Nothing to debug yet</Heading>
@@ -116,7 +123,8 @@ export function FlowPanel(p: FlowProps) {
         </VStack>
       ))}
       {view === "analyze" && <AnalyzeView {...p} />}
-      <Text type="supporting">Space — next action · 1–3 views · D graph · E event flow</Text>
+      {view === "history" && <HistoryView {...p} />}
+      <Text type="supporting">Space — next action · 1–4 views · D graph · E event flow</Text>
     </VStack>
   );
 }
@@ -709,6 +717,101 @@ function AnalyzeView(p: FlowProps) {
           <MoreTools {...p} view={view} />
         </>
       )}
+    </VStack>
+  );
+}
+
+// ------------------------------------------------------------------ History view (D-044)
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return "queued";
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+/** The workspace's memory: every run for this project, newest first (D-044).
+    Rows with an incident resume it in Debug; passes open a read-only record. */
+function HistoryView(p: FlowProps) {
+  const [runs, setRuns] = useState<TestRun[]>([]);
+  const [labels, setLabels] = useState<Record<string, string>>({});
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    let live = true;
+    Promise.all([api.projectTests(p.projectId), api.expectations(p.projectId)])
+      .then(([rs, exps]) => {
+        if (!live) return;
+        setRuns(rs);
+        setLabels(Object.fromEntries(exps.map((e) => [e.id, e.trigger.value])));
+      })
+      .catch((e) => live && setErr((e as Error).message));
+    return () => { live = false; };
+  }, [p.projectId, p.flowSeq]);
+  const selected = p.run?.id;
+  return (
+    <VStack gap={3}>
+      <Eyebrow>History — every run for this project</Eyebrow>
+      <Heading level={2} type="display-3">Test history</Heading>
+      {err && <Notice tone="warning" title="Couldn't load history" body={err} />}
+      {!err && runs.length === 0 && (
+        <Text type="body" color="secondary">No test runs yet — run a test in the Test view.</Text>
+      )}
+      <VStack gap={1}>
+        {runs.map((r) => {
+          const outcome = r.result?.outcome;
+          return (
+            <button key={r.id} type="button" className="history-row" aria-selected={r.id === selected}
+                    onClick={() => p.onSelectRun(r)}>
+              <HStack gap={2} vAlign="center">
+                {r.state !== "completed" ? <Spinner size="sm" />
+                  : <StatusDot label={outcome ?? "queued"}
+                               variant={outcome === "pass" ? "success" : outcome === "fail" ? "error" : "warning"} />}
+                <Text type="body">{labels[r.expectation_id] ?? r.expectation_id}</Text>
+                {r.attempt_kind !== "initial" && <Badge variant="neutral" label={r.attempt_kind} />}
+                {r.incident_id && <Badge variant="neutral" label="investigation" />}
+                <span style={{ flex: 1 }} />
+                <Text type="supporting" color="secondary"><RunSourceLabel run={r} /></Text>
+                <Text type="supporting" color="secondary">{timeAgo(r.started_at_utc)}</Text>
+              </HStack>
+            </button>
+          );
+        })}
+      </VStack>
+      <Text type="supporting">Select a run to load it — failures resume their investigation, passes open a record. Event flow (E) shows its timeline.</Text>
+    </VStack>
+  );
+}
+
+/** One-line provenance for a run row: where its measurements came from. */
+function RunSourceLabel({ run }: { run: TestRun }) {
+  const k = run.source.kind;
+  return <>{k === "live" ? "Live hardware" : k === "sim" ? "Simulated rig" : run.synthetic ? "Synthetic replay" : "Recorded replay"}</>;
+}
+
+/** Read-only record for a run that never opened an incident (a pass). Debug = "the
+    selected run" — this is the no-incident branch. */
+function RunRecord(p: FlowProps & { run: TestRun }) {
+  const r = p.run, res = r.result!;
+  return (
+    <VStack gap={3}>
+      <Eyebrow>Debug — run record</Eyebrow>
+      <HStack hAlign="between" vAlign="center" wrap="wrap">
+        <Heading level={2} type="display-3">
+          {res.outcome === "pass" ? "Test passed" : res.outcome === "inconclusive" ? "Measurement unavailable" : "Test failed"}
+        </Heading>
+        <SourceBadge run={r} />
+      </HStack>
+      {res.final_valid_value != null && (
+        <Text type="supporting">{p.expectation?.unit === "state"
+          ? `Camera saw ${res.final_valid_value === 1 ? "on" : "off"} — expected ${p.expectation.target === 1 ? "on" : "off"}`
+          : `Camera measured ${res.final_valid_value.toFixed(1)}° — expected ${p.expectation?.target ?? "?"}°`}</Text>
+      )}
+      <Facts result={res} />
+      <Notice tone="neutral" title="No investigation was opened"
+              body="This run passed (or produced no fault). Press E for its event timeline; History lists every run." />
+      <Button label="Back to current test" variant="ghost" size="sm" onClick={p.onNewTest} />
     </VStack>
   );
 }

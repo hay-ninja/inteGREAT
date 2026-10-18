@@ -489,6 +489,13 @@ class Service:
             raise ServiceError(404, "not_found", f"test run {run_id} not found")
         return r
 
+    def list_test_runs(self, pid: str) -> list[TestRun]:
+        """Every run for the project, newest first — the History view's timeline (D-044).
+        Passing runs appear here even though they never open an incident."""
+        self.project(pid)
+        return sorted(self.store.list(K_RUN, TestRun, project_id=pid),
+                      key=lambda r: r.started_at_utc or utcnow(), reverse=True)
+
     def runs_for_incident(self, iid: str) -> list[TestRun]:
         inc = self.incident(iid)
         runs = [r for r in self.store.list(K_RUN, TestRun, project_id=inc.project_id)

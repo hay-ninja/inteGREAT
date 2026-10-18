@@ -26,9 +26,9 @@ export function TopBar(p: {
   const serial = p.devices?.serial.connected;
   const cam = p.devices?.camera;
   const kind = parseSource(p.source).kind;
-  const mode = kind === "live" ? { variant: "success" as const, label: "Live rig" }
-    : kind === "replay" ? { variant: "neutral" as const, label: "Replay" }
-    : { variant: "neutral" as const, label: "Simulated" };
+  const mode = kind === "live" ? { variant: "success" as const, label: "Live hardware" }
+    : kind === "replay" ? { variant: "neutral" as const, label: "Recorded replay" }
+    : { variant: "neutral" as const, label: "Simulated rig" };
   return (
     <HStack hAlign="between" vAlign="center" gap={3} width="100%" wrap="wrap">
       <HStack gap={2} vAlign="center">

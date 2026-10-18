@@ -572,3 +572,25 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   This avoids opening the unrestricted local development API to the LAN.
 - Camera transport preserves host receive timestamps and existing ArUco calibration.
   LED metrics remain separate; browser/synthetic tests are not iPhone hardware validation.
+
+### D-044 History view + provenance labels — 2026-10-18
+- User asked for test/debugging history on the workspace — a scrollable list of past
+  runs to click through ("like Roblox assessment factories"), instead of a workspace
+  that only shows the latest failure.
+- New fourth view **History** (`.chapters` now 4 columns; keyboard 1–4 already worked).
+  `GET /projects/{pid}/tests` returns every `TestRun` newest-first — a separate runs
+  list was needed because passing runs never open an incident, so
+  `/projects/{pid}/incidents` was not sufficient.
+- Selection semantics (chosen with user): a clicked row becomes *the selected run*.
+  Runs with `incident_id` resume their investigation in Debug — open ones are fully
+  actionable (existing state machine), resolved ones render the existing read-only
+  resolved view. Runs without an incident (passes) render a new read-only `RunRecord`
+  branch in Debug. The selection also sets `run`/`runRef`, so the Event flow canvas,
+  run selector and serial drawer follow it.
+- `FlowPanel` gained a `viewRequest` prop so history clicks land the user on Debug.
+- Provenance labels renamed across the UI after "Simulated · connected" confused the
+  user (it was `sim` + scenario id `connected`, not a device status): badges now say
+  `Live hardware` / `Simulated rig — {condition}` / `Recorded|Synthetic replay — {name}`;
+  the top-bar mode chip uses the same wording; scenario ids map to plain conditions
+  ("wired as declared", "signal lead off", …). The sim SourcePicker copy now says
+  plainly it is a software model, no AI involved.

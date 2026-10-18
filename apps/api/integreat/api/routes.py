@@ -225,6 +225,12 @@ def start_test(pid: str, req: StartTestRequest, request: Request, bg: Background
     return run
 
 
+@router.get("/projects/{pid}/tests", response_model=list[TestRun])
+def list_tests(pid: str, request: Request):
+    """All runs for the project, newest first — the History view (D-044)."""
+    return svc(request).list_test_runs(pid)
+
+
 @router.get("/projects/{pid}/incidents", response_model=list[Incident])
 def list_incidents(pid: str, request: Request):
     return svc(request).list_incidents(pid)

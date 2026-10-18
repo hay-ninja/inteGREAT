@@ -118,8 +118,8 @@
   .eyebrow .num { color: var(--color-text-disabled); font-weight: var(--font-weight-regular); }
   .eyebrow-muted .num { color: var(--color-text-disabled); }
 
-  /* View strip — Test / Debug / Analyze are views, not sequential steps (D-041) */
-  .chapters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* View strip — Test / Debug / Analyze / History are views, not sequential steps (D-041/D-044) */
+  .chapters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
               border: 1px solid var(--color-border); border-radius: var(--radius-element);
               background: var(--color-background-card); overflow: hidden; }
   .chapter { appearance: none; background: none; border: 0; border-right: 1px solid var(--color-border);
@@ -161,3 +161,10 @@
   .react-flow__edge-textbg { fill: var(--color-background-elevated, #232323); }
   .react-flow__edge-text { font-size: var(--font-size-2xs); }
 }
+
+  /* History view rows (D-044) */
+  .history-row { appearance: none; background: none; border: 1px solid var(--color-border);
+                 border-radius: var(--radius-element); padding: 8px 12px; width: 100%;
+                 text-align: left; cursor: pointer; }
+  .history-row:hover { background: var(--color-background-muted); }
+  .history-row[aria-selected="true"] { border-color: var(--color-border-focus, var(--color-accent)); }

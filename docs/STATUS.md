@@ -354,3 +354,15 @@ What remains is hardware validation.
   pass; certificate generation and CLI checked. Chromium synthetic-camera walkthrough
   verifies capture/upload/stop and token removal; real Safari/certificate trust/LAN still
   need owner-device validation. LED brightness evaluation remains unimplemented.
+
+## History view + provenance labels (D-044) — done 2026-10-18
+- Fourth flow view **History**: scrollable timeline of every project run (passes
+  included — new `GET /projects/{pid}/tests` since passes never open incidents).
+  Click a run → it becomes the selected run: incidents resume in Debug (open ones
+  actionable, resolved read-only), passes render a read-only RunRecord, and Event
+  flow / serial drawer follow the selection.
+- Provenance renamed UI-wide after "Simulated · connected" confused (it was the
+  `connected` scenario id, not a status): "Live hardware" / "Simulated rig — wired
+  as declared" / "Recorded replay — name". Sim picker copy states "no AI involved".
+- Verified: `tsc -b` clean, 17/17 vitest, 163/163 pytest (incl. new runs-list test),
+  `vite build` clean.

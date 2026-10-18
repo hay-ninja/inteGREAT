@@ -81,6 +81,7 @@ export default function App() {
   const [devices, setDevices] = useState<DeviceStatus | null>(null);
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
+  const [viewRequest, setViewRequest] = useState<{ view: "test" | "debug" | "analyze" | "history"; seq: number } | null>(null);
   // Live view of an agent round, fed by agent.stage / agent.reported events (D-041).
   const [agentProgress, setAgentProgress] = useState<
     { phase: "triage" | "specialists" | "critique" | "synthesis" | "done"; agents: string[]; reported: string[] } | null
@@ -360,6 +361,23 @@ export default function App() {
     try { await api.setPermission(incidentId, c, granted); refreshView(incidentId); } catch (e) { fail(e); }
   };
 
+  /** History view (D-044): make any past run the selected run — incidents resume,
+      passes open a read-only record. The canvas event flow + serial drawer follow `run`. */
+  const selectRun = async (r: TestRun) => {
+    runRef.current = r.id;
+    setRun(r);
+    if (r.incident_id) {
+      incidentRef.current = r.incident_id;
+      setIncidentId(r.incident_id);
+      refreshView(r.incident_id);
+    } else {
+      incidentRef.current = null;
+      setIncidentId(null);
+      setView(null);
+    }
+    setViewRequest({ view: "debug", seq: Date.now() });
+  };
+
   const diagnose = async () => {
     if (!incidentId) return;
     setDiagnosing(true);
@@ -457,6 +475,7 @@ export default function App() {
                        onReveal={(ids) => revealNodes(ids, true)}
                        onEvidence={showEvidence} onOpenDevices={() => setRigSetupOpen(true)}
                        projectReview={<ProjectReview project={project} graph={graph} onConnection={setSelectedEdgeIds} />}
+                       onSelectRun={selectRun} viewRequest={viewRequest} flowSeq={flowSeq}
                        onNewTest={() => { incidentRef.current = null; runRef.current = null; setIncidentId(null); setView(null); setRun(null); setSerial([]); }}
                        onError={(m) => fail(m)} />
           </VStack>

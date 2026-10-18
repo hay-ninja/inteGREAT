@@ -220,6 +220,7 @@ export const api = {
     req<Project>("PATCH", `/projects/${enc(pid)}/graph/verification`, { edge_id, verification, note }),
   expectations: (pid: string) => req<Expectation[]>("GET", `/projects/${enc(pid)}/expectations`),
   incidents: (pid: string) => req<Incident[]>("GET", `/projects/${enc(pid)}/incidents`),
+  projectTests: (pid: string) => req<TestRun[]>("GET", `/projects/${enc(pid)}/tests`),
   saveReplay: (runId: string, name: string) => req<ReplayInfo>("POST", `/tests/${enc(runId)}/save-replay`, { name }),
   setPermission: (iid: string, category: PermissionCategory, granted: boolean) =>
     req<PermissionGrant[]>("POST", `/investigations/${enc(iid)}/permissions`, { category, granted }),

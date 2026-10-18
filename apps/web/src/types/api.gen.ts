@@ -370,7 +370,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Tests
+         * @description All runs for the project, newest first — the History view (D-044).
+         */
+        get: operations["list_tests_api_v1_projects__pid__tests_get"];
         put?: never;
         /** Start Test */
         post: operations["start_test_api_v1_projects__pid__tests_post"];
@@ -2887,6 +2891,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Expectation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tests_api_v1_projects__pid__tests_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestRun"][];
                 };
             };
             /** @description Validation Error */

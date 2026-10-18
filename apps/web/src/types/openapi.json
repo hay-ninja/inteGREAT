@@ -854,6 +854,48 @@
       }
      }
     }
+   },
+   "get": {
+    "summary": "List Tests",
+    "description": "All runs for the project, newest first \u2014 the History view (D-044).",
+    "operationId": "list_tests_api_v1_projects__pid__tests_get",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/TestRun"
+         },
+         "title": "Response List Tests Api V1 Projects  Pid  Tests Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
    }
   },
   "/api/v1/projects/{pid}/incidents": {
