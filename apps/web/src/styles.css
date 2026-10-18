@@ -191,3 +191,12 @@
                    cursor: pointer; pointer-events: auto; }
   .roi-candidate:hover, .roi-candidate:focus-visible { background: rgb(128 160 255 / 0.3); }
   .roi-drag { border-color: var(--color-accent); border-style: dashed; pointer-events: none; }
+
+  /* two-click region picking: corner marker + pending hint */
+  .roi-corner { position: absolute; background: var(--color-accent); border-radius: 1px;
+                pointer-events: none; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6); }
+  .roi-hint { position: absolute; left: 8px; bottom: 8px; display: flex; gap: 8px;
+              align-items: center; padding: 3px 8px; border-radius: 4px;
+              background: rgb(0 0 0 / 0.65); color: #eee; font-size: 11px; }
+  .roi-reset { background: none; border: none; color: var(--color-accent);
+               font: inherit; cursor: pointer; padding: 0; text-decoration: underline; }

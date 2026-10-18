@@ -118,10 +118,11 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
         </HStack>
         <RoiView cid={cid} candidates={candidates ?? []} roi={roi} onPick={useRoi} disabled={busy} />
         <Text type="supporting">
-          Drag a box around the LED on the video — picking a region also records the
-          LED-off baseline, so make sure it is dark right now. Blink-to-find is usually
-          faster: it toggles the LED over serial and watches which part of the image
-          changes — no marker needed, and it sends exactly the two commands below, nothing else.
+          Click once for box 1, once for box 2 — the region between them is the LED.
+          Picking a region also records the LED-off baseline, so make sure it is dark
+          right now. Blink-to-find is usually faster: it toggles the LED over serial
+          and watches which part of the image changes — no marker needed, and it sends
+          exactly the two commands below, nothing else.
         </Text>
         <HStack gap={1} vAlign="end" wrap="wrap">
           <TextInput label="ON command" value={onCmd} onChange={setOnCmd} width={140} />
@@ -151,8 +152,10 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
   );
 }
 
-/** Live feed with a drag-to-mark overlay. Rects are kept in natural frame pixels and
- *  drawn as percentage-positioned divs so the overlay tracks the scaled <img>. */
+/** Live feed with a two-click region marker. Drag doesn't survive the MJPEG stream —
+ *  each frame swap can drop pointer capture — so this is click corner 1, click corner 2.
+ *  Rects are kept in natural frame pixels and drawn as percentage-positioned divs so
+ *  the overlay tracks the scaled <img>. */
 function RoiView({ cid, candidates, roi, onPick, disabled }: {
   cid: string;
   candidates: number[][];
@@ -161,9 +164,9 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
   disabled: boolean;
 }) {
   const imgRef = useRef<HTMLImageElement>(null);
-  const dragStart = useRef<[number, number] | null>(null);
   const [nat, setNat] = useState<[number, number] | null>(null);
-  const [drag, setDrag] = useState<number[] | null>(null); // [x,y,w,h] in frame px
+  const [first, setFirst] = useState<[number, number] | null>(null); // corner 1, frame px
+  const [hover, setHover] = useState<[number, number] | null>(null);  // live preview corner
 
   // MJPEG frames don't reliably re-fire onLoad — poll natural size until known.
   useEffect(() => {
@@ -176,8 +179,9 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
     const id = window.setInterval(tick, 500);
     return () => window.clearInterval(id);
   }, [cid]);
+  useEffect(() => setFirst(null), [cid]);
 
-  const toNat = (e: ReactPointerEvent): [number, number] | null => {
+  const toNat = (e: { clientX: number; clientY: number }): [number, number] | null => {
     const im = imgRef.current;
     if (!im?.naturalWidth) return null;
     const b = im.getBoundingClientRect();
@@ -188,27 +192,21 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
     ];
   };
 
-  const down = (e: ReactPointerEvent) => {
+  const click = (e: ReactPointerEvent) => {
     if (disabled) return;
     const p = toNat(e);
     if (!p) return;
-    dragStart.current = p;
-    setDrag([p[0], p[1], 0, 0]);
-    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    if (!first) { setFirst(p); return; }
+    const r = [Math.min(first[0], p[0]), Math.min(first[1], p[1]),
+               Math.abs(p[0] - first[0]), Math.abs(p[1] - first[1])];
+    setFirst(null); setHover(null);
+    if (r[2] >= 6 && r[3] >= 6) onPick(r);  // a tap that doesn't span anything isn't a region
   };
-  const move = (e: ReactPointerEvent) => {
-    const s = dragStart.current;
-    if (!s) return;
-    const p = toNat(e);
-    if (!p) return;
-    setDrag([Math.min(s[0], p[0]), Math.min(s[1], p[1]), Math.abs(p[0] - s[0]), Math.abs(p[1] - s[1])]);
-  };
-  const up = () => {
-    const d = drag;
-    dragStart.current = null;
-    setDrag(null);
-    if (d && d[2] >= 6 && d[3] >= 6) onPick(d);
-  };
+  const move = (e: ReactPointerEvent) => { if (first) setHover(toNat(e)); };
+  const preview = first && hover
+    ? [Math.min(first[0], hover[0]), Math.min(first[1], hover[1]),
+       Math.abs(hover[0] - first[0]), Math.abs(hover[1] - first[1])]
+    : null;
   const box = (r: number[]) => nat ? {
     left: `${(r[0] / nat[0]) * 100}%`, top: `${(r[1] / nat[1]) * 100}%`,
     width: `${(r[2] / nat[0]) * 100}%`, height: `${(r[3] / nat[1]) * 100}%`,
@@ -218,18 +216,25 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
     <div className="roi-view">
       <img ref={imgRef} draggable={false}
            src={`/api/v1/devices/camera/stream.mjpg?metric=led_state&component=${encodeURIComponent(cid)}`}
-           alt="Live camera — drag a box around the LED" />
-      <div className="roi-layer" role="presentation"
-           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+           alt="Live camera — click two corners around the LED" />
+      <div className="roi-layer" role="presentation" onPointerDown={click} onPointerMove={move}>
         {nat && roi && <div className="roi-box roi-current" style={box(roi)} />}
         {nat && candidates.map((r, i) => (
           <button key={i} className="roi-box roi-candidate" style={box(r)}
                   aria-label={`Use candidate region ${i + 1}`}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => onPick(r)} />
+                  onPointerDown={(e) => { e.stopPropagation(); setFirst(null); onPick(r); }} />
         ))}
-        {nat && drag && <div className="roi-box roi-drag" style={box(drag)} />}
+        {nat && preview && <div className="roi-box roi-drag" style={box(preview)} />}
+        {nat && first && <div className="roi-corner" style={box([first[0] - 4, first[1] - 4, 8, 8])} />}
       </div>
+      {first && (
+        <div className="roi-hint">
+          <span>Box 1 placed — click box 2</span>
+          <button className="roi-reset" onPointerDown={(e) => { e.stopPropagation(); setFirst(null); setHover(null); }}>
+            Reset
+          </button>
+        </div>
+      )}
     </div>
   );
 }
