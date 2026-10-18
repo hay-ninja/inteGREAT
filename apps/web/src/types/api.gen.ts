@@ -1255,6 +1255,17 @@ export interface components {
             /** On Level */
             on_level: string | null;
             /**
+             * Pattern
+             * @default steady
+             * @enum {string}
+             */
+            pattern: "steady" | "toggle";
+            /**
+             * Min Transitions
+             * @default 4
+             */
+            min_transitions: number;
+            /**
              * Min Motion Deg
              * @default 5
              */
@@ -1284,6 +1295,10 @@ export interface components {
             deadline_ms?: number | null;
             /** Trigger Value */
             trigger_value?: string | null;
+            /** Pattern */
+            pattern?: ("steady" | "toggle") | null;
+            /** Min Transitions */
+            min_transitions?: number | null;
         };
         /**
          * ExpectationOutcome

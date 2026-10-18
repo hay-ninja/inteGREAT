@@ -3240,6 +3240,20 @@
       ],
       "title": "On Level"
      },
+     "pattern": {
+      "type": "string",
+      "enum": [
+       "steady",
+       "toggle"
+      ],
+      "title": "Pattern",
+      "default": "steady"
+     },
+     "min_transitions": {
+      "type": "integer",
+      "title": "Min Transitions",
+      "default": 4
+     },
      "min_motion_deg": {
       "type": "number",
       "title": "Min Motion Deg",
@@ -3290,6 +3304,8 @@
      "measurement_source",
      "ack_pattern",
      "on_level",
+     "pattern",
+     "min_transitions",
      "min_motion_deg",
      "min_valid_samples",
      "confirmed_by_engineer",
@@ -3343,6 +3359,32 @@
        }
       ],
       "title": "Trigger Value"
+     },
+     "pattern": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "steady",
+         "toggle"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pattern"
+     },
+     "min_transitions": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Transitions"
      }
     },
     "additionalProperties": false,

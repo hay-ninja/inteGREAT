@@ -158,9 +158,12 @@ export function Notice({ tone, title, body, end }: {
 /** Plain-English name for what the camera measures, derived from the expectation's metric. */
 const NOUNS: Record<string, string> = { led_state: "the light", servo_angle_deg: "the arm" };
 const noun = (exp?: { metric: string } | null) => NOUNS[exp?.metric ?? ""] ?? "the component";
-const goalText = (exp: { metric: string; unit: string; target: number; tolerance: number; deadline_ms: number }) =>
+const goalText = (exp: { metric: string; unit: string; target: number; tolerance: number; deadline_ms: number;
+                         pattern?: string; min_transitions?: number }) =>
   exp.unit === "state"
-    ? `${noun(exp)} should ${exp.target === 1 ? "turn on" : "turn off"} within ${exp.deadline_ms} ms`
+    ? exp.pattern === "toggle"
+      ? `${noun(exp)} should toggle at least ${exp.min_transitions ?? 4} times within ${exp.deadline_ms} ms`
+      : `${noun(exp)} should ${exp.target === 1 ? "turn on" : "turn off"} within ${exp.deadline_ms} ms`
     : `${noun(exp)} should reach ${exp.target}° ± ${exp.tolerance}° within ${exp.deadline_ms} ms`;
 
 /** Compact expectation switcher shown when a project has more than one test (D-045). */
@@ -180,12 +183,14 @@ function ExpectationPicker(p: FlowProps) {
 
 function TestView(p: FlowProps) {
   const exp = p.expectation;
-  const [draft, setDraft] = useState({ target: 90, tolerance: 8, deadline_ms: 2000, trigger: "MOVE 90" });
+  const [draft, setDraft] = useState({ target: 90, tolerance: 8, deadline_ms: 2000, trigger: "MOVE 90",
+                                      pattern: "steady" as "steady" | "toggle", minTrans: 4 });
   const [comp, setComp] = useState("");
   const [cites, setCites] = useState<Evidence[]>([]);
   useEffect(() => {
     if (!exp) return;
-    setDraft({ target: exp.target, tolerance: exp.tolerance, deadline_ms: exp.deadline_ms, trigger: exp.trigger.value });
+    setDraft({ target: exp.target, tolerance: exp.tolerance, deadline_ms: exp.deadline_ms,
+               trigger: exp.trigger.value, pattern: exp.pattern, minTrans: exp.min_transitions });
     api.evidence(p.projectId, exp.proposed_from_evidence_ids).then(setCites).catch(() => setCites([]));
   }, [exp, p.projectId]);
 
@@ -225,12 +230,33 @@ function TestView(p: FlowProps) {
             <Eyebrow>Test parameters</Eyebrow>
             <Text type="supporting">inteGREAT sends this command to the board, then watches {noun(exp)} to check it actually responded.</Text>
             <TextInput label="Command to send" value={draft.trigger} onChange={(v) => setDraft({ ...draft, trigger: v })} />
-            <HStack gap={2}>
-              <NumberInput label="Target" units={exp.unit === "state" ? "state" : exp.unit} value={draft.target} onChange={(v) => setDraft({ ...draft, target: v })} />
-              <NumberInput label="± tolerance" units={exp.unit === "state" ? "state" : exp.unit} value={draft.tolerance} min={0} onChange={(v) => setDraft({ ...draft, tolerance: v })} />
-              <NumberInput label="Within" units="ms" value={draft.deadline_ms} min={100} step={100}
-                           onChange={(v) => setDraft({ ...draft, deadline_ms: v })} />
-            </HStack>
+            {exp.unit === "state" ? (
+              <HStack gap={2} vAlign="end">
+                <Selector label="Behaviour" size="sm" width={240} placement="below"
+                          value={draft.pattern === "toggle" ? "toggle" : draft.target === 1 ? "steady_on" : "steady_off"}
+                          onChange={(v) => setDraft(v === "toggle"
+                            ? { ...draft, pattern: "toggle" }
+                            : { ...draft, pattern: "steady", target: v === "steady_on" ? 1 : 0 })}
+                          options={[
+                            { value: "steady_on", label: "Ends ON" },
+                            { value: "steady_off", label: "Ends OFF" },
+                            { value: "toggle", label: "Toggles repeatedly (flicker/blink)" },
+                          ]} />
+                {draft.pattern === "toggle" && (
+                  <NumberInput label="At least" units="changes" value={draft.minTrans} min={2}
+                               onChange={(v) => setDraft({ ...draft, minTrans: v })} />
+                )}
+                <NumberInput label="Within" units="ms" value={draft.deadline_ms} min={100} step={100}
+                             onChange={(v) => setDraft({ ...draft, deadline_ms: v })} />
+              </HStack>
+            ) : (
+              <HStack gap={2}>
+                <NumberInput label="Target" units={exp.unit} value={draft.target} onChange={(v) => setDraft({ ...draft, target: v })} />
+                <NumberInput label="± tolerance" units={exp.unit} value={draft.tolerance} min={0} onChange={(v) => setDraft({ ...draft, tolerance: v })} />
+                <NumberInput label="Within" units="ms" value={draft.deadline_ms} min={100} step={100}
+                             onChange={(v) => setDraft({ ...draft, deadline_ms: v })} />
+              </HStack>
+            )}
           </VStack>
         </Card>
         <Collapsible defaultIsOpen={false} trigger={<Text type="supporting">Why this test?</Text>}>
@@ -241,7 +267,8 @@ function TestView(p: FlowProps) {
         </Collapsible>
         <Button label="Confirm test" variant="primary" className="flow-primary"
                 clickAction={() => api.confirmExpectation(p.projectId, exp.id, {
-                  target: draft.target, tolerance: draft.tolerance, deadline_ms: draft.deadline_ms, trigger_value: draft.trigger,
+                  target: draft.target, tolerance: draft.tolerance, deadline_ms: draft.deadline_ms,
+                  trigger_value: draft.trigger, pattern: draft.pattern, min_transitions: draft.minTrans,
                 }).then(p.onExpectation).catch((e) => p.onError(e.message))} />
       </VStack>
     );

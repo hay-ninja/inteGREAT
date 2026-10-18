@@ -219,6 +219,10 @@ class Expectation(Model):
     measurement_source: str = "camera"
     ack_pattern: str | None = None  # serial line prefix that counts as firmware acknowledgement
     on_level: str | None = None  # level the code drives for the "on" state (binary metrics; None = unresolved)
+    # steady = end-state check (current behaviour); toggle = oscillation must reach
+    # min_transitions within the window (FLICKER/BLINK-style commands — D-053).
+    pattern: Literal["steady", "toggle"] = "steady"
+    min_transitions: int = 4  # state changes required for a toggle pattern to pass
     min_motion_deg: float = 5.0  # displacement below this counts as "no physical motion" (analog metrics)
     min_valid_samples: int = 3
     confirmed_by_engineer: bool = False
@@ -231,6 +235,8 @@ class ExpectationEdit(Model):
     tolerance: float | None = None
     deadline_ms: int | None = None
     trigger_value: str | None = None
+    pattern: Literal["steady", "toggle"] | None = None
+    min_transitions: int | None = None
 
 
 class ProposeExpectationRequest(Model):
@@ -266,7 +272,8 @@ class Fact(Model):
     analog form (displacement), `physical_state` the binary form (state reached) — same slot,
     different metric family."""
 
-    key: Literal["command_sent", "command_acknowledged", "physical_motion", "physical_state"]
+    key: Literal["command_sent", "command_acknowledged", "physical_motion", "physical_state",
+                 "state_transitions", "first_response"]
     label: str
     value: Literal["yes", "no", "unknown"]
     evidence_ids: list[str] = Field(default_factory=list)
