@@ -29,11 +29,14 @@ a patch. Every run is badged — **Live hardware** / **Simulated environment** /
 
 - Landing → **Open the workspace** → the demo card: **esp32_halloween** ("two LEDs, two faults —
   inverted ghost + dead candle"). **Load demo**.
-- The **Combined** graph opens already suspicious: dashed red edges from `esp32_halloween.ino`
-  "configures pin" — code paths to GPIO18/GPIO19, and both LEDs wired under the Halloween porch
-  lights subsystem. Say: "before any test, the graph already shows where code meets copper."
+- The **Combined** graph shows the boundary honestly: dashed "configures pin" edges from
+  `esp32_halloween.ino` into GPIO18/GPIO19, both LEDs wired under the Halloween porch lights
+  subsystem. **Deliberately no red** — the wiring matches the code; the bug isn't visible
+  statically. Say: "the map is consistent — and the system still fails. That gap is the point."
 - Flip **Hardware** layer → only the rig (board, pins, both LEDs, GND, 3V3 rail). Flip **Software**
   → code plus dashed boundary refs. Point at `GHOST ON`/`FLICKER` command literals found in source.
+- (Contrast for judges who ask: a wrong-pin fault *would* light the code↔wiring edge red
+  pre-run — the graph marks conflicts it can prove, not suspicions.)
 
 ## 2. Arc A — the ghost LED inverted-logic fault (75 s)
 
