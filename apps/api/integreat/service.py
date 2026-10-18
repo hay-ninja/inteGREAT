@@ -405,23 +405,13 @@ class Service:
         return self.store.get_many(K_EVIDENCE, list(dict.fromkeys(ids)), Evidence)
 
     def demo_fixtures(self) -> list[DemoFixture]:
+        # One demo card, one story: the halloween rig carries both arcs (inverted
+        # ghost LED + dead pumpkin candle). Older servo/LED fixtures stay on disk
+        # for tests but are no longer offered as demo imports.
         f = self.settings.fixtures_dir
-        led = str(f / "manifests" / "esp32_led_demo.yaml")
-        led_low = str(f / "manifests" / "esp32_led_demo_active_low.yaml")
-        servo = str(f / "manifests" / "esp32_servo_demo.yaml")
         return [DemoFixture(label="Halloween — two LEDs, two faults (inverted ghost + dead candle)",
                             repo_path=str(f / "esp32_halloween"),
-                            manifest_path=str(f / "manifests" / "esp32_halloween.yaml")),
-                DemoFixture(label="LED demo — code drives the wrong pin",
-                            repo_path=str(f / "esp32_led_demo_fault_a"), manifest_path=led),
-                DemoFixture(label="LED demo — correct firmware (pairs with signal/power faults)",
-                            repo_path=str(f / "esp32_led_demo"), manifest_path=led),
-                DemoFixture(label="LED demo — active-low wiring, active-high code",
-                            repo_path=str(f / "esp32_led_demo"), manifest_path=led_low),
-                DemoFixture(label="Servo — wrong pin (legacy demo)",
-                            repo_path=str(f / "esp32_servo_demo_fault_a"), manifest_path=servo),
-                DemoFixture(label="Servo — correct firmware (legacy demo)",
-                            repo_path=str(f / "esp32_servo_demo"), manifest_path=servo)]
+                            manifest_path=str(f / "manifests" / "esp32_halloween.yaml"))]
 
     def demo_netlist(self) -> str:
         return str(self.settings.fixtures_dir / "kicad" / "esp32_servo_demo.xml")

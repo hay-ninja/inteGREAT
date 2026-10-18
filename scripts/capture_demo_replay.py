@@ -213,36 +213,6 @@ def import_project(fx: dict):
     return proj
 
 
-def capture_fixture(fx: dict, scenario: str) -> dict:
-    proj = import_project(fx)
-    pid = proj["id"]
-
-    exp = call("POST", f"/projects/{enc(pid)}/expectations/propose")
-    confirm = {"target": exp["target"], "tolerance": exp["tolerance"],
-               "deadline_ms": exp["deadline_ms"], "trigger_value": exp["trigger"]["value"]}
-    call("POST", f"/projects/{enc(pid)}/expectations/{enc(exp['id'])}/confirm", confirm)
-
-    source = {"kind": "sim", "scenario": scenario}
-    run = call("POST", f"/projects/{enc(pid)}/tests",
-               {"expectation_id": exp["id"], "source": source})
-    detail = wait_run(run["id"])
-    collect_evidence(detail)
-    call("GET", f"/tests/{enc(run['id'])}/flow")
-
-    incidents = call("GET", f"/projects/{enc(pid)}/incidents")
-    call("GET", f"/projects/{enc(pid)}/expectations")
-    call("GET", f"/projects/{enc(pid)}/tests")
-    if not incidents:
-        print(f"  no incident for {pid} (run may have passed) — done")
-        return proj
-    # Judges can verify with whatever source the picker holds — record the fault
-    # replay, the 'good' replay, and the default simulated condition.
-    capture_incident(incidents[-1]["id"],
-                     [source, {"kind": "replay", "scenario": "good"},
-                      {"kind": "sim", "scenario": "connected"}])
-    return proj
-
-
 def capture_halloween(fx: dict) -> dict:
     """Two-arc story on one two-LED rig (D-046): the ghost LED is wired active-low
     but driven active-high (arc A — INVERTED_LOGIC), and the pumpkin candle never
@@ -257,8 +227,11 @@ def capture_halloween(fx: dict) -> dict:
     # The proposal prefers the ON literal; the engineer retypes the flicker command
     # in the confirm card — the backend re-resolves the ACK pattern. Record the
     # unedited confirm too, in case a judge confirms the proposal as-suggested.
+    # The confirm card always sends pattern + min_transitions (D-053), so the
+    # recorded bodies must carry them to hash-match the frontend's requests.
     base = {"target": pumpkin["target"], "tolerance": pumpkin["tolerance"],
-            "deadline_ms": pumpkin["deadline_ms"]}
+            "deadline_ms": pumpkin["deadline_ms"], "pattern": pumpkin.get("pattern", "steady"),
+            "min_transitions": pumpkin.get("min_transitions", 4)}
     call("POST", f"/projects/{enc(pid)}/expectations/{enc(pumpkin['id'])}/confirm",
          {**base, "trigger_value": pumpkin["trigger"]["value"]})
     call("POST", f"/projects/{enc(pid)}/expectations/{enc(pumpkin['id'])}/confirm",
@@ -269,7 +242,9 @@ def capture_halloween(fx: dict) -> dict:
                  {"component_id": "component:ghost_led"})
     call("POST", f"/projects/{enc(pid)}/expectations/{enc(ghost['id'])}/confirm",
          {"target": ghost["target"], "tolerance": ghost["tolerance"],
-          "deadline_ms": ghost["deadline_ms"], "trigger_value": ghost["trigger"]["value"]})
+          "deadline_ms": ghost["deadline_ms"], "trigger_value": ghost["trigger"]["value"],
+          "pattern": ghost.get("pattern", "steady"),
+          "min_transitions": ghost.get("min_transitions", 4)})
     run = call("POST", f"/projects/{enc(pid)}/tests",
                {"expectation_id": ghost["id"],
                 "source": {"kind": "replay", "scenario": "halloween_inverted"}})
@@ -323,12 +298,8 @@ def main() -> None:
 
     fixtures = demo["fixtures"]
     halloween = next(fx for fx in fixtures if fx["repo_path"].endswith("esp32_halloween"))
-    led_fault = next(fx for fx in fixtures if fx["repo_path"].endswith("esp32_led_demo_fault_a"))
-    led_good = next(fx for fx in fixtures if fx["label"].startswith("LED demo — correct firmware"))
 
-    projects = [capture_halloween(halloween),
-                capture_fixture(led_fault, "connected"),
-                capture_fixture(led_good, "signal_disconnected")]
+    projects = [capture_halloween(halloween)]
 
     routes["GET /projects"] = projects
 

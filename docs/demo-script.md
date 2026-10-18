@@ -27,7 +27,7 @@ a patch. Every run is badged — **Live hardware** / **Simulated environment** /
 
 ## 1. Hook → graph first (60 s)
 
-- Landing → **Open the workspace** → first demo card: **esp32_halloween** ("two LEDs, two faults —
+- Landing → **Open the workspace** → the demo card: **esp32_halloween** ("two LEDs, two faults —
   inverted ghost + dead candle"). **Load demo**.
 - The **Combined** graph opens already suspicious: dashed red edges from `esp32_halloween.ino`
   "configures pin" — code paths to GPIO18/GPIO19, and both LEDs wired under the Halloween porch
@@ -64,24 +64,19 @@ a patch. Every run is badged — **Live hardware** / **Simulated environment** /
   fix that didn't land. The actual bug in the fixture: a `uint8_t` loop counter that wraps at 255 —
   the kind of thing rules flag as 'software-side' and a repair agent can diff in seconds.
 
-## 4. Legacy arc — GPIO mismatch + event flow (75 s)
+## 4. Event flow + honest ambiguity (60 s)
 
-- Back to the hub → second demo card (**esp32_led_demo_fault_a**). **Run test** (any source — hosted
-  replay serves the recorded run for that expectation).
-- Debug → **Potential causes** → **Incorrect GPIO mapping** ranked above signal/power. **Inspect GPIO
-  mapping** → permission → excerpt: source says one pin, engineer-verified manifest says the other.
-- **Timeline** rail → Event Flow: 4 lanes — command → serial ACK → camera samples → verdict — with
-  the step scrubber. Say the correlation caveat: host-clock correlated, ordering ≠ causation.
+- With the pumpkin run still selected, open the **Timeline** rail → Event Flow: 4 lanes — command →
+  serial ACK (`FLICKER` / `ACK FLICKER` / `DONE FLICKER`) → camera samples (a flat row of `0`) →
+  verdict — with the step scrubber. Say the correlation caveat: host-clock correlated, ordering ≠
+  causation.
+- Point at the tied hypotheses again: signal and power stay **tied** until an engineer looks — the
+  rules say "we can't tell these apart yet" instead of guessing. Recording *Connected* weakens the
+  physical branch (and unlocks the Devin action); recording *Disconnected* makes it **supported** —
+  the engineer's observation is first-class evidence, not a note on the side.
 - Optional: **Analyze** tab (live backend with keys) — StepFun triage → Gemini specialists → critique
   → synthesis, with per-stage provider attribution and "Evidence cited" chips. Bounded: one fan-out,
   one follow-up; invented evidence ids are rejected.
-
-## 5. Fault B — honest ambiguity + engineer-in-the-loop (45 s)
-
-- Third demo card (correct firmware, dead lead). Run → signal and power stay **tied** — the rules
-  say "we can't tell these apart yet" instead of guessing.
-- **Check signal connection** → record *Disconnected* → that hypothesis becomes **supported** —
-  the engineer's observation is first-class evidence, not a note on the side.
 
 ## If something breaks
 

@@ -11,8 +11,11 @@ const shots = "C:/Users/hayre/AppData/Local/Temp/integreat-shots";
 /** Pick a scenario in a SourcePicker inside `scope`: segment → combobox → option. */
 async function pickScenario(scope, segment, optionName) {
   await scope.getByText(segment, { exact: true }).click();
-  await page.waitForTimeout(300);
-  await scope.locator("[role=combobox]").last().click();
+  // The picker keeps one combobox per segment mounted — only the active one is
+  // visible; wait for it rather than grabbing the last in DOM order.
+  const combo = scope.locator("[role=combobox]:visible").last();
+  await combo.waitFor({ state: "visible", timeout: 8000 });
+  await combo.click();
   const opt = page.getByRole("option", { name: new RegExp(optionName, "i") }).last();
   await opt.waitFor({ state: "visible", timeout: 5000 });
   await opt.click();
@@ -86,78 +89,23 @@ if (await flickerRow.isVisible().catch(() => false)) {
   await page.screenshot({ path: `${shots}/r05-pumpkin.png` });
 } else log("NO flicker run in history");
 
-// ---- Segment 2: LED fault A — GPIO mismatch + inspect ----
-await page.locator(".brand").click();
-await page.waitForTimeout(900);
-const ws = page.getByRole("button", { name: "Open the workspace" });
-if (await ws.first().isVisible().catch(() => false)) await ws.first().click();
-await page.waitForTimeout(800);
-await page.getByText("Simulated · ~5 minutes").nth(1).click();
-await page.locator("dialog").getByText("Load demo").click();
-await page.waitForSelector(".graph-canvas", { timeout: 15000 }).catch(() => page.screenshot({ path: `${shots}/r06b-stuck.png` }));
-log("fault A canvas:", await page.locator(".graph-canvas").isVisible().catch(() => false));
-await page.locator(".chapter").nth(0).click(); // Test
-await page.waitForTimeout(500);
-const runBtn2 = page.locator("button").filter({ hasText: /Run the test again|Run test|Run again/ }).first();
-await runBtn2.waitFor({ state: "visible", timeout: 10000 }).catch(() => log("no fault-A run button"));
-if (await runBtn2.isVisible().catch(() => false)) {
-  await runBtn2.click();
-  await page.waitForSelector("text=In short", { timeout: 15000 }).catch(() => log("no fault-A result"));
-}
-await page.locator(".chapter").nth(1).click(); // Debug
-await page.waitForTimeout(700);
-await page.getByText("Potential causes").first().click().catch(() => undefined);
-log("gpio mismatch:", await page.waitForSelector("text=Incorrect GPIO mapping", { timeout: 10000 }).then(() => true).catch(() => false));
-await page.screenshot({ path: `${shots}/r06-faulta.png` });
-const inspect = page.locator("button").filter({ hasText: "Inspect GPIO mapping" }).first();
-if (await inspect.isVisible().catch(() => false)) {
-  await inspect.click();
-  await page.waitForTimeout(800);
-  const dlg = await page.locator("dialog[open]").count();
-  log("inspect result dialog:", dlg > 0);
-  if (dlg) await page.keyboard.press("Escape");
+// Manual check on the pumpkin incident: record "Disconnected" as the engineer's
+// observation — first-class evidence, not a note on the side.
+const check = page.locator("button").filter({ hasText: /Check signal/i }).first();
+if (await check.isVisible().catch(() => false)) {
+  await check.click();
+  await page.waitForTimeout(600);
+  const choice = page.locator("dialog").getByText("Disconnected", { exact: true }).first();
+  if (await choice.isVisible().catch(() => false)) {
+    await choice.click();
+    await page.waitForTimeout(300);
+    await page.getByText("Record check result").click();
+    await page.waitForTimeout(1200);
+    log("manual check submitted:", await page.getByText("supported").first().isVisible().catch(() => false));
+  } else log("manual dialog choice buttons not found");
 }
 
-// ---- Segment 3: LED good firmware — tied signal/power hypotheses + manual check ----
-await page.locator(".brand").click();
-await page.waitForTimeout(900);
-const ws2 = page.getByRole("button", { name: "Open the workspace" });
-if (await ws2.first().isVisible().catch(() => false)) await ws2.first().click();
-await page.waitForTimeout(800);
-await page.getByText("Simulated · ~5 minutes").nth(2).click();
-await page.locator("dialog").getByText("Load demo").click();
-await page.waitForTimeout(1500);
-await page.getByRole("button", { name: "Map", exact: true }).first().click().catch(() => undefined);
-await page.waitForSelector(".graph-canvas", { timeout: 15000 }).catch(() => page.screenshot({ path: `${shots}/r08b-stuck.png` }));
-log("fault B canvas:", await page.locator(".graph-canvas").isVisible().catch(() => false));
-await page.locator(".chapter").nth(0).click(); // Test
-await page.waitForTimeout(500);
-const runBtn3 = page.locator("button").filter({ hasText: /Run the test again|Run test|Run again/ }).first();
-await runBtn3.waitFor({ state: "visible", timeout: 10000 }).catch(() => log("no fault-B run button"));
-if (await runBtn3.isVisible().catch(() => false)) {
-  await runBtn3.click();
-  await page.waitForSelector("text=In short", { timeout: 15000 }).catch(() => log("no fault-B incident"));
-  await page.locator(".chapter").nth(1).click(); // Debug
-  await page.waitForTimeout(700);
-  await page.getByText("Potential causes").first().click().catch(() => undefined);
-  log("fault B tied hypotheses:", await page.waitForSelector("text=/Signal or power|signal lead|power or ground/i", { timeout: 10000 }).then(() => true).catch(() => false));
-  await page.screenshot({ path: `${shots}/r08-faultb.png` });
-  const check = page.locator("button").filter({ hasText: /Check signal|Check servo/i }).first();
-  if (await check.isVisible().catch(() => false)) {
-    await check.click();
-    await page.waitForTimeout(600);
-    const choice = page.locator("dialog").getByText("Disconnected", { exact: true }).first();
-    if (await choice.isVisible().catch(() => false)) {
-      await choice.click();
-      await page.waitForTimeout(300);
-      await page.getByText("Record check result").click();
-      await page.waitForTimeout(1200);
-      log("manual check submitted:", await page.getByText("supported").first().isVisible().catch(() => false));
-    } else log("manual dialog choice buttons not found");
-  }
-}
-
-// event flow via rail
+// event flow via rail — the selected pumpkin run's recorded timeline
 await page.getByText("Timeline", { exact: true }).first().click().catch(() => undefined);
 await page.waitForTimeout(900);
 log("event flow lanes:", await page.locator(".lane-row").count(), "events:", await page.locator(".fev").count());

@@ -275,6 +275,11 @@ What remains is hardware validation.
    graph version history UI.
 
 ## Known issues / gotchas
+- **COM6 serial recovery (2026-10-18):** CH340 driver `3.9.2024.9` enumerated normally but
+  refused Windows `CreateFile` with WinError 1 / "Incorrect function" even after replug.
+  Administrator restart of only the CH340 PnP device restored access; the real API connected
+  COM6 at 115200 with `last_error: null`. See `hardware-setup.md` troubleshooting. This verifies
+  port opening only; H0 command exchange/reset behavior and complete hardware validation remain open.
 - ESP32 resets on serial open unless DTR/RTS are low (handled, unverified on hardware). Windows COM ports
   are exclusive → *Release port* before reflashing.
 - `probe_cameras` takes ~0.5 s per index on Windows (DirectShow).
@@ -469,11 +474,11 @@ What remains is hardware validation.
   surfaced honestly as waiting-for-engineer, not success).
 - **Replay robustness (D-052):** request-key canonicalization (`90.0` vs `90`)
   and `expectation_id` fallback matching for recorded runs.
-- **Capture:** `scripts/capture_demo_replay.py` now records the halloween project
-  (both incidents, manual checks, repair preflight/jobs) alongside the legacy
-  LED fault-A/fault-B projects — 187 routes, 84 evidence records, ~1.5 MB bundle
-  at `apps/web/public/replay/demo.json`. Scoped-graph requests are derived from
-  the imported project (no hardcoded `subsystem:motor_control`).
+- **Capture:** `scripts/capture_demo_replay.py` records the halloween project
+  (both incidents, manual checks, repair preflight/jobs) — it is the only demo
+  card now; legacy servo/LED fixtures were dropped from the picker (files kept
+  for tests). Bundle at `apps/web/public/replay/demo.json`. Scoped-graph
+  requests are derived from the imported project (no hardcoded subsystem).
 - **Verified:** 178 pytest, 17/17 vitest, `tsc -b` clean, `vite build` clean.
   `apps/web/replay_test.mjs` against static `dist/` on :8080 — ALL PASS:
   hosted banner, graph + layer switching, inverted hypothesis, ghost resolved,
