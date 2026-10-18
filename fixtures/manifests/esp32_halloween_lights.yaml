@@ -1,0 +1,132 @@
+# Proposed passive-piezo circuit; GPIO4 momentary button to GND.
+schema: integreat-manifest/v1
+board:
+  id: esp32
+  label: ESP32-WROOM development board (exact variant unconfirmed)
+  mcu: esp32
+subsystems:
+- id: led_control
+  label: Halloween Lights and Sound
+  source_globs:
+  - '*.ino'
+  components:
+  - led_1
+  - led_2
+  - resistor_1
+  - resistor_2
+  - buzzer_1
+  - buzzer_resistor
+  - play_button
+components:
+- id: led_1
+  type: led
+  label: LED 1 (GPIO18)
+  pins:
+  - anode
+  - cathode
+- id: led_2
+  type: led
+  label: LED 2 (GPIO21)
+  pins:
+  - anode
+  - cathode
+- id: resistor_1
+  type: resistor
+  label: LED 1 series resistor (330 ohm)
+  pins:
+  - a
+  - b
+  attributes:
+    resistance_ohms: 330
+- id: resistor_2
+  type: resistor
+  label: LED 2 series resistor (330 ohm)
+  pins:
+  - a
+  - b
+  attributes:
+    resistance_ohms: 330
+- id: buzzer_1
+  type: piezo_buzzer
+  label: Passive piezo (assumed - confirm part)
+  pins:
+  - pos
+  - neg
+  attributes:
+    drive: GPIO19 tone output; passive piezo only
+    part_identified: false
+- id: buzzer_resistor
+  type: resistor
+  label: Piezo series resistor (1 kilohm)
+  pins:
+  - a
+  - b
+  attributes:
+    resistance_ohms: 1000
+- id: play_button
+  type: pushbutton
+  label: Playback toggle (GPIO4, active low)
+  pins:
+  - signal
+  - gnd
+  attributes:
+    mode: normally open momentary
+    pull: ESP32 INPUT_PULLUP
+    boot_state: playback off
+power_sources: []
+connections:
+- id: led_1_gpio
+  from: mcu.GPIO18
+  to: resistor_1.a
+  kind: signal
+  verification: unverified
+- id: led_1_series
+  from: resistor_1.b
+  to: led_1.anode
+  kind: signal
+  verification: unverified
+- id: led_1_ground
+  from: led_1.cathode
+  to: mcu.GND
+  kind: ground
+  verification: unverified
+- id: led_2_gpio
+  from: mcu.GPIO21
+  to: resistor_2.a
+  kind: signal
+  verification: unverified
+- id: led_2_series
+  from: resistor_2.b
+  to: led_2.anode
+  kind: signal
+  verification: unverified
+- id: led_2_ground
+  from: led_2.cathode
+  to: mcu.GND
+  kind: ground
+  verification: unverified
+- id: buzzer_drive
+  from: mcu.GPIO19
+  to: buzzer_resistor.a
+  kind: signal
+  verification: unverified
+- id: buzzer_series
+  from: buzzer_resistor.b
+  to: buzzer_1.pos
+  kind: signal
+  verification: unverified
+- id: buzzer_ground
+  from: buzzer_1.neg
+  to: mcu.GND
+  kind: ground
+  verification: unverified
+- id: button_signal
+  from: mcu.GPIO4
+  to: play_button.signal
+  kind: signal
+  verification: unverified
+- id: button_ground
+  from: play_button.gnd
+  to: mcu.GND
+  kind: ground
+  verification: unverified

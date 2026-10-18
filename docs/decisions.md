@@ -596,3 +596,30 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
 - Calibration UI uses a clean, unannotated camera snapshot and SVG region overlay within
   existing Astryx sections, collapsed once confirmed; this is the same canvas exception
   as graph rendering. Only numeric measurements are stored, not raw camera images.
+
+### D-045 Separate Halloween melody fixture with beat-alternating LEDs — 2026-10-18
+- Owner requested Halloween music and LEDs alternating to the song. Added an original
+  minor-key jingle, Haunted Breadboard, as a separate sketch; preserved the fade fixture.
+- GPIO18/21 LEDs switch digitally in alternation at sounding-note boundaries, with
+  80% articulation and rests. GPIO19 supplies tone output for a small passive piezo (owner-requested pin swap).
+  Digital LED outputs avoid sharing PWM timer resources with tone(). Serial p/s
+  controls restart/stop without blocking note-length delays; no inteGREAT instrumentation.
+- Owner identified a TMB12A05 and confirmed another passive buzzer is available.
+  TMB12A05 is an active magnetic 5 V / <=30 mA part and is not the direct-drive melody
+  circuit. Exact passive part/piezo-vs-magnetic remains unconfirmed. README and proposed
+  manifest explicitly limit direct GPIO + series resistor wiring to a small passive piezo;
+  magnetic/powered modules require their own suitable drive circuit.
+- Existing visual check verifies alternating bright/dim regions only. Audio pitch, song
+  correctness and audio/LED synchronization remain unmeasured; do not imply CV verifies them.
+
+### D-046 Momentary playback toggle, initially off — 2026-10-18
+- Owner requested a button so music/lights do not start whenever power is connected.
+  GPIO22 with INPUT_PULLUP and a normally open switch to GND controls software enable.
+  Use 35 ms stable-state debounce and falling-edge toggling, with held-at-boot ignored.
+- Off silences the buzzer and both LEDs; On restarts at note one / LED one. ESP32 stays
+  powered to read the button. This does not claim to be a physical supply disconnect.
+- Owner's available pins prompted changing the D-046 button from GPIO22 to GPIO32.
+  GPIO32 supports INPUT_PULLUP without boot-strapping/JTAG conflicts on classic ESP32;
+  GPIO34/35 lack internal pull resistors, and GPIO12 is a strapping pin.
+- Superseding the previous GPIO32 choice within D-046: owner narrowed available pins
+  to 0/2/4/15; use GPIO4, the non-strapping option supporting INPUT_PULLUP.

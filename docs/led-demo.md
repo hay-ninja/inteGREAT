@@ -1,5 +1,10 @@
 # Two-LED camera demo
 
+Optional Halloween music/light sketch: `fixtures/esp32_halloween_lights/` with
+`fixtures/manifests/esp32_halloween_lights.yaml`. See that folder's README for
+passive-piezo wiring. Its alternating on/off beats satisfy the same visual dim/bright
+pattern; the app does not measure audio or verify synchronization with sound.
+
 This is an observation-only LED workflow, separate from the servo/agent investigation
 pipeline. It shares the hardware/source graph, camera inputs, evidence store, and
 activity events. It does not claim general visual root-cause diagnosis.

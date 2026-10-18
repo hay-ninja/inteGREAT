@@ -375,3 +375,32 @@ What remains is hardware validation.
 - Limits: fixed framing/stable exposure; occlusion, moving camera or reflections may mimic
   LED behavior. These are image measurements, never voltage/PWM/current, and this separate
   LED path does not yet invoke the existing agent/Devin pipeline.
+
+## Halloween light/music fixture — 2026-10-18 (D-045)
+- New `fixtures/esp32_halloween_lights/esp32_halloween_lights.ino`: original spooky jingle,
+  LEDs GPIO18/21 alternating with notes, tone output GPIO19, 120 BPM, silent phrase gap,
+  serial p=restart / s=stop. Existing fade sketch preserved. No upload/actuation performed.
+- Matching YAML adds a proposed passive piezo + 1-kilohm series resistor; all wiring
+  unverified. Owner confirms a passive buzzer exists, exact part still unknown; TMB12A05
+  is active and excluded from direct GPIO wiring. See sketch README before wiring.
+- Verified actual compile with Arduino-ESP32 3.3.2, generic ESP32 target (291215 bytes
+  flash, 20984 bytes globals). Host scheduling test passes (alternation, note alignment,
+  stop/restart, timer wrap); manifest validates and parser resolves GPIO18/19/21. Owner swapped LED 2 to GPIO21 and buzzer to GPIO19; scheduling test and ESP32 recompile pass.
+- Physical sound/light behavior unverified. CV only checks the visual alternating pattern;
+  it cannot verify the melody or synchronization with audio.
+
+## Halloween playback button — 2026-10-18
+- GPIO22-to-GND normally open momentary button uses INPUT_PULLUP and 35 ms debounce.
+  Starts OFF; each settled press toggles playback, holding/releasing does not repeat,
+  and a button held during boot must be released before the next press can start.
+  Serial p/s remains available. LED18/21 and buzzer19 unchanged.
+- Sketch README and YAML include wiring and button. Host simulation passes debounce,
+  held-at-boot/held-press, stop/restart, mutual exclusion and timer-wrap checks.
+  ESP32 compilation passes (291519 bytes flash, 21008 bytes globals); no hardware uploaded/tested. This is playback enable,
+  not an electrical power disconnect. Start playback before a camera pattern check.
+- Button pin revised to GPIO32 at owner's request (from their available-pin list).
+  Sketch, manifest, wiring guide and debounce test updated; host test passes.
+  GPIO34/35 would need an external pull-up; GPIO12 avoided as a strapping pin.
+- Final owner-selected button options: moved button to GPIO4 (from GPIO32). Sketch,
+  YAML, wiring notes and host test agree; debounce test passes. GPIO0/2/15 avoided
+  because they are classic ESP32 strapping pins. ESP32 compilation passes.
