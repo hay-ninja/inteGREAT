@@ -162,8 +162,34 @@ def test_locate_led_requires_devices(client):
         r = client.post(f"{API}/devices/camera/locate-led",
                         json={"component_id": "x", "on_command": "A", "off_command": "B"})
         assert r.status_code == 200 and r.json()["found"] is False  # static scene: honest empty
+        # loop:// echoes everything, so "board silence" doesn't fire here
+        assert "printed nothing" not in r.json()["message"]
     finally:
         svc.devices.serial.release()
+
+
+def test_locate_led_reports_board_silence(client):
+    """Commands that don't match the firmware must surface as 'board printed nothing',
+    not just 'nothing changed' — a silent board can't be blinked (D-047)."""
+    class SilentSerial:
+        connected = True
+        written: list[str] = []
+        def write_line(self, text):
+            self.written.append(text)
+        def recent(self, n):
+            return []
+    svc = _connect_fake(client, [_blob_frame(False)] * 8)
+    real_serial = svc.devices.serial
+    fake_serial = SilentSerial()
+    try:
+        svc.devices.serial = fake_serial
+        r = client.post(f"{API}/devices/camera/locate-led",
+                        json={"component_id": "x", "on_command": "LED ON", "off_command": "LED OFF"})
+        assert r.status_code == 200
+        assert r.json()["found"] is False and "printed nothing" in r.json()["message"]
+        assert fake_serial.written[0] == "LED OFF"  # off first so the baseline frame is dark
+    finally:
+        svc.devices.serial = real_serial
 
 
 def test_led_roi_route_and_validation(client):

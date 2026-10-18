@@ -698,6 +698,7 @@ class Service:
                 raise CameraError("no frame yet")
             return f.image
 
+        rx_before = len([l for l in ser.recent(200) if l.direction == "rx"])
         try:
             off_frames: list = []
             on_frames: list = []
@@ -717,10 +718,19 @@ class Service:
             est.calibrate(off_frames[-1])
             return LedLocateResult(found=True, roi=cands[0],
                                    message="LED found — baseline recorded")
+        heard = len([l for l in ser.recent(200) if l.direction == "rx"]) - rx_before
         if not cands:
+            if heard == 0:
+                return LedLocateResult(
+                    found=False,
+                    message=f'Sent "{req.off_command}"/"{req.on_command}" over serial but the board '
+                            "printed nothing back — the firmware may not handle those commands "
+                            "(autonomous sketches, e.g. a fade loop, never read serial). "
+                            "Fix the commands to match your firmware, or mark the LED region on the video instead.")
             return LedLocateResult(found=False,
-                                   message="Nothing changed between ON and OFF — check the LED "
-                                           "responds, or draw the region manually")
+                                   message="The board answered, but nothing changed in frame between "
+                                           "ON and OFF — check the LED is in view and the commands "
+                                           "actually drive it, or mark the region on the video.")
         return LedLocateResult(found=False, candidates=cands,
                                message=f"{len(cands)} regions changed — pick the one that is this LED")
 

@@ -118,11 +118,13 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
         </HStack>
         <RoiView cid={cid} candidates={candidates ?? []} roi={roi} onPick={useRoi} disabled={busy} />
         <Text type="supporting">
-          Click once for box 1, once for box 2 — the region between them is the LED.
-          Picking a region also records the LED-off baseline, so make sure it is dark
-          right now. Blink-to-find is usually faster: it toggles the LED over serial
-          and watches which part of the image changes — no marker needed, and it sends
-          exactly the two commands below, nothing else.
+          Click once for box 1, then hold and release for box 2 — the region between
+          them is the LED. Picking a region also records the LED-off baseline, so make
+          sure it is dark right now. Blink-to-find is usually faster: it toggles the
+          LED over serial and watches which part of the image changes — no marker
+          needed, and it sends exactly the two commands below, nothing else. If the
+          board doesn't answer, your firmware may not handle these commands — mark the
+          region on the video instead.
         </Text>
         <HStack gap={1} vAlign="end" wrap="wrap">
           <TextInput label="ON command" value={onCmd} onChange={setOnCmd} width={140} />
@@ -165,8 +167,10 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
 }) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [nat, setNat] = useState<[number, number] | null>(null);
-  const [first, setFirst] = useState<[number, number] | null>(null); // corner 1, frame px
-  const [hover, setHover] = useState<[number, number] | null>(null);  // live preview corner
+  const [first, setFirst] = useState<[number, number] | null>(null);  // anchored corner 1, frame px
+  const [press, setPress] = useState<[number, number] | null>(null);  // gesture origin while held
+  const [hover, setHover] = useState<[number, number] | null>(null);  // cursor while held
+  const lastCursor = useRef<[number, number] | null>(null);
 
   // MJPEG frames don't reliably re-fire onLoad — poll natural size until known.
   useEffect(() => {
@@ -179,7 +183,7 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
     const id = window.setInterval(tick, 500);
     return () => window.clearInterval(id);
   }, [cid]);
-  useEffect(() => setFirst(null), [cid]);
+  useEffect(() => { setFirst(null); setPress(null); setHover(null); }, [cid]);
 
   const toNat = (e: { clientX: number; clientY: number }): [number, number] | null => {
     const im = imgRef.current;
@@ -192,18 +196,39 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
     ];
   };
 
-  const click = (e: ReactPointerEvent) => {
+  const finish = (origin: [number, number], end: [number, number] | null) => {
+    setPress(null); setHover(null);
+    if (!first) { setFirst(origin); return; }        // gesture 1: box 1 stays placed
+    const e2 = end ?? origin;                         // gesture 2: commit on release point
+    const r = [Math.min(first[0], e2[0]), Math.min(first[1], e2[1]),
+               Math.abs(e2[0] - first[0]), Math.abs(e2[1] - first[1])];
+    if (r[2] >= 6 && r[3] >= 6) { setFirst(null); onPick(r); }
+    // too small a span keeps box 1 so the engineer can just press again
+  };
+
+  // Releases off the image still end the gesture — pointer capture over an MJPEG
+  // stream is unreliable, so a window listener covers release outside the frame.
+  useEffect(() => {
+    if (!press) return;
+    const done = () => finish(press, lastCursor.current);
+    window.addEventListener("pointerup", done);
+    return () => window.removeEventListener("pointerup", done);
+  }, [!!press]);
+
+  const down = (e: ReactPointerEvent) => {
     if (disabled) return;
     const p = toNat(e);
     if (!p) return;
-    if (!first) { setFirst(p); return; }
-    const r = [Math.min(first[0], p[0]), Math.min(first[1], p[1]),
-               Math.abs(p[0] - first[0]), Math.abs(p[1] - first[1])];
-    setFirst(null); setHover(null);
-    if (r[2] >= 6 && r[3] >= 6) onPick(r);  // a tap that doesn't span anything isn't a region
+    lastCursor.current = p;
+    setPress(p); setHover(p);
   };
-  const move = (e: ReactPointerEvent) => { if (first) setHover(toNat(e)); };
-  const preview = first && hover
+  const move = (e: ReactPointerEvent) => {
+    const p = toNat(e);
+    if (!p) return;
+    lastCursor.current = p;
+    if (press) setHover(p);
+  };
+  const preview = first && press && hover
     ? [Math.min(first[0], hover[0]), Math.min(first[1], hover[1]),
        Math.abs(hover[0] - first[0]), Math.abs(hover[1] - first[1])]
     : null;
@@ -217,19 +242,19 @@ function RoiView({ cid, candidates, roi, onPick, disabled }: {
       <img ref={imgRef} draggable={false}
            src={`/api/v1/devices/camera/stream.mjpg?metric=led_state&component=${encodeURIComponent(cid)}`}
            alt="Live camera — click two corners around the LED" />
-      <div className="roi-layer" role="presentation" onPointerDown={click} onPointerMove={move}>
+      <div className="roi-layer" role="presentation" onPointerDown={down} onPointerMove={move}>
         {nat && roi && <div className="roi-box roi-current" style={box(roi)} />}
         {nat && candidates.map((r, i) => (
           <button key={i} className="roi-box roi-candidate" style={box(r)}
                   aria-label={`Use candidate region ${i + 1}`}
-                  onPointerDown={(e) => { e.stopPropagation(); setFirst(null); onPick(r); }} />
+                  onPointerDown={(e) => { e.stopPropagation(); setFirst(null); setPress(null); onPick(r); }} />
         ))}
         {nat && preview && <div className="roi-box roi-drag" style={box(preview)} />}
-        {nat && first && <div className="roi-corner" style={box([first[0] - 4, first[1] - 4, 8, 8])} />}
+        {nat && (first ?? press) && <div className="roi-corner" style={box([(first ?? press)![0] - 4, (first ?? press)![1] - 4, 8, 8])} />}
       </div>
       {first && (
         <div className="roi-hint">
-          <span>Box 1 placed — click box 2</span>
+          <span>Box 1 placed — hold and release for box 2</span>
           <button className="roi-reset" onPointerDown={(e) => { e.stopPropagation(); setFirst(null); setHover(null); }}>
             Reset
           </button>
