@@ -38,6 +38,10 @@ AGENT_TOOLS: dict[AgentName, list[tuple[str, dict]]] = {
     AgentName.code: [("inspect_gpio_config", {"component_id": "$component"}), ("read_project_metadata", {})],
     AgentName.hardware: [("read_netlist_connections", {"component_id": "$component"}),
                          ("expand_scope", {"scope_node_id": "$component", "depth": 3})],
+    AgentName.telemetry: [("read_test_events", {}), ("read_serial_buffer", {"max_lines": 40})],
+    AgentName.vision: [("read_cv_measurements", {}), ("read_test_events", {})],
+    AgentName.critic: [("read_test_events", {}), ("read_cv_measurements", {}),
+                       ("expand_scope", {"scope_node_id": "$component", "depth": 3})],
     AgentName.runtime_vision: [("read_test_events", {}), ("read_cv_measurements", {}),
                                ("read_serial_buffer", {"max_lines": 40})],
 }
@@ -46,6 +50,10 @@ AGENT_EDGES = {
                              EdgeRelation.powered_by, EdgeRelation.calls},
     AgentName.code: {EdgeRelation.configures, EdgeRelation.controls, EdgeRelation.calls},
     AgentName.hardware: {EdgeRelation.connected_to, EdgeRelation.powered_by, EdgeRelation.configures},
+    AgentName.telemetry: {EdgeRelation.controls, EdgeRelation.configures, EdgeRelation.calls},
+    AgentName.vision: {EdgeRelation.controls, EdgeRelation.configures},
+    AgentName.critic: {EdgeRelation.configures, EdgeRelation.controls, EdgeRelation.connected_to,
+                       EdgeRelation.powered_by, EdgeRelation.calls},
     AgentName.runtime_vision: {EdgeRelation.controls, EdgeRelation.configures},
 }
 

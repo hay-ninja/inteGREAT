@@ -14,16 +14,14 @@ import { Card } from "@astryxdesign/core/Card";
 import {
   api,
   type DeviceStatus,
-  type Expectation,
   type IntegreatEvent,
-  type Observation,
   type SerialEvent,
   type TestRun,
   type ToolCall,
 } from "../../lib/api";
 import { Eyebrow, SourceBadge } from "../flow/common";
 
-export type DrawerTab = "angle" | "serial" | "devices" | "activity";
+export type DrawerTab = "serial" | "devices" | "activity";
 
 interface Props {
   open: boolean;
@@ -31,9 +29,7 @@ interface Props {
   tab: DrawerTab;
   onTab: (t: DrawerTab) => void;
   run: TestRun | null;
-  observations: Observation[];
   serial: SerialEvent[];
-  expectation: Expectation | null;
   events: IntegreatEvent[];
   toolCalls: ToolCall[];
   devices: DeviceStatus | null;
@@ -47,7 +43,6 @@ export function BottomDrawer(p: Props) {
     <VStack gap={0} height={p.open ? 260 : undefined}>
       <HStack hAlign="between" vAlign="center" gap={2} paddingInline={2} wrap="wrap">
         <TabList value={p.tab} size="sm" onChange={(t) => { p.onTab(t as DrawerTab); p.onOpen(true); }}>
-          <Tab value="angle" label="Arm angle" />
           <Tab value="serial" label="Board messages" />
           <Tab value="devices" label="Devices" />
           <Tab value="activity" label="Activity" />
@@ -58,12 +53,11 @@ export function BottomDrawer(p: Props) {
             <Button label="Save as replay" size="sm" variant="ghost" tooltip="Keep this run for offline demos"
                     onClick={() => p.onSaveReplay(p.run!.id)} />
           )}
-          <Button label={p.open ? "Focus graph" : "Show measurements"} size="sm" variant="ghost" onClick={() => p.onOpen(!p.open)} />
+          <Button label={p.open ? "Focus graph" : "Show logs"} size="sm" variant="ghost" onClick={() => p.onOpen(!p.open)} />
         </HStack>
       </HStack>
       {p.open && (
         <VStack gap={0} isScrollable height="100%" paddingInline={3} paddingBlock={2}>
-          {p.tab === "angle" && <AnglePlot obs={p.observations} exp={p.expectation} />}
           {p.tab === "serial" && <SerialLog serial={p.serial} />}
           {p.tab === "devices" && <DeviceSummary status={p.devices} onOpenSetup={p.onRigSetup} />}
           {p.tab === "activity" && (
@@ -81,35 +75,6 @@ export function BottomDrawer(p: Props) {
         </VStack>
       )}
     </VStack>
-  );
-}
-
-function AnglePlot({ obs, exp }: { obs: Observation[]; exp: Expectation | null }) {
-  if (!obs.length) return <EmptyState isCompact title="No measurements yet" description="Run a test and the camera will plot where the arm was over time." />;
-  const W = 900, H = 170, pad = { l: 36, r: 8, t: 8, b: 20 };
-  const maxT = Math.max(exp?.deadline_ms ?? 0, ...obs.map((o) => o.elapsed_ms)) * 1.05;
-  const x = (t: number) => pad.l + (t / maxT) * (W - pad.l - pad.r);
-  const y = (v: number) => pad.t + (1 - v / 180) * (H - pad.t - pad.b);
-  const valid = obs.filter((o) => o.measurement_quality === "valid" && o.value != null);
-  const invalid = obs.filter((o) => o.measurement_quality !== "valid");
-  const path = valid.map((o, i) => `${i ? "L" : "M"}${x(o.elapsed_ms).toFixed(1)},${y(o.value!).toFixed(1)}`).join(" ");
-  return (
-    <svg className="plot" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Servo angle over time">
-      {exp && (
-        <>
-          <rect x={pad.l} width={W - pad.l - pad.r} y={y(exp.target + exp.tolerance)}
-                height={y(exp.target - exp.tolerance) - y(exp.target + exp.tolerance)} className="band" />
-          <line x1={x(exp.deadline_ms)} x2={x(exp.deadline_ms)} y1={pad.t} y2={H - pad.b} className="deadline" />
-          <text x={x(exp.deadline_ms) + 4} y={pad.t + 10} className="axis">{exp.deadline_ms} ms</text>
-          <text x={pad.l + 4} y={y(exp.target + exp.tolerance) - 3} className="axis">target {exp.target}° ± {exp.tolerance}°</text>
-        </>
-      )}
-      {[0, 90, 180].map((v) => <text key={v} x={2} y={y(v) + 4} className="axis">{v}°</text>)}
-      <path d={path} className="series" />
-      {valid.map((o) => <circle key={o.id} cx={x(o.elapsed_ms)} cy={y(o.value!)} r={2} className="pt" />)}
-      {invalid.map((o) => <text key={o.id} x={x(o.elapsed_ms) - 3} y={H - pad.b - 2} className="invalid-pt">×</text>)}
-      <text x={W - 170} y={H - 5} className="axis">{valid.length} valid · {invalid.length} missing frames</text>
-    </svg>
   );
 }
 

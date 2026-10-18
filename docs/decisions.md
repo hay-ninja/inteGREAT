@@ -271,3 +271,97 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
 - Verified: `tsc -b` clean, 17 vitest, 100 pytest, `vite build`, headless-Chromium walkthrough
   (extended with Activity + Devices→setup coverage) at 1280×720 / 1024×768 / 800×600 — zero
   console errors, no horizontal overflow.
+
+### D-028 Angle removed as terminal output; run state writes back to the graph, metric-keyed — 2026-10-18 — owner request
+- Implements stage A of [dsg-agent-architecture.md](dsg-agent-architecture.md). The bottom drawer
+  loses the "Arm angle" plot tab entirely (Serial · Devices · Activity remain); CV observations,
+  `cv_measurement` evidence, and `read_cv_measurements` are unchanged — angle is now an input to
+  diagnosis, never a universal output surface. Deviates from the PRD §9 wireframe's
+  "CV angle plot" row; flagged there.
+- `diagnostics/graph_state.py` writes the last run's state back onto the canonical graph:
+  metric-keyed node attributes (`obs_metric`, `obs_value`, `obs_residual`, `obs_outcome`,
+  `obs_run_id` + evidence ids) and `traversal` on edges (`observed` / `unobserved`, evidence-cited).
+  Metric-keying means a different estimator (e.g. an LED brightness observer for a lights demo)
+  flows through the same path with no renames; nothing assumes "angle" outside the estimator.
+- Traversal is evidence-driven, not ACK-driven: a `controls`/`configured_by` edge is "observed"
+  only when the function's own serial literal was received. `moveServoTo` prints `ACK MOVE` and
+  is observed; `servoSetup` prints nothing and stays "unobserved" — we never infer execution we
+  didn't see. `traversal` = code-path ran, never "the physical thing moved".
+- Node/edge ids are deterministic, so `record_run_state` re-applies cleanly after rescan.
+
+### D-029 Digital shadow: SimRig reused predictively; deterministic refutation is authoritative — 2026-10-18
+- Implements stage B + the verification half of stage C. `diagnostics/shadow.py` runs `SimRig`
+  forward under nominal `SimConditions` derived from the graph + expectation, and emits
+  `shadow_residual` evidence comparing predicted vs. observed signatures (ACK, motion,
+  valid measurement count). `diagnostics/estimate.py` sweeps the existing fault-knob space
+  (GPIO match, signal, power, marker visibility, firmware ACKs) and reports which θ reproduces
+  the observed signature — diagnosis as parameter estimation over a 0-d discrete model.
+- **Deliberately no MuJoCo/Isaac/FEA/STEP:** the rig has ~6 distinguishable fault states; a
+  higher-fidelity sim would answer questions the sensors cannot discriminate. The
+  graph-state + shadow interfaces are where a richer model would slot in later.
+- All shadow output is `epistemic=inferred`, `synthetic`, labelled "model" in the UI. A θ that
+  reproduces the signature is *model-consistent*, never hardware-verified — a fault outside the
+  knob space can still be the true cause.
+- **Refutation is executable, not argumentative:** `_refute` in the orchestrator checks each top
+  hypothesis by shadow consistency — does the implied fault reproduce the observed signature?
+  An LLM "critic" run (pseudo-agent `critic`) may add adversarial commentary, but its output
+  is validated citations like any other report and can never override a residual record.
+  This satisfies the "Prosecutor/Defense" shape without trusting LLM prose as a falsifier, and
+  works with zero API keys.
+
+### D-030 Agent roster: runtime_vision splits into telemetry + vision; qualitative ambiguity gates probing — 2026-10-18
+- Implements the rest of stage C. `AgentName` gains `telemetry` (serial lines, timing, event
+  traversal) and `vision` (CV measurements, observation quality); `runtime_vision` is kept as a
+  legacy enum member so persisted `AgentRun`s deserialize but is never dispatched. New roster:
+  orchestrator + code + hardware + telemetry + vision + critic. Deviates from PRD §11's "3
+  specialist agents" / "Runtime/Vision Agent" wording; flagged there. Packet tools/edges,
+  dispatch rules, and triage schema updated; the one-fan-out + one-follow-up bound is unchanged.
+- **Ambiguity is qualitative, not numeric:** PRD §12 forbids probabilities and the fault space
+  is too small for honest entropy. The synthesizer is told when ≥2 unresolved hypotheses share
+  the top rank and must pick the recommended action whose expected_outcomes discriminate them;
+  deterministic fallback attaches the same ambiguity note. Probing stays recommendation-only —
+  engineer clicks an action card, the executor enforces grants. No agent writes to the device.
+
+### D-031 Causal chain per incident; counterfactuals are shadow interventions — 2026-10-18
+- Implements stage D. `diagnostics/causal.py` builds the five-link chain
+  (command → ACK → signal → motion → observed feedback) from run facts + declared structure,
+  rendered in the debug chapter. Each link is `yes`/`no`/`unknown`/`unmeasured` — e.g. signal
+  voltage is honestly "unmeasured" (we never claimed PWM/voltage measurement).
+- Counterfactuals (`do(X = nominal)`) are answered by re-running the shadow with that knob
+  forced nominal; the result lands on the leading hypothesis as "Counterfactual: had signal
+  been connected, prediction would still show motion — consistent" — a model-level statement,
+  never a physical claim. No formal do-calculus; the reduced-order model IS the interventional
+  semantics at this fidelity.
+
+### D-032 Studio-style left view rail owns view/layer switching — 2026-10-18
+- User asked for a Roblox-Studio-like structure: sections with defined purposes, icons with
+  clear text labels, visibly separated views. Implemented as `shell/ViewRail.tsx` — an Astryx
+  `SideNav` in `Layout`'s `start` slot with grouped `SideNavItem`s: **View** (Map / Timeline)
+  and **Layer** (All / Hardware / Software), each with an icon, text label, and selected
+  state. Collapsible to an icon strip (`collapsible`, auto-starts collapsed under 1000px).
+- This replaces the in-canvas `CanvasToggles` segmented controls — one place owns
+  "what am I looking at", the canvas header keeps only tools (search, expand, run selector).
+  Deviation from the D-026 segmented-control pattern; the keyboard layer (D/E, H/S/C)
+  drives the same state, and the regions are now rail | canvas | guided panel | drawer —
+  four separated zones instead of toggles inside the canvas chrome.
+- Home page un-condensed (user: "should not be condensed"): wider frame (1040),
+  `ClickableCard` grids for demos and recents, full-width import card. Same modal-first
+  open behavior. No functionality moved or removed.
+
+### D-033 IDE-style resizable panels + marketing landing page; decorative type removed — 2026-10-18
+- User asked for VS Code/Devin-like panels: the view rail uses SideNav's built-in
+  `resizable` (drag handle at its edge, width persisted via `autoSaveId`); the guided
+  steps panel uses `useResizable` + an adjacent `ResizeHandle` (320–620px). Panel
+  *repositioning* (dragging a panel to another side) is not supported — out of
+  scope for the Layout slot model.
+- `Selector` dropdowns now use `placement="below"` so menus open under the trigger
+  instead of centring the selected item over it.
+- Decorative typography removed at user request ("easily usable vibe"): eyebrows
+  and chapter names are now plain body-font labels (no mono, no uppercase, no
+  letter-spacing). The `.eyebrow`/`.chapters` classes remain as layout hooks.
+- Canvas tools are explained, not just labelled: "Expand groups" / "Collapse
+  groups" / "Show whole system" get descriptive tooltips and `secondary` (boxed)
+  styling — plain-text ghost buttons were illegible as controls.
+- New `LandingScreen` before the import screen: product story, why, 3-step how-it-
+  works, feature grid, and an "Open the workspace" CTA. The logo/home button now
+  returns there. Intended to give judges/evaluators context on a live deployment.

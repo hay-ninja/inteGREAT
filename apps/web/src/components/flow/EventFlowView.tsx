@@ -15,7 +15,7 @@ import type { Evidence, EventFlow, FlowEvent, FlowLane, GraphLayer, TestRun } fr
 import { api } from "../../lib/api";
 import { Eyebrow, SourceBadge } from "./common";
 import { InspectorCard } from "./InspectorCard";
-import { CanvasToggles, type CanvasMode } from "../graph/GraphView";
+
 
 const LANE_LABEL: Record<FlowLane, string> = {
   command: "What we asked",
@@ -68,9 +68,6 @@ interface Props {
   runId: string | null;
   onRunChange: (id: string) => void;
   layer: GraphLayer;
-  mode: CanvasMode;
-  onMode: (m: CanvasMode) => void;
-  onLayer: (l: GraphLayer) => void;
   refreshSeq: number;
   onSelectNode: (id: string) => void;
   onEvidence: (e: Evidence) => void;
@@ -135,8 +132,8 @@ export function EventFlowView(p: Props) {
   return (
     <Layout header={<LayoutHeader padding={2} hasDivider>
       <HStack gap={2} vAlign="center" wrap="wrap">
-        <CanvasToggles mode={p.mode} onMode={p.onMode} layer={p.layer} onLayer={p.onLayer} />
-        <Selector label="Run" isLabelHidden size="sm" value={p.runId ?? ""} onChange={(v) => p.onRunChange(String(v))}
+        <Text type="label" color="secondary">Event timeline</Text>
+        <Selector label="Run" isLabelHidden size="sm" placement="below" value={p.runId ?? ""} onChange={(v) => p.onRunChange(String(v))}
                   options={p.runs.map((r) => ({ value: r.id, label: runLabel(r, p.runs) }))} width={230} />
         {selectedRun && <SourceBadge run={selectedRun} />}
         {selectedRun?.state === "running" && (

@@ -5,13 +5,13 @@ import { Text } from "@astryxdesign/core/Text";
 import { StatusDot } from "@astryxdesign/core/StatusDot";
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Selector } from "@astryxdesign/core/Selector";
-import type { Evidence, ExpectationResult, SourceOptions, TestRun } from "../../lib/api";
+import type { CausalStep, Evidence, ExpectationResult, SourceOptions, TestRun } from "../../lib/api";
 
 
 const KIND_LABEL: Record<string, string> = {
   source_excerpt: "code", manifest_entry: "manifest", netlist_entry: "netlist", serial_line: "serial",
   host_command: "command", cv_measurement: "camera", tool_output: "tool", engineer_assertion: "you",
-  rule_result: "rule",
+  rule_result: "rule", shadow_residual: "model",
 };
 
 export function cite(e: Evidence): string {
@@ -21,7 +21,7 @@ export function cite(e: Evidence): string {
 
 /** Compact evidence list: what it says, what kind of fact it is, where it came from. */
 export function EvidenceList({ ids, evById, title, onInspect }: { ids: string[]; evById: Map<string, Evidence>; title?: string; onInspect?: (e: Evidence) => void }) {
-  const items = ids.map((id) => evById.get(id)).filter(Boolean) as Evidence[];
+  const items = [...new Map(ids.map((id) => [id, evById.get(id)])).values()].filter(Boolean) as Evidence[];
   if (!items.length) return null;
   return (
     <List density="compact" header={<Text type="label" color="secondary">{title ?? "Evidence"}</Text>}>
@@ -45,6 +45,28 @@ export function Facts({ result }: { result: ExpectationResult }) {
                      label={`${f.label}: ${f.value}`} tooltip={f.note ?? undefined} />
           <Text type="body" color={f.value === "unknown" ? "secondary" : "primary"}>{labels[f.key]}</Text>
           <Text type="supporting">{f.value === "yes" ? "yes" : f.value === "no" ? "no" : "unknown"}</Text>
+        </HStack>
+      ))}
+    </VStack>
+  );
+}
+
+/** The causal chain from command to observation. Deduced links say "deduced"; links we cannot
+    measure say "not measurable" — nothing is smoothed over. */
+export function CausalChain({ steps }: { steps: CausalStep[] }) {
+  if (!steps.length) return null;
+  const variant = (s: CausalStep) => s.value === "yes" ? "success" : s.value === "no" ? "error" : "neutral";
+  const text = (s: CausalStep) =>
+    s.value === "unmeasured" ? "not measurable" : s.value === "unknown" ? "unknown"
+    : s.inferred ? `${s.value} — deduced` : s.value;
+  return (
+    <VStack gap={1}>
+      {steps.map((s) => (
+        <HStack key={s.key} gap={1.5} vAlign="center">
+          <StatusDot variant={variant(s)} label={`${s.label}: ${text(s)}`}
+                     tooltip={s.breaks_if ? `Breaks if: ${s.breaks_if}` : undefined} />
+          <Text type="body" color={s.value === "yes" || s.value === "no" ? "primary" : "secondary"}>{s.label}</Text>
+          <Text type="supporting">{text(s)}</Text>
         </HStack>
       ))}
     </VStack>

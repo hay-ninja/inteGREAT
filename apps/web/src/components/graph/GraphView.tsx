@@ -26,7 +26,6 @@ import { VStack } from "@astryxdesign/core/VStack";
 import { Text } from "@astryxdesign/core/Text";
 import { StatusDot } from "@astryxdesign/core/StatusDot";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
-import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Layout, LayoutContent, LayoutHeader } from "@astryxdesign/core/Layout";
 import type { GraphLayer, GraphSnapshot, Highlight } from "../../lib/api";
 import {
@@ -123,34 +122,6 @@ function edgeStyle(e: VEdge): CSSProperties {
 
 export type CanvasMode = "deps" | "flow";
 
-/** Shared chrome for the two main visualizations: which view, which layer, what's hidden. */
-export function CanvasToggles({ mode, onMode, layer, onLayer, hiddenNote }: {
-  mode: CanvasMode;
-  onMode: (m: CanvasMode) => void;
-  layer: GraphLayer;
-  onLayer: (l: GraphLayer) => void;
-  hiddenNote?: string | null;
-}) {
-  return (
-    <HStack gap={3} vAlign="center" wrap="wrap">
-      <Text type="label" color="secondary">Graph view</Text>
-      <SegmentedControl label="Main view" value={mode} onChange={(v) => onMode(v as CanvasMode)} size="sm">
-        <SegmentedControlItem value="deps" label="Dependencies" />
-        <SegmentedControlItem value="flow" label="Event flow" />
-      </SegmentedControl>
-      <SegmentedControl label="Graph layer" value={layer} onChange={(v) => onLayer(v as GraphLayer)} size="sm">
-        <SegmentedControlItem value="combined" label="Combined" />
-        <SegmentedControlItem value="hardware" label="Hardware" />
-        <SegmentedControlItem value="software" label="Software" />
-      </SegmentedControl>
-      {hiddenNote && (
-        <Button label={`${hiddenNote} — show everything`} size="sm" variant="ghost"
-                onClick={() => onLayer("combined")} />
-      )}
-    </HStack>
-  );
-}
-
 interface Props {
   graph: GraphSnapshot;
   expanded: Set<string>;
@@ -158,8 +129,6 @@ interface Props {
   focusIds: Set<string> | null;
   selectedId: string | null;
   layer: GraphLayer;
-  mode: CanvasMode;
-  onMode: (m: CanvasMode) => void;
   onLayer: (l: GraphLayer) => void;
   onToggle: (id: string) => void;
   onSelect: (id: string | null) => void;
@@ -245,12 +214,16 @@ function Inner(p: Props) {
   return (
     <Layout header={<LayoutHeader padding={2} hasDivider>
       <HStack gap={2} vAlign="center" wrap="wrap">
-        <CanvasToggles mode={p.mode} onMode={p.onMode} layer={p.layer} onLayer={p.onLayer} hiddenNote={hiddenNote} />
+        <Text type="label" color="secondary">Dependency map</Text>
         <TextInput label="Search nodes in this view" isLabelHidden size="sm" value={search} onChange={setSearch}
                    placeholder="Search…" startIcon="search" hasClear width={200} />
-        <Button label="Expand all" size="sm" variant="ghost" onClick={p.onExpandAll} />
-        <Button label="Collapse" size="sm" variant="ghost" onClick={p.onCollapseAll} />
-        {p.onClearFocus && <Button label="Whole system" size="sm" variant="ghost" onClick={p.onClearFocus} />}
+        <Button label="Expand groups" size="sm" variant="secondary"
+                tooltip="Reveal every part hidden inside the grouped boxes" onClick={p.onExpandAll} />
+        <Button label="Collapse groups" size="sm" variant="secondary"
+                tooltip="Fold the detailed parts back into their groups" onClick={p.onCollapseAll} />
+        {p.onClearFocus && <Button label="Show whole system" size="sm" variant="secondary"
+                tooltip="Leave the subsystem focus — show the full map again" onClick={p.onClearFocus} />}
+        {hiddenNote && <Button label={`${hiddenNote} — show everything`} size="sm" variant="ghost" onClick={() => p.onLayer("combined")} />}
       </HStack>
     </LayoutHeader>} content={<LayoutContent padding={0} isScrollable={false} ref={canvasRef}>
     {vg.nodes.length === 0 ? (

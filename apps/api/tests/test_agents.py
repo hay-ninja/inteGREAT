@@ -24,7 +24,9 @@ def make_script(**over):
             v = over[schema]
             return v(prompt) if callable(v) else v
         if schema == "TriageOut":
-            return {"agents": ["code", "hardware", "runtime_vision"], "rationale": "check config, wiring, observations"}
+            return {"agents": ["code", "hardware", "vision"], "rationale": "check config, wiring, observations"}
+        if schema == "CritiqueOut":
+            return {"critiques": []}
         if schema == "AgentReportOut":
             cat = prompt.split("## EVIDENCE CATALOG")[1].split("##")[0]
             ev = ids("evidence", cat)
@@ -69,7 +71,7 @@ def test_round_produces_validated_reports(agent_client):
     assert r.status_code == 200
     v = c.get(f"{API}/investigations/{iid}").json()
     runs = v["agent_runs"]
-    specialists = [x for x in runs if x["agent"] in ("code", "hardware", "runtime_vision")]
+    specialists = [x for x in runs if x["agent"] in ("code", "hardware", "telemetry", "vision")]
     assert len(specialists) == 3 and all(x["status"] == "completed" for x in specialists)
     ev_ids = {e["id"] for e in v["evidence"]}
     for x in specialists:
@@ -142,7 +144,9 @@ def test_agent_timeout_and_failures_are_isolated():
 
     def script(schema, prompt):
         if schema == "TriageOut":
-            return {"agents": ["code", "runtime_vision"], "rationale": "x"}
+            return {"agents": ["code", "vision"], "rationale": "x"}
+        if schema == "CritiqueOut":
+            return {"critiques": []}
         if schema == "AgentReportOut":
             calls["n"] += 1
             if calls["n"] == 1:
@@ -157,7 +161,8 @@ def test_agent_timeout_and_failures_are_isolated():
         iid = incident(c)
         assert c.post(f"{API}/investigations/{iid}/diagnose").status_code == 200
         v = c.get(f"{API}/investigations/{iid}").json()
-        statuses = sorted(x["status"] for x in v["agent_runs"] if x["agent"] != "orchestrator")
+        statuses = sorted(x["status"] for x in v["agent_runs"]
+                          if x["agent"] in ("code", "hardware", "telemetry", "vision"))
         assert statuses == ["failed", "timeout"]
         assert v["incident"]["state"] == "awaiting_engineer"  # investigation continues
         # D-023: the orchestrator still synthesizes the deterministic evidence when every
@@ -172,6 +177,6 @@ def test_invalid_triage_falls_back_to_rules(agent_client):
     c.post(f"{API}/investigations/{iid}/diagnose")
     runs = c.get(f"{API}/investigations/{iid}").json()["agent_runs"]
     triage = runs[0]
-    # Fault A fires mismatch + no-motion + power/signal codes → rule-based plan uses all three specialists
-    assert triage["agent"] == "orchestrator" and triage["dispatched"] == ["code", "hardware", "runtime_vision"]
+    # Fault A fires mismatch + no-motion + power/signal codes → rule plan uses code+hardware+vision
+    assert triage["agent"] == "orchestrator" and triage["dispatched"] == ["code", "hardware", "vision"]
     assert any("fell back" in e for e in triage["validation_errors"])

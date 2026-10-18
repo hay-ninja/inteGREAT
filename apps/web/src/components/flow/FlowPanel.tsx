@@ -31,7 +31,7 @@ import {
   type SourceOptions,
   type TestRun,
 } from "../../lib/api";
-import { EvidenceList, Eyebrow, Facts, SourceBadge, SourcePicker } from "./common";
+import { CausalChain, EvidenceList, Eyebrow, Facts, SourceBadge, SourcePicker } from "./common";
 import { latestRun, nextCheck } from "./flowState";
 
 const STEPS = ["Setup", "Run", "Debug", "Verify"] as const;
@@ -280,6 +280,7 @@ function InvestigateStep(p: FlowProps & { view: InvestigationView }) {
         {result && inPlainTerms(result) && <Text type="body" color="secondary">{inPlainTerms(result)}</Text>}
       </VStack>
       {result && <Facts result={result} />}
+      {view.causal_chain.length > 0 && <CausalChain steps={view.causal_chain} />}
       <Divider />
 
       {result?.outcome === "pass" ? (
@@ -417,7 +418,7 @@ function AIReview(p: FlowProps & { view: InvestigationView }) {
   return <VStack gap={2}>
     <Divider />
     <Eyebrow>AI evidence review</Eyebrow>
-    <Text type="supporting">Code, hardware, and runtime specialists can review this investigation and recommend an existing diagnostic action.</Text>
+    <Text type="supporting">Code, hardware, telemetry, and vision specialists can review this investigation — a critic pass then tries to invalidate the leading hypotheses before a next check is recommended.</Text>
     {reason && <Text type="supporting">{reason}. Deterministic checks remain available.</Text>}
     <Button label={p.diagnosing ? "Reviewing evidence…" : rounds ? "Review new evidence" : "Ask AI to review evidence"}
             size="sm" isLoading={p.diagnosing} isDisabled={!!reason} onClick={p.onDiagnose} />

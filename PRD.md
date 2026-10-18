@@ -243,7 +243,8 @@ A small pre-existing firmware demo should accept a documented host test request 
 │   ├─ System graph + scoped context builder                    │
 │   ├─ Test/expectation + incident state machine                │
 │   ├─ Event store + SQLite                                     │
-│   ├─ Gemini orchestrator + 3 specialist agents                │
+│   ├─ Gemini orchestrator + 3 specialist agents  (D-030: now 4 —│
+│   │    code · hardware · telemetry · vision — + critic pass)  │
 │   ├─ Tool registry + session permission manager               │
 │   ├─ Serial adapter (USB to ESP32)                            │
 │   └─ OpenCV adapter (local webcam)                             │
@@ -429,7 +430,7 @@ Rules:
 
 - Dispatch Code Agent for configuration/API/path issues.
 - Dispatch Hardware Agent for wiring/power/netlist questions.
-- Dispatch Runtime/Vision Agent for observed behavior, timing, serial/logs, or CV issues.
+- Dispatch Runtime/Vision Agent for observed behavior, timing, serial/logs, or CV issues. **Updated by D-030:** this role is split into a Telemetry Agent (serial, timing, event traversal) and a Vision Agent (CV measurements, observation quality) — four specialists total.
 - May invoke multiple agents in parallel when independent evidence is needed.
 - Every agent receives only its scoped packet and registered tools.
 - Limit to one initial dispatch and one follow-up dispatch per incident in P0; maximum tool calls per run and total Gemini calls configured centrally.
@@ -444,6 +445,8 @@ Rules:
 | Code | Search repository, inspect bounded file ranges, read parsed pin references, inspect diff | Edit files, run build scripts, flash firmware |
 | Hardware | Read netlist, manifest, verified connections, datasheet snippets | Assume physical wiring from schematic; actuate devices |
 | Runtime/Vision | Read serial buffer, inspect events, request camera measurements, approved host diagnostics | Change GPIO states, reset devices, write serial commands outside configured test runner |
+| └ split per D-030 → | **Telemetry:** serial buffer, events, timing. **Vision:** camera measurements, observation quality | Same prohibitions, per agent |
+| Critic (D-029) | Adversarial commentary on hypotheses only; validated like any report | Cannot override deterministic shadow refutation or tool output |
 | Orchestrator | Dispatch agents, rank hypotheses, propose action cards | Execute arbitrary shell, bypass approvals, auto-repair |
 
 ### 11.3 Agent failure behavior
@@ -531,6 +534,10 @@ Optional Linux gateway tools: `read_kernel_log`, `read_service_status`, `read_de
 │ Timeline / Serial / CV angle plot / Camera preview / Diagnostic output │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+> **Updated by D-028 (2026-10-18):** the "CV angle plot" bottom-strip output is removed. Angle
+> is internal evidence for diagnosis/agents; the strip is Serial · Devices · Activity. CV
+> data remains available as evidence per the requirement below.
 
 ### UX requirements
 
@@ -688,7 +695,7 @@ Do not generate empty files for every proposed module unless implementation need
 
 ### Phase 3 — Gemini agents and context filtering (hours 17–25)
 
-- Implement scoped context packets and three specialist agent schemas.
+- Implement scoped context packets and three specialist agent schemas. *(D-030: four — runtime/vision split into telemetry + vision.)*
 - Add triage orchestrator, selective dispatch, evidence validation, and bounded follow-up.
 - Rank hypotheses and render explanation/evidence links.
 - Add engineer fix verification.

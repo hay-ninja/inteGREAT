@@ -19,6 +19,9 @@ from .api.ws import Hub
 from .config import Settings
 from .diagnostics import expectations as expmod
 from .diagnostics import hypotheses as hypmod
+from .diagnostics.causal import causal_chain
+from .diagnostics.estimate import assess as shadow_assess, attach_verdicts
+from .diagnostics.graph_state import reapply_run_state, record_run_state
 from .diagnostics.rules import config_vs_wiring, run_rules
 from .diagnostics.state_machine import InvalidTransition, check_incident, check_test
 from .flow import build_event_flow
@@ -216,6 +219,11 @@ class Service:
                                      for rel, why in scan.skipped]
         manifest, lines, hw_file, hw_source = self._load_hardware(req, issues)
         built = build_graph(pid, [f.rel for f in scan.files], parsed, manifest, lines, hw_file, hardware_source=hw_source)
+
+        # Rescan keeps identity: carry the latest run state forward onto rebuilt elements (D-019).
+        old_g = self.store.get(K_GRAPH, pid, GraphSnapshot)
+        if old_g is not None:
+            reapply_run_state(old_g, built.nodes, built.edges)
 
         # Re-apply engineer wiring confirmations from earlier versions.
         if overrides:
@@ -454,6 +462,14 @@ class Service:
         result, rev = expmod.evaluate(exp, obs, serial, run.id)
         self.store.put(K_EVIDENCE, rev)
         run.result = result
+
+        # Write observed state back onto the canonical graph (residuals on the component,
+        # traversal on edges) so agents/inspectors see it anchored to structure.
+        g = self.store.get(K_GRAPH, pid, GraphSnapshot)
+        if g is not None and record_run_state(g, exp, result, run.id, serial):
+            self.store.put(K_GRAPH, g)
+            self.store.put(f"{K_GRAPH}_v{g.version}", g)
+            self._emit("graph.updated", pid, {"version": g.version, "reason": "run_state"})
         run.state = check_test(run.state, TestRunState.completed)
         run.ended_at_utc = utcnow()
 
@@ -578,6 +594,15 @@ class Service:
         _, _, wired_pin = config_vs_wiring(exp.component_id, g.nodes, g.edges)
         wired_label = next((n.label for n in g.nodes if n.id == wired_pin), None)
         hyps, actions = hypmod.build(iid, findings, wired_label, exp.component_id)
+        # Digital-shadow sweep: which fault-knob settings reproduce the observed signature.
+        # Adds inferred evidence/counter-evidence to hypotheses; rules keep the ranking.
+        if run.result is not None:
+            verdicts, shev = shadow_assess(exp, g.nodes, g.edges, run.result, run.id)
+            obs = {f.key: f.value for f in run.result.facts}
+            attach_verdicts(hyps, verdicts, shev.id,
+                            f"sent={obs.get('command_sent')} ack={obs.get('command_acknowledged')} "
+                            f"motion={obs.get('physical_motion')} valid={run.result.valid_samples}")
+            self.store.put(K_EVIDENCE, shev)
         codes = [f.code for f in findings]
         title = ("Measurement unavailable" if FaultCode.CAMERA_MEASUREMENT_UNAVAILABLE in codes
                  else f"Servo did not reach {exp.target:g}°")
@@ -638,12 +663,14 @@ class Service:
                    for i in f.supporting_evidence_ids + f.contradicting_evidence_ids]
         calls = self.tools.calls(iid)
         ev_ids += [i for c in calls for i in c.evidence_ids]
+        exp = self.store.get(K_EXPECT, inc.expectation_id, Expectation)
+        causal = causal_chain(exp, run.result) if run.result else []
         return InvestigationView(
             incident=inc, test_run=run, followup_runs=followups, hypotheses=hyps, actions=actions,
             evidence=self.evidence(ev_ids), highlights=self._highlights(inc, run, hyps),
             permissions=self.tools.permissions.active(iid), tool_calls=calls,
             messages=[e for e in engineer if e.payload.get("message")], agent_runs=agent_runs,
-            repair_jobs=self.store.list(K_REPAIR, RepairJob, parent_id=iid))
+            repair_jobs=self.store.list(K_REPAIR, RepairJob, parent_id=iid), causal_chain=causal)
 
     def _highlights(self, inc: Incident, run: TestRun, hyps: list[Hypothesis]) -> list[Highlight]:
         out: dict[str, Highlight] = {}

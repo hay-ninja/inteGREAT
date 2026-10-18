@@ -96,6 +96,7 @@ class EvidenceKind(StrEnum):
     tool_output = "tool_output"
     engineer_assertion = "engineer_assertion"
     rule_result = "rule_result"
+    shadow_residual = "shadow_residual"  # digital-shadow model output; always epistemic=inferred
 
 
 # ---------------------------------------------------------------- evidence (D-003)
@@ -556,6 +557,17 @@ class Highlight(Model):
     reason: str
 
 
+class CausalStep(Model):
+    """One link in the fixed cyber-physical causal chain for a run (diagnostics/causal.py)."""
+
+    key: str  # command_sent | command_acknowledged | signal_path | physical_motion | observed
+    label: str
+    value: Literal["yes", "no", "unknown", "unmeasured"]
+    inferred: bool = False  # True when the value was deduced, not directly observed
+    evidence_ids: list[str] = Field(default_factory=list)
+    breaks_if: str | None = None  # which fault state would interrupt this link
+
+
 class InvestigationView(Model):
     incident: Incident
     test_run: TestRun  # the run that opened the incident
@@ -569,6 +581,7 @@ class InvestigationView(Model):
     messages: list[Evidence] = Field(default_factory=list)  # engineer free-text inputs
     agent_runs: list["AgentRun"] = Field(default_factory=list)
     repair_jobs: list[RepairJob] = Field(default_factory=list)
+    causal_chain: list[CausalStep] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------- API payloads
@@ -725,7 +738,10 @@ class AgentName(StrEnum):
     orchestrator = "orchestrator"
     code = "code"
     hardware = "hardware"
-    runtime_vision = "runtime_vision"
+    telemetry = "telemetry"
+    vision = "vision"
+    critic = "critic"  # adversarial pass: tries to invalidate leading hypotheses
+    runtime_vision = "runtime_vision"  # legacy: persisted AgentRuns may still carry this
 
 
 class AgentFinding(Model):

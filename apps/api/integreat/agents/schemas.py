@@ -31,14 +31,27 @@ class AgentReportOut(BaseModel):
 class TriageQuestion(BaseModel):
     """The question the orchestrator wants a specific specialist to resolve (D-023)."""
 
-    agent: Literal["code", "hardware", "runtime_vision"]
+    agent: Literal["code", "hardware", "telemetry", "vision"]
     question: str = Field(max_length=400)
 
 
 class TriageOut(BaseModel):
-    agents: list[Literal["code", "hardware", "runtime_vision"]] = Field(min_length=1, max_length=3)
+    agents: list[Literal["code", "hardware", "telemetry", "vision"]] = Field(min_length=1, max_length=4)
     rationale: str = Field(max_length=400)
-    questions: list[TriageQuestion] = Field(default_factory=list, max_length=3)
+    questions: list[TriageQuestion] = Field(default_factory=list, max_length=4)
+
+
+class CritiqueItem(BaseModel):
+    """Adversarial verdict on one hypothesis from the critic pass."""
+
+    hypothesis_id: str
+    verdict: Literal["refuted", "survives", "undecided"]
+    statement: str = Field(max_length=400)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=12)
+
+
+class CritiqueOut(BaseModel):
+    critiques: list[CritiqueItem] = Field(default_factory=list, max_length=8)
 
 
 class SynthesisOut(BaseModel):

@@ -94,6 +94,8 @@ def script(schema, prompt):
     if schema == "SynthesisOut":
         return {"summary": "pin mismatch", "recommended_action_id": "action:nope",
                 "contradictions": [], "outcome_explanation": "inspect shows pin difference"}
+    if schema == "CritiqueOut":
+        return {"critiques": []}
     raise AssertionError(schema)
 
 
@@ -152,7 +154,7 @@ def test_stepfun_down_deterministic_still_works():
         runs = c.get(f"{API}/investigations/{iid}").json()["agent_runs"]
         triage = runs[0]
         assert triage["provider"] == "none"
-        assert set(triage["dispatched"]) == {"code", "hardware", "runtime_vision"}  # rule plan
+        assert set(triage["dispatched"]) == {"code", "hardware", "vision"}  # rule plan
         synth = runs[-1]
         assert synth["status"] == "failed" and "rule-based ranking stands" in synth["error"]
 
