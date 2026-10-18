@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/devices/camera/browser/pair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pair Browser Camera */
+        post: operations["pair_browser_camera_api_v1_devices_camera_browser_pair_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/demo-fixtures": {
         parameters: {
             query?: never;
@@ -913,6 +930,13 @@ export interface components {
             /** Stages */
             stages: components["schemas"]["ProviderStatus"][];
         };
+        /** BrowserCameraPairing */
+        BrowserCameraPairing: {
+            /** Url */
+            url: string;
+            /** Expires In Seconds */
+            expires_in_seconds: number;
+        };
         /** CalibrateRequest */
         CalibrateRequest: {
             /** Known Angle Deg */
@@ -920,8 +944,13 @@ export interface components {
         };
         /** CameraConnectRequest */
         CameraConnectRequest: {
-            /** Index */
+            /**
+             * Index
+             * @default 0
+             */
             index: number;
+            /** Stream Url */
+            stream_url?: string | null;
         };
         /** CameraStatus */
         CameraStatus: {
@@ -2253,6 +2282,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    pair_browser_camera_api_v1_devices_camera_browser_pair_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrowserCameraPairing"];
                 };
             };
         };

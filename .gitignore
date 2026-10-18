@@ -20,3 +20,5 @@ apps/web/dist/
 Thumbs.db
 .vscode/
 .idea/
+# Local HTTPS demo certificates and private keys
+.phone-camera/

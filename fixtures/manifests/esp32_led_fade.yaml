@@ -1,0 +1,70 @@
+# Two external LEDs; no potentiometer, motor, or driver.
+# Proposed wiring: physically verify before marking connections verified.
+# ESP32 is powered through USB; LEDs draw power from their GPIO outputs.
+schema: integreat-manifest/v1
+board:
+  id: esp32
+  label: ESP32-WROOM development board (exact variant unconfirmed)
+  mcu: esp32
+
+subsystems:
+  - id: led_control
+    label: Alternating LED Fades
+    source_globs: ["*.ino"]
+    components: [led_1, led_2, resistor_1, resistor_2]
+
+components:
+  - id: led_1
+    type: led
+    label: LED 1 (GPIO18)
+    pins: [anode, cathode]
+  - id: led_2
+    type: led
+    label: LED 2 (GPIO19)
+    pins: [anode, cathode]
+  - id: resistor_1
+    type: resistor
+    label: LED 1 series resistor (330 ohm)
+    pins: [a, b]
+    attributes:
+      resistance_ohms: 330
+  - id: resistor_2
+    type: resistor
+    label: LED 2 series resistor (330 ohm)
+    pins: [a, b]
+    attributes:
+      resistance_ohms: 330
+
+power_sources: []
+
+connections:
+  - id: led_1_gpio
+    from: mcu.GPIO18
+    to: resistor_1.a
+    kind: signal
+    verification: unverified
+  - id: led_1_series
+    from: resistor_1.b
+    to: led_1.anode
+    kind: signal
+    verification: unverified
+  - id: led_1_ground
+    from: led_1.cathode
+    to: mcu.GND
+    kind: ground
+    verification: unverified
+  - id: led_2_gpio
+    from: mcu.GPIO19
+    to: resistor_2.a
+    kind: signal
+    verification: unverified
+  - id: led_2_series
+    from: resistor_2.b
+    to: led_2.anode
+    kind: signal
+    verification: unverified
+  - id: led_2_ground
+    from: led_2.cathode
+    to: mcu.GND
+    kind: ground
+    verification: unverified

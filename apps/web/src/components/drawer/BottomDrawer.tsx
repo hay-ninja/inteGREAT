@@ -9,6 +9,7 @@ import { Table, pixel } from "@astryxdesign/core/Table";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Selector } from "@astryxdesign/core/Selector";
 import { NumberInput } from "@astryxdesign/core/NumberInput";
+import { TextInput } from "@astryxdesign/core/TextInput";
 import { StatusDot } from "@astryxdesign/core/StatusDot";
 import { Card } from "@astryxdesign/core/Card";
 import {
@@ -168,6 +169,14 @@ export function DeviceControls({ status, onStatus, onError }: { status: DeviceSt
   const [port, setPort] = useState("");
   const [cams, setCams] = useState<number[] | null>(null);
   const [cam, setCam] = useState("0");
+  const [cameraKind, setCameraKind] = useState("local");
+  const [phoneUrl, setPhoneUrl] = useState("");
+  const [pairing, setPairing] = useState<string | null>(null);
+  useEffect(() => {
+    if (!pairing) return;
+    const timer = window.setInterval(() => api.devices().then(onStatus).catch((e) => onError(e.message)), 2000);
+    return () => window.clearInterval(timer);
+  }, [pairing, onStatus, onError]);
   const [angle, setAngle] = useState(0);
   useEffect(() => { if (!port && status?.serial.ports.length) setPort(status.serial.ports[0].port); }, [status, port]);
   if (!status) return <EmptyState isCompact title="Loading devices…" />;
@@ -205,7 +214,27 @@ export function DeviceControls({ status, onStatus, onError }: { status: DeviceSt
             </Text>
           </HStack>
           {!c.connected ? (
-            cams === null ? (
+            <VStack gap={2}>
+            <Selector label="Camera source" value={cameraKind} onChange={setCameraKind}
+              options={[{ value: "local", label: "USB / laptop webcam" }, { value: "browser", label: "iPhone / Safari (no app)" }, { value: "phone", label: "MJPEG camera app" }]} />
+            {cameraKind === "browser" ? (
+              <VStack gap={2}>
+                <Text type="supporting">Start the local HTTPS phone server first (docs/phone-camera.md). Connect both devices to the same trusted Wi-Fi and trust the demo certificate on your iPhone.</Text>
+                <Button label={pairing ? "Create replacement pairing link" : "Pair iPhone camera"} clickAction={() => api.cameraPairBrowser().then((p) => setPairing(p.url)).catch((e) => onError(e.message))} />
+                {pairing && <>
+                  <TextInput label="Open this link in iPhone Safari" value={pairing} onChange={() => undefined} />
+                  <Button label="Copy pairing link" clickAction={() => navigator.clipboard.writeText(pairing).catch(() => onError("Select and copy the pairing link manually."))} />
+                  <Text type="supporting">Tap Start camera on your phone. Waiting for frames; this link expires in two hours. Keep it private.</Text>
+                  <Button label="Cancel pairing" variant="ghost" clickAction={() => run(api.cameraRelease()).then(() => setPairing(null))} />
+                </>}
+              </VStack>
+            ) : cameraKind === "phone" ? (
+              <VStack gap={2}>
+                <Text type="supporting">Run an HTTP MJPEG camera app on your phone. Connect both devices to the same trusted Wi-Fi and paste its video stream URL, not its web page. Use 640×480 or 1280×720. Keep the app open.</Text>
+                <TextInput label="Phone MJPEG URL" value={phoneUrl} onChange={setPhoneUrl} placeholder="http://192.168.1.42:8080/video" />
+                <Button label="Connect phone camera" isDisabled={!phoneUrl.trim()} clickAction={() => run(api.cameraConnectPhone(phoneUrl.trim()))} />
+              </VStack>
+            ) : cams === null ? (
               <Button label="Find cameras" clickAction={() => api.cameraProbe().then((x) => { setCams(x); if (x.length) setCam(String(x[0])); }).catch((e) => onError(e.message))} />
             ) : (
               <HStack gap={1} vAlign="end">
@@ -213,14 +242,17 @@ export function DeviceControls({ status, onStatus, onError }: { status: DeviceSt
                           options={cams.map((i) => ({ value: String(i), label: `Camera ${i}` }))} />
                 <Button label="Connect camera" size="sm" isDisabled={!cams.length} clickAction={() => run(api.cameraConnect(+cam))} />
               </HStack>
-            )
+            )}
+            </VStack>
           ) : (
             <HStack gap={1} vAlign="end">
               <NumberInput label="Servo is at" size="sm" units="°" value={angle} onChange={setAngle} width={130} />
               <Button label="Calibrate" size="sm" clickAction={() => run(api.cameraCalibrate(angle))} />
-              <Button label="Release" size="sm" variant="ghost" clickAction={() => run(api.cameraRelease())} />
+              <Button label="Release" size="sm" variant="ghost" clickAction={() => run(api.cameraRelease()).then(() => setPairing(null))} />
             </HStack>
           )}
+          {c.last_error && <Text type="supporting" color="secondary">{c.last_error}</Text>}
+          <Text type="supporting">Camera input supports preview and existing marker tracking. LED brightness measurements are not implemented yet.</Text>
           <Text type="supporting">Two printed marker stickers let the camera measure the arm: id 1 on the moving arm, id 0 beside the servo.</Text>
           <Text type="supporting">If the camera can't see the markers, the measurement is reported as unavailable — never as a fault. Calibrate at a known angle before a live test.</Text>
         </VStack>

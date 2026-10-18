@@ -1,0 +1,4 @@
+:root { color-scheme: dark; font-family: system-ui, sans-serif; }
+body { margin: 1.5rem; } main { max-width: 40rem; margin: auto; }
+video { width: 100%; max-height: 60vh; background: black; }
+button { padding: 1rem; margin: .25rem; font: inherit; }

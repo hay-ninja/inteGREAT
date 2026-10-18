@@ -1,5 +1,12 @@
 # Decision log
 
+### D-034 Two-LED bench sketch while preparing alternate demo — 2026-10-18
+- Owner has two external LEDs on GPIO18/19 and requested alternating fades; added standalone
+  Arduino firmware using analogWrite, with no inteGREAT instrumentation or app changes.
+- This supports bench bring-up; it does not satisfy or replace the PRD servo-angle acceptance
+  criteria. An LED-based app investigation still needs explicitly adapted contracts/observations.
+- Each LED requires its own series resistor. Hardware operation is unverified.
+
 Append-only. Each entry: what, why, what it rules out, and when to revisit. Supersede, don't edit:
 mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — the code shows what, this shows why.
 
@@ -532,3 +539,36 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   the engineer picks an observed outcome, not an option index.
 - The right workspace panel resizes to `50vw` (was 620px cap) so Debug/Analyze can act
   as a real workspace beside the map.
+### D-042 Phone camera via explicit LAN HTTP MJPEG source — 2026-10-18
+- (Renumbered from upstream D-035 on merge — the number collided with the feature
+  branch's projects-hub decision; no code references the old number.)
+- Owner requested a phone camera while keeping the laptop usable. Rig setup accepts an
+  explicit HTTP MJPEG URL from a phone camera app; no phone browser camera permissions,
+  HTTPS hosting, public tunnel, or platform-specific virtual webcam driver is required.
+- CameraSource receives frames with host receive timestamps; preview and existing ArUco
+  estimation reuse that interface. A fresh source ID requires calibration after reconnect.
+- Restrict URLs to literal RFC1918 IPv4; refuse credentials/query/fragment, redirects,
+  environment proxies, and non-HTTP schemes. Compressed buffers are capped, reads time out,
+  stale frames are unavailable after 5 seconds, and reconnection is explicit.
+- Camera transport does not implement LED brightness evaluation or change servo acceptance
+  criteria. Real phone/app interoperability remains to be verified on the owner's LAN.
+- Local LED notes were renumbered D-034 after the pull introduced upstream D-028–D-033.
+
+### D-043 Direct browser camera with isolated local HTTPS gateway — 2026-10-18
+- (Renumbered from upstream D-036 on merge — collided with the dynamic-graph decision.)
+- Owner requested an iPhone camera without third-party apps. Safari captures rear-camera
+  video after explicit permission, samples bounded JPEG frames, and uploads same-origin
+  to the laptop. No microphone, cloud service, external JavaScript, or frame persistence.
+- A separate restricted FastAPI app exposes only capture assets, token-gated frame upload,
+  and token-gated stop on LAN HTTPS :8443. Main project API remains loopback :8000.
+  Both listeners share one CameraManager in a single process; no second service/database.
+- Pairing is initiated from laptop rig setup; a 256-bit token travels in URL fragment,
+  is removed from page history, and authenticates uploads via header. Replacement, Release,
+  Stop, and two-hour expiration invalidate access. Hidden-page cleanup is best effort;
+  five-second frame freshness prevents stale camera readiness after disconnect.
+- Safari secure-context requirements require trusting a locally generated seven-day demo
+  CA on iPhone. Scripts generate certs and run the two listeners; trust installation is
+  manual, CA signing key is not retained, and secrets stay in ignored .phone-camera/.
+  This avoids opening the unrestricted local development API to the LAN.
+- Camera transport preserves host receive timestamps and existing ArUco calibration.
+  LED metrics remain separate; browser/synthetic tests are not iPhone hardware validation.
