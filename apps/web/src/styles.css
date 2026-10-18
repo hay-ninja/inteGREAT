@@ -176,3 +176,18 @@
     background: var(--color-background-card); border: 1px solid var(--color-border-emphasized);
     border-radius: var(--radius-card); box-shadow: 0 12px 40px rgb(0 0 0 / 0.5); }
   .graph-inspector-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+
+  /* Environment setup dialog — content scrolls inside the dialog (D-047 follow-up). */
+  .setup-dialog-body { max-height: calc(90dvh - 72px); overflow-y: auto; overscroll-behavior: contain; }
+
+  /* LED region picker — drag a box on the live feed (D-047 follow-up). */
+  .roi-view { position: relative; max-width: 100%; user-select: none; }
+  .roi-view img { display: block; width: 100%; max-height: 300px; object-fit: contain;
+                  border-radius: var(--radius-element); border: 1px solid var(--color-border); background: #000; }
+  .roi-layer { position: absolute; inset: 0; cursor: crosshair; touch-action: none; }
+  .roi-box { position: absolute; border: 2px solid transparent; border-radius: 2px; padding: 0; background: none; }
+  .roi-current { border-color: #46a24a; }
+  .roi-candidate { border-color: var(--color-accent); background: rgb(128 160 255 / 0.15);
+                   cursor: pointer; pointer-events: auto; }
+  .roi-candidate:hover, .roi-candidate:focus-visible { background: rgb(128 160 255 / 0.3); }
+  .roi-drag { border-color: var(--color-accent); border-style: dashed; pointer-events: none; }

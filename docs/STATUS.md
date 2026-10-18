@@ -417,6 +417,11 @@ What remains is hardware validation.
 - Verified: 174/174 pytest (11 new LED-CV tests incl. locator units, keyed
   estimators, both gating directions), 17/17 vitest, `tsc -b`, `vite build`.
   **Not run on real hardware** — all verification is synthetic frames/loop serial.
+- Follow-up (same day): environment setup dialog body now scrolls
+  (`.setup-dialog-body`); the LED section embeds the live feed with a
+  drag-to-mark overlay — drag a box around the LED to set its region, or click
+  an outlined blink candidate on the video. Typed x,y,w,h stays as fallback.
+  Verified: `tsc -b` clean, 17/17 vitest, `vite build`.
 
 ## Side inspector + failure-path trace (D-048) — done 2026-10-18
 - Graph-inspect modal → side panel docked inside the canvas (scrollable body,

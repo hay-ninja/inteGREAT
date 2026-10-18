@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
 import { VStack } from "@astryxdesign/core/VStack";
 import { HStack } from "@astryxdesign/core/HStack";
@@ -32,31 +32,34 @@ export function EnvironmentSetupDialog(p: {
   return (
     <Dialog isOpen={p.open} onOpenChange={(open) => !open && p.onClose()} width={840} maxHeight="90dvh" purpose="form">
       <DialogHeader title="Set up the live environment" subtitle="Plug in the board and camera, then keep the printed markers in view so the camera can measure the component." onOpenChange={(open) => !open && p.onClose()} />
-      <VStack gap={4} padding={4}>
-        <HStack gap={3} wrap="wrap">
-          {checks.map((c) => (
-            <HStack key={c.label} gap={1} vAlign="center">
-              <StatusDot variant={c.ready ? "success" : "neutral"} label={`${c.label}: ${c.ready ? "ready" : "needed"}`} />
-              <Text type="supporting">{c.label}</Text>
-            </HStack>
-          ))}
-        </HStack>
-        <DeviceControls status={p.devices} onStatus={p.onDevices} onError={p.onError} />
-        {isLed && p.devices?.camera.connected && (
-          <LedSetup expectation={p.expectation!} devices={p.devices} onDevices={p.onDevices} onError={p.onError} />
-        )}
-        <Text type="supporting">Live tests require all three checks. You can explore the complete workflow with a clearly labeled simulated environment.</Text>
-        <HStack gap={2} hAlign="end">
-          {!ready && <Button label="Use simulated environment" variant="primary" onClick={p.onUseSimulation} />}
-          <Button label={ready ? "Environment ready — continue" : "Close setup"} variant={ready ? "primary" : "ghost"} onClick={p.onClose} />
-        </HStack>
-      </VStack>
+      <div className="setup-dialog-body">
+        <VStack gap={4} padding={4}>
+          <HStack gap={3} wrap="wrap">
+            {checks.map((c) => (
+              <HStack key={c.label} gap={1} vAlign="center">
+                <StatusDot variant={c.ready ? "success" : "neutral"} label={`${c.label}: ${c.ready ? "ready" : "needed"}`} />
+                <Text type="supporting">{c.label}</Text>
+              </HStack>
+            ))}
+          </HStack>
+          <DeviceControls status={p.devices} onStatus={p.onDevices} onError={p.onError} />
+          {isLed && p.devices?.camera.connected && (
+            <LedSetup expectation={p.expectation!} devices={p.devices} onDevices={p.onDevices} onError={p.onError} />
+          )}
+          <Text type="supporting">Live tests require all three checks. You can explore the complete workflow with a clearly labeled simulated environment.</Text>
+          <HStack gap={2} hAlign="end">
+            {!ready && <Button label="Use simulated environment" variant="primary" onClick={p.onUseSimulation} />}
+            <Button label={ready ? "Environment ready — continue" : "Close setup"} variant={ready ? "primary" : "ghost"} onClick={p.onClose} />
+          </HStack>
+        </VStack>
+      </div>
     </Dialog>
   );
 }
 
-/** LED locator + baseline (D-045). Blink-to-find sends engineer-confirmed fixed serial
- *  commands — never arbitrary writes — and diffs frames; the manual box is the fallback. */
+/** LED locator + baseline (D-047). Blink-to-find sends engineer-confirmed fixed serial
+ *  commands — never arbitrary writes — and diffs frames; dragging a box on the video
+ *  overlay is the manual fallback. */
 function LedSetup({ expectation, devices, onDevices, onError }: {
   expectation: Expectation;
   devices: DeviceStatus;
@@ -72,6 +75,7 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
     (expectation.trigger?.value ?? "LED ON").replace(/on$/i, "OFF"));
   const [msg, setMsg] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<number[][] | null>(null);
+  const [roi, setRoi] = useState<number[] | null>(null);
   const [manual, setManual] = useState("");
   useEffect(() => setCandidates(null), [cid]);
 
@@ -82,16 +86,17 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
       .then((r) => {
         setMsg(r.message);
         if (r.candidates?.length) setCandidates(r.candidates);
+        if (r.roi) setRoi(r.roi);
         refresh();
       })
       .catch((e) => onError(e.message))
       .finally(() => setBusy(false));
   };
-  const useRoi = (roi: number[]) => {
+  const useRoi = (next: number[]) => {
     setBusy(true); setMsg(null);
-    api.cameraSetLedRoi(cid, roi)
+    api.cameraSetLedRoi(cid, next.map(Math.round))
       .then(onDevices)
-      .then(() => { setCandidates(null); setMsg("Region set — LED-off baseline recorded"); })
+      .then(() => { setRoi(next.map(Math.round)); setCandidates(null); setMsg("Region set — LED-off baseline recorded"); })
       .catch((e) => onError(e.message))
       .finally(() => setBusy(false));
   };
@@ -111,9 +116,12 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
           <Text type="label">LED measurement — {cid}</Text>
           <Text type="supporting">{calibrated ? "region + off-baseline recorded" : "not yet located"}</Text>
         </HStack>
+        <RoiView cid={cid} candidates={candidates ?? []} roi={roi} onPick={useRoi} disabled={busy} />
         <Text type="supporting">
-          Blink-to-find toggles the LED over serial and watches which part of the image changes —
-          no marker needed. It sends exactly the two commands below, nothing else.
+          Drag a box around the LED on the video — picking a region also records the
+          LED-off baseline, so make sure it is dark right now. Blink-to-find is usually
+          faster: it toggles the LED over serial and watches which part of the image
+          changes — no marker needed, and it sends exactly the two commands below, nothing else.
         </Text>
         <HStack gap={1} vAlign="end" wrap="wrap">
           <TextInput label="ON command" value={onCmd} onChange={setOnCmd} width={140} />
@@ -124,11 +132,11 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
                   clickAction={locate} />
         </HStack>
         {msg && <Text type="supporting" color="secondary">{msg}</Text>}
-        {candidates?.map((r, i) => (
-          <HStack key={i} gap={1} vAlign="center">
-            <Button label={`Use region ${i + 1} — ${r[2]}×${r[3]} at (${r[0]}, ${r[1]})`} size="sm" variant="ghost" clickAction={() => useRoi(r)} />
-          </HStack>
-        ))}
+        {candidates && candidates.length > 1 && (
+          <Text type="supporting" color="secondary">
+            Several regions changed — click the box on the video that is this LED (outlined above).
+          </Text>
+        )}
         <HStack gap={1} vAlign="end">
           <TextInput label="Or type the region: x, y, w, h" value={manual} onChange={setManual} width={240} placeholder="e.g. 188, 68, 24, 24" />
           <Button label="Use region" size="sm" variant="ghost" isDisabled={busy || !manual.trim()} clickAction={manualRoi} />
@@ -140,5 +148,88 @@ function LedSetup({ expectation, devices, onDevices, onError }: {
         )}
       </VStack>
     </Card>
+  );
+}
+
+/** Live feed with a drag-to-mark overlay. Rects are kept in natural frame pixels and
+ *  drawn as percentage-positioned divs so the overlay tracks the scaled <img>. */
+function RoiView({ cid, candidates, roi, onPick, disabled }: {
+  cid: string;
+  candidates: number[][];
+  roi: number[] | null;
+  onPick: (r: number[]) => void;
+  disabled: boolean;
+}) {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const dragStart = useRef<[number, number] | null>(null);
+  const [nat, setNat] = useState<[number, number] | null>(null);
+  const [drag, setDrag] = useState<number[] | null>(null); // [x,y,w,h] in frame px
+
+  // MJPEG frames don't reliably re-fire onLoad — poll natural size until known.
+  useEffect(() => {
+    const tick = () => {
+      const im = imgRef.current;
+      if (im?.naturalWidth) setNat((cur) =>
+        cur && cur[0] === im.naturalWidth && cur[1] === im.naturalHeight ? cur : [im.naturalWidth, im.naturalHeight]);
+    };
+    tick();
+    const id = window.setInterval(tick, 500);
+    return () => window.clearInterval(id);
+  }, [cid]);
+
+  const toNat = (e: ReactPointerEvent): [number, number] | null => {
+    const im = imgRef.current;
+    if (!im?.naturalWidth) return null;
+    const b = im.getBoundingClientRect();
+    const sx = im.naturalWidth / b.width, sy = im.naturalHeight / b.height;
+    return [
+      Math.max(0, Math.min(im.naturalWidth, (e.clientX - b.left) * sx)),
+      Math.max(0, Math.min(im.naturalHeight, (e.clientY - b.top) * sy)),
+    ];
+  };
+
+  const down = (e: ReactPointerEvent) => {
+    if (disabled) return;
+    const p = toNat(e);
+    if (!p) return;
+    dragStart.current = p;
+    setDrag([p[0], p[1], 0, 0]);
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+  };
+  const move = (e: ReactPointerEvent) => {
+    const s = dragStart.current;
+    if (!s) return;
+    const p = toNat(e);
+    if (!p) return;
+    setDrag([Math.min(s[0], p[0]), Math.min(s[1], p[1]), Math.abs(p[0] - s[0]), Math.abs(p[1] - s[1])]);
+  };
+  const up = () => {
+    const d = drag;
+    dragStart.current = null;
+    setDrag(null);
+    if (d && d[2] >= 6 && d[3] >= 6) onPick(d);
+  };
+  const box = (r: number[]) => nat ? {
+    left: `${(r[0] / nat[0]) * 100}%`, top: `${(r[1] / nat[1]) * 100}%`,
+    width: `${(r[2] / nat[0]) * 100}%`, height: `${(r[3] / nat[1]) * 100}%`,
+  } : undefined;
+
+  return (
+    <div className="roi-view">
+      <img ref={imgRef} draggable={false}
+           src={`/api/v1/devices/camera/stream.mjpg?metric=led_state&component=${encodeURIComponent(cid)}`}
+           alt="Live camera — drag a box around the LED" />
+      <div className="roi-layer" role="presentation"
+           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+        {nat && roi && <div className="roi-box roi-current" style={box(roi)} />}
+        {nat && candidates.map((r, i) => (
+          <button key={i} className="roi-box roi-candidate" style={box(r)}
+                  aria-label={`Use candidate region ${i + 1}`}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => onPick(r)} />
+        ))}
+        {nat && drag && <div className="roi-box roi-drag" style={box(drag)} />}
+      </div>
+    </div>
   );
 }
