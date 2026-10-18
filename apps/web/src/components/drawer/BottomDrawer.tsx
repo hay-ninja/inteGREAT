@@ -1,7 +1,7 @@
 /** Collapsible bottom drawer: measurements and logs live here, out of the way until needed.
  *  Height drags like a VS Code panel (drag the top edge; drag down past the header to close),
  *  and a second pane can be split off beside the first — e.g. camera output next to activity. */
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { HStack } from "@astryxdesign/core/HStack";
 import { VStack } from "@astryxdesign/core/VStack";
 import { TabList, Tab } from "@astryxdesign/core/TabList";
@@ -150,7 +150,7 @@ export function BottomDrawer(p: Props) {
 
 /** Raw camera feed for orientation during a test. Measurements still come from the
     estimator — this picture is never itself evidence. */
-function CameraPane({ devices, onOpenSetup }: { devices: DeviceStatus | null; onOpenSetup: () => void }) {
+const CameraPane = memo(function CameraPane({ devices, onOpenSetup }: { devices: DeviceStatus | null; onOpenSetup: () => void }) {
   const c = devices?.camera;
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [c?.connected, c?.source_id]);
@@ -176,11 +176,11 @@ function CameraPane({ devices, onOpenSetup }: { devices: DeviceStatus | null; on
            alt="Live camera view of the test environment" onError={() => setFailed(true)} />
     </VStack>
   );
-}
+});
 
 interface Row extends Record<string, unknown> { id: string; t: string; dir: string; raw: string; note: string }
 
-function SerialLog({ serial }: { serial: SerialEvent[] }) {
+const SerialLog = memo(function SerialLog({ serial }: { serial: SerialEvent[] }) {
   if (!serial.length) return <EmptyState isCompact title="No messages yet" description="Everything sent to and heard back from the board during a test appears here." />;
   const rows: Row[] = serial.map((s) => ({
     id: s.id, t: `${s.elapsed_ms} ms`, dir: s.direction === "tx" ? "→ board" : "← board", raw: s.raw,
@@ -191,13 +191,13 @@ function SerialLog({ serial }: { serial: SerialEvent[] }) {
                columns={[{ key: "t", header: "Time", width: pixel(80) }, { key: "dir", header: "Direction", width: pixel(80) },
                          { key: "raw", header: "Message" }, { key: "note", header: "From code" }]} />
   );
-}
+});
 
 const SHOWN = new Set(["project.imported", "graph.updated", "expectation.confirmed", "test.started", "test.completed",
   "expectation.failed", "incident.created", "action.completed", "action.denied", "permissions.updated",
   "agent.started", "agent.reported", "message.added", "test.verification_completed", "incident.resolved", "error"]);
 
-function Timeline({ events }: { events: IntegreatEvent[] }) {
+const Timeline = memo(function Timeline({ events }: { events: IntegreatEvent[] }) {
   const shown = events.filter((e) => SHOWN.has(e.type)).slice().reverse();
   if (!shown.length) return <EmptyState isCompact title="Nothing yet" />;
   interface TRow extends Record<string, unknown> { id: string; t: string; type: string; what: string }
@@ -208,7 +208,7 @@ function Timeline({ events }: { events: IntegreatEvent[] }) {
                  columns={[{ key: "t", header: "Time", width: pixel(90) }, { key: "type", header: "Event", width: pixel(170) },
                            { key: "what", header: "" }]} />
   );
-}
+});
 
 function summarize(e: IntegreatEvent): string {
   const p = e.payload as Record<string, unknown>;
@@ -229,7 +229,7 @@ function summarize(e: IntegreatEvent): string {
   }
 }
 
-function Audit({ calls }: { calls: ToolCall[] }) {
+const Audit = memo(function Audit({ calls }: { calls: ToolCall[] }) {
   if (!calls.length) return <EmptyState isCompact title="No tool calls yet" description="Every tool run, approval and denial is listed here." />;
   interface ARow extends Record<string, unknown> { id: string; t: string; tool: string; who: string; decision: string; what: string }
   const rows: ARow[] = [...calls].reverse().map((c) => ({ id: c.id, t: new Date(c.started_at_utc).toLocaleTimeString(),
@@ -240,10 +240,10 @@ function Audit({ calls }: { calls: ToolCall[] }) {
                            { key: "who", header: "By", width: pixel(120) }, { key: "decision", header: "Decision", width: pixel(120) },
                            { key: "what", header: "Result" }]} />
   );
-}
+});
 
 /** Status-only view — actual connect/calibrate actions live in the single environment setup dialog. */
-function DeviceSummary({ status, onOpenSetup }: { status: DeviceStatus | null; onOpenSetup: () => void }) {
+const DeviceSummary = memo(function DeviceSummary({ status, onOpenSetup }: { status: DeviceStatus | null; onOpenSetup: () => void }) {
   const s = status?.serial, c = status?.camera;
   return (
     <HStack gap={4} vAlign="center" wrap="wrap">
@@ -262,7 +262,7 @@ function DeviceSummary({ status, onOpenSetup }: { status: DeviceStatus | null; o
       <Button label="Open environment setup" size="sm" onClick={onOpenSetup} />
     </HStack>
   );
-}
+});
 
 export function DeviceControls({ status, onStatus, onError }: { status: DeviceStatus | null; onStatus: (s: DeviceStatus) => void; onError: (m: string) => void }) {
   const [port, setPort] = useState("");

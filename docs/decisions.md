@@ -616,3 +616,18 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   half of tab/button clicks — a fixed 16px grip spacer now absorbs it (the pill grip
   sits in that zone, like VS Code's panel sash). Text open/close buttons became
   chevron IconButtons (collapse/expand), matching the VS Code panel chrome.
+
+### D-046 Batched event-stream updates for scroll responsiveness — 2026-10-18
+- **Problem:** scrolling felt laggy during/after runs. Each `test.observation` and
+  `test.serial` websocket event (~15+/sec) caused three React state updates, so the
+  entire workspace re-rendered ~15 times a second; `flowSeq`/`refreshSeq` also made
+  `HistoryView` and `EventFlowView` fire a fetch per event.
+- **Choice:** batch stream events into a 200ms flush window in `App.tsx`
+  (`queueStreamEvent`/`flushEvents`): one `setEvents`, one `setSerial`, one
+  `flowSeq` bump per window. Lifecycle events (`test.started`, `test.completed`,
+  agent/incident/tool events) still apply immediately and `test.completed` forces a
+  flush so UI state never lags the run. Refetches in the two views are capped to one
+  per 1.5s with a trailing call. Drawer tables are `React.memo`'d so the 4s device
+  poll doesn't rebuild them. Serial still feels live (5 updates/sec) but renders and
+  fetches dropped ~3-15x. Trade-off accepted: serial lines appear up to 200ms later
+  than the wire — imperceptible next to human scroll/reading speed.

@@ -382,3 +382,18 @@ What remains is hardware validation.
 - Polish: "Board messages" → "Serial output"; 16px grip spacer under the resize
   handle so its 15px hitbox can't eat tab/button clicks; open/close is a chevron
   IconButton (VS Code panel chrome).
+
+## Scroll responsiveness (D-046) — done 2026-10-18
+- Root cause of sluggish scroll during runs: every `test.observation`/`test.serial`
+  WS event (~15+/sec) triggered `setEvents` + `setSerial` + `setFlowSeq`, re-rendering
+  the whole workspace tree at ~15Hz, and `flowSeq`/`refreshSeq` made HistoryView +
+  EventFlowView refetch on every bump (~15 fetches/sec).
+- Fix: event stream is batched into a 200ms flush (single setEvents/setSerial/flowSeq
+  per flush; lifecycle events stay immediate; seq-dedupe preserved; queues cleared on
+  project switch). HistoryView/EventFlowView refetches capped at one per 1.5s.
+- Drawer leaf components (`SerialLog`, `Timeline`, `Audit`, `DeviceSummary`,
+  `CameraPane`) wrapped in `React.memo` + `onEnvSetup` stabilized via `useCallback`,
+  so the 4s device poll and busy-state toggles no longer rebuild tables.
+- Verified: `tsc -b` clean, 17/17 vitest, build clean; drawer_test (all gestures,
+  zero console errors); scroll_test wheels over the drawer — 579px on 8 ticks,
+  no dead zones, no pageerrors.

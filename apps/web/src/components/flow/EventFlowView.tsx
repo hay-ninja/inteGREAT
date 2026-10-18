@@ -79,13 +79,20 @@ export function EventFlowView(p: Props) {
   const [idx, setIdx] = useState(0);
   const reqRef = useRef(0);
 
+  const lastFetch = useRef(0);
   useEffect(() => {
     if (!p.runId) { setFlow(null); return; }
-    const req = ++reqRef.current;
-    api.testFlow(p.runId)
-      .then((f) => { if (req === reqRef.current) { setFlow(f); setError(null); setIdx((i) => Math.min(i, Math.max(0, f.events.length - 1))); } })
-      .catch((e) => { if (req === reqRef.current) setError(e instanceof Error ? e.message : String(e)); });
-    return () => { reqRef.current++; };
+    const load = () => {
+      lastFetch.current = Date.now();
+      const req = ++reqRef.current;
+      api.testFlow(p.runId!)
+        .then((f) => { if (req === reqRef.current) { setFlow(f); setError(null); setIdx((i) => Math.min(i, Math.max(0, f.events.length - 1))); } })
+        .catch((e) => { if (req === reqRef.current) setError(e instanceof Error ? e.message : String(e)); });
+    };
+    // Live runs bump refreshSeq ~5x/sec; refetching that often fights scrolling. Cap it.
+    const wait = Date.now() - lastFetch.current;
+    const t = wait < 1500 ? window.setTimeout(load, 1500 - wait) : (load(), 0);
+    return () => { reqRef.current++; window.clearTimeout(t); };
   }, [p.runId, p.refreshSeq]);
 
   const selectedRun = p.runs.find((r) => r.id === p.runId) ?? null;

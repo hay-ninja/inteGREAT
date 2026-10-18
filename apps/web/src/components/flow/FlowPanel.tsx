@@ -2,7 +2,7 @@
  * Guided debugging flow (D-021): Set up → Run → Investigate → Verify.
  * Rule of thumb: each step shows ONE primary button. Alternatives and advanced tools are collapsed.
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { VStack } from "@astryxdesign/core/VStack";
 import { HStack } from "@astryxdesign/core/HStack";
 import { Text } from "@astryxdesign/core/Text";
@@ -738,16 +738,23 @@ function HistoryView(p: FlowProps) {
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [labels, setLabels] = useState<Record<string, string>>({});
   const [err, setErr] = useState("");
+  const lastFetch = useRef(0);
   useEffect(() => {
     let live = true;
-    Promise.all([api.projectTests(p.projectId), api.expectations(p.projectId)])
-      .then(([rs, exps]) => {
-        if (!live) return;
-        setRuns(rs);
-        setLabels(Object.fromEntries(exps.map((e) => [e.id, e.trigger.value])));
-      })
-      .catch((e) => live && setErr((e as Error).message));
-    return () => { live = false; };
+    const load = () => {
+      lastFetch.current = Date.now();
+      Promise.all([api.projectTests(p.projectId), api.expectations(p.projectId)])
+        .then(([rs, exps]) => {
+          if (!live) return;
+          setRuns(rs);
+          setLabels(Object.fromEntries(exps.map((e) => [e.id, e.trigger.value])));
+        })
+        .catch((e) => live && setErr((e as Error).message));
+    };
+    // Runs bump flowSeq ~5x/sec; refetching that often fights scrolling. Cap it.
+    const wait = Date.now() - lastFetch.current;
+    const t = wait < 1500 ? window.setTimeout(load, 1500 - wait) : (load(), 0);
+    return () => { live = false; window.clearTimeout(t); };
   }, [p.projectId, p.flowSeq]);
   const selected = p.run?.id;
   return (
