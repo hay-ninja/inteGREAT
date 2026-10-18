@@ -14,8 +14,9 @@ export function RigSetupDialog(p: {
   onDevices: (s: DeviceStatus) => void;
   onError: (message: string) => void;
   onUseSimulation: () => void;
+  observationOnly?: boolean;
 }) {
-  const checks = [
+  const checks = p.observationOnly ? [{ label: "Camera connected", ready: !!p.devices?.camera.connected }] : [
     { label: "ESP32 connected", ready: !!p.devices?.serial.connected },
     { label: "Camera connected", ready: !!p.devices?.camera.connected },
     { label: "Angle calibrated", ready: !!p.devices?.camera.connected && !!p.devices?.camera.calibrated },
@@ -23,7 +24,7 @@ export function RigSetupDialog(p: {
   const ready = checks.every((c) => c.ready);
   return (
     <Dialog isOpen={p.open} onOpenChange={(open) => !open && p.onClose()} width={840} maxHeight="90dvh" purpose="form">
-      <DialogHeader title="Set up the live rig" subtitle="Plug in the board and camera, then tell it the arm's current angle so the camera can measure movement." onOpenChange={(open) => !open && p.onClose()} />
+      <DialogHeader title="Set up the live rig" subtitle={p.observationOnly ? "Connect a camera, then select and calibrate LED regions in the workspace. The LEDs run their existing firmware; no serial connection is required." : "Plug in the board and camera, then tell it the arm's current angle so the camera can measure movement."} onOpenChange={(open) => !open && p.onClose()} />
       <VStack gap={4} padding={4}>
         <HStack gap={3} wrap="wrap">
           {checks.map((c) => (
@@ -33,10 +34,10 @@ export function RigSetupDialog(p: {
             </HStack>
           ))}
         </HStack>
-        <DeviceControls status={p.devices} onStatus={p.onDevices} onError={p.onError} />
-        <Text type="supporting">Live tests require all three checks. You can explore the complete workflow with a clearly labeled simulated rig.</Text>
+        <DeviceControls status={p.devices} onStatus={p.onDevices} onError={p.onError} observationOnly={p.observationOnly} />
+        <Text type="supporting">{p.observationOnly ? "LED region calibration and the visual expectation are configured in the workspace after connecting the camera." : "Live servo tests require all three checks. You can explore the complete workflow with a clearly labeled simulated rig."}</Text>
         <HStack gap={2} hAlign="end">
-          {!ready && <Button label="Use simulated rig" variant="primary" onClick={p.onUseSimulation} />}
+          {!ready && !p.observationOnly && <Button label="Use simulated rig" variant="primary" onClick={p.onUseSimulation} />}
           <Button label={ready ? "Rig ready — continue" : "Close setup"} variant={ready ? "primary" : "ghost"} onClick={p.onClose} />
         </HStack>
       </VStack>

@@ -354,3 +354,24 @@ What remains is hardware validation.
   pass; certificate generation and CLI checked. Chromium synthetic-camera walkthrough
   verifies capture/upload/stop and token removal; real Safari/certificate trust/LAN still
   need owner-device validation. LED brightness evaluation remains unimplemented.
+
+## Two-LED visual demo — 2026-10-18 (D-044)
+- Supersedes earlier transport-only LED limitation: projects with exactly two LEDs and no
+  servo now open LED visual checks. Select two image ROIs, capture dim/bright references,
+  confirm an 8-second alternating expectation, observe, repair externally, and Verify.
+- Camera-only readiness: no serial commands, servo markers, or firmware instrumentation.
+  Webcam/MJPEG/Safari sources reuse CameraSource. Existing servo tests remain unchanged.
+- Numeric samples + calibration + source/wiring context + resolving result evidence persist;
+  graph LED states and Activity update, runs/config restore on reload. Explicit passing
+  verification resolves a failed visual run; missing/stale/gapped frames are inconclusive.
+- Guide: `docs/led-demo.md`, using the existing LED sketch + YAML manifest. Detectors remain
+  case-specific; the shared region/measurement/evidence infrastructure is reusable.
+- Validation: full backend regression 143 passing before two final boundary tests; focused
+  LED + observation + camera suite 51 passing after those additions. Frontend typecheck,
+  17 frontend tests and production build pass. Actual browser/API walkthrough with synthetic
+  images verifies saved calibration, marker-free setup, failure -> verification -> pass,
+  graph update and reload. Screenshot inspected for layout; physical LED/camera validation
+  remains outstanding. Final LED suite rerun: 10/10 pass, including per-component graph state.
+- Limits: fixed framing/stable exposure; occlusion, moving camera or reflections may mimic
+  LED behavior. These are image measurements, never voltage/PWM/current, and this separate
+  LED path does not yet invoke the existing agent/Devin pipeline.

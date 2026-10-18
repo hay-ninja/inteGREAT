@@ -405,18 +405,18 @@ def camera_calibrate(req: CalibrateRequest, request: Request):
     return d.status()
 
 
-def _jpeg(d) -> bytes | None:
+def _jpeg(d, raw: bool = False) -> bytes | None:
     f = d.camera.source.latest() if d.camera.connected else None
     if f is None:
         return None
-    est = d.camera.estimator().estimate(f.image)
-    ok, buf = cv2.imencode(".jpg", annotate(f.image, est), [cv2.IMWRITE_JPEG_QUALITY, 70])
+    image = f.image if raw else annotate(f.image, d.camera.estimator().estimate(f.image))
+    ok, buf = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 70])
     return buf.tobytes() if ok else None
 
 
 @router.get("/devices/camera/frame.jpg")
-def camera_frame(request: Request):
-    data = _jpeg(svc(request).devices)
+def camera_frame(request: Request, raw: bool = False):
+    data = _jpeg(svc(request).devices, raw=raw)
     if data is None:
         raise ServiceError(409, "camera_unavailable", "no camera frame available")
     return Response(content=data, media_type="image/jpeg", headers={"Cache-Control": "no-store"})

@@ -882,6 +882,76 @@ class BrowserCameraPairing(Model):
     expires_in_seconds: int
 
 
+class VisualRegion(Model):
+    x: float = Field(ge=0, lt=1, allow_inf_nan=False)
+    y: float = Field(ge=0, lt=1, allow_inf_nan=False)
+    width: float = Field(gt=0, le=1, allow_inf_nan=False)
+    height: float = Field(gt=0, le=1, allow_inf_nan=False)
+
+
+class VisualCaptureRequest(Model):
+    component_id: str
+    region: VisualRegion
+    state: Literal["off", "on"]
+
+
+class VisualReference(Model):
+    id: str
+    project_id: str
+    component_id: str
+    camera_id: str
+    region: VisualRegion
+    state: Literal["off", "on"]
+    frame_width: int
+    frame_height: int
+    contrast: float
+    background: float
+    evidence_id: str
+
+
+class VisualConfigRequest(Model):
+    reference_ids: list[str] = Field(min_length=4, max_length=4)
+    duration_ms: int = Field(default=8000, ge=6000, le=20000)
+    confirmed: bool
+
+
+class VisualConfig(Model):
+    id: str
+    project_id: str
+    references: list[VisualReference]
+    duration_ms: int
+    evidence_id: str
+
+
+class VisualRunRequest(Model):
+    config_id: str
+    verifies_run_id: str | None = None
+
+
+class VisualSample(Model):
+    component_id: str
+    elapsed_ms: int
+    brightness: float | None
+    quality: Literal["valid", "unavailable"]
+    evidence_id: str
+
+
+class VisualRun(Model):
+    id: str
+    project_id: str
+    config_id: str
+    source_id: str
+    synthetic: bool = False
+    state: Literal["running", "completed", "failed"] = "running"
+    outcome: Literal["pass", "fail", "inconclusive"] | None = None
+    summary: str = "Observing camera; no board command is sent."
+    samples: list[VisualSample] = Field(default_factory=list)
+    evidence_ids: list[str] = Field(default_factory=list)
+    verifies_run_id: str | None = None
+    resolved_by_run_id: str | None = None
+    checks: dict[str, str] = Field(default_factory=dict)
+
+
 class CalibrateRequest(Model):
     known_angle_deg: float = Field(ge=-90, le=270)
 

@@ -161,3 +161,8 @@
   .react-flow__edge-textbg { fill: var(--color-background-elevated, #232323); }
   .react-flow__edge-text { font-size: var(--font-size-2xs); }
 }
+@layer app {
+  .led-region-picker { width: 100%; display: block; cursor: crosshair; touch-action: none; }
+  .led-region-picker rect { fill: none; stroke: var(--color-text-secondary); stroke-width: 2; }
+  .led-region-picker rect.selected { stroke: var(--color-text-primary); stroke-width: 3; }
+}

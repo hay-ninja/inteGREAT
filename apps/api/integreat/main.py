@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from .agents.provider import LLMProvider
 from .api.routes import router
+from .api.visual import router as visual_router
 from .api.ws import Hub
 from .config import Settings, load_settings
 from .observations.devices import DeviceManager
@@ -48,4 +49,5 @@ def create_app(settings: Settings | None = None, llm: LLMProvider | None = None,
         return {"ok": True}
 
     app.include_router(router)
+    app.include_router(visual_router)
     return app

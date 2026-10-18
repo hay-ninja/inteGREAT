@@ -29,6 +29,7 @@ import { GraphView, type CanvasMode } from "./components/graph/GraphView";
 import { ViewRail } from "./components/shell/ViewRail";
 import { EventFlowView } from "./components/flow/EventFlowView";
 import { FlowPanel } from "./components/flow/FlowPanel";
+import { LedVisualPanel } from "./components/flow/LedVisualPanel";
 import { SelectionCard } from "./components/flow/SelectionCard";
 import { ProjectReview } from "./components/flow/ProjectReview";
 import { RigSetupDialog } from "./components/setup/RigSetupDialog";
@@ -429,7 +430,7 @@ export default function App() {
     <Layout
       header={
         <LayoutHeader hasDivider>
-          <TopBar project={project} subsystems={subsystems} focus={focusSub} onFocus={focusSubsystem}
+          <TopBar observationOnly={graph.nodes.filter(n => n.attributes.type === "led").length === 2 && !graph.nodes.some(n => n.attributes.type === "servo")} project={project} subsystems={subsystems} focus={focusSub} onFocus={focusSubsystem}
                   devices={devices} agents={agentStatus} source={source} onRescan={rescan}
                   onRigSetup={() => setRigSetupOpen(true)}
                   onSettings={() => setSettingsOpen(true)}
@@ -447,6 +448,8 @@ export default function App() {
           <ResizeHandle resizable={guide.props} hasDivider isReversed label="Resize steps panel" />
           <LayoutPanel resizable={guide.props} label="Debugging steps" padding={4}>
           <VStack gap={4}>
+            {graph.nodes.filter(n => n.attributes.type === "led").length === 2 && !graph.nodes.some(n => n.attributes.type === "servo") ?
+            <LedVisualPanel key={project.id} projectId={project.id} graph={graph} onSetup={() => setRigSetupOpen(true)} onError={m => fail(m)} onEvidence={showEvidence} /> :
             <FlowPanel projectId={project.id} conflictNote={conflict} expectation={expectation} onExpectation={setExpectation}
                        run={run} running={busy} view={view} sources={sources} source={source} onSource={setSource}
                        liveReady={liveReady} onRun={runTest} busyActionId={busyAction} onAction={(a) => runAction(a)}
@@ -458,7 +461,7 @@ export default function App() {
                        onEvidence={showEvidence} onOpenDevices={() => setRigSetupOpen(true)}
                        projectReview={<ProjectReview project={project} graph={graph} onConnection={setSelectedEdgeIds} />}
                        onNewTest={() => { incidentRef.current = null; runRef.current = null; setIncidentId(null); setView(null); setRun(null); setSerial([]); }}
-                       onError={(m) => fail(m)} />
+                       onError={(m) => fail(m)} />}
           </VStack>
         </LayoutPanel>
         </>
@@ -505,7 +508,7 @@ export default function App() {
           <Button label={expanded.has(selectedNode.id) ? "Collapse in graph" : "Expand in graph"} onClick={() => { toggle(selectedNode.id); setSelectedId(null); }} />}
       </GraphInspector>
       <EvidenceDialog evidence={evidence} onClose={() => setEvidence(null)} />
-      <RigSetupDialog open={rigSetupOpen} onClose={() => setRigSetupOpen(false)} devices={devices} onDevices={setDevices}
+      <RigSetupDialog observationOnly={graph.nodes.filter(n => n.attributes.type === "led").length === 2 && !graph.nodes.some(n => n.attributes.type === "servo")} open={rigSetupOpen} onClose={() => setRigSetupOpen(false)} devices={devices} onDevices={setDevices}
                       onError={(m) => fail(m)} onUseSimulation={() => { setSource(`sim:${sources.sim[0]?.id ?? "connected"}`); setRigSetupOpen(false); }} />
       <InspectDialog result={inspect} onClose={() => setInspect(null)} />
       <ToolOutputDialog result={toolOutput} onClose={() => setToolOutput(null)} />

@@ -805,6 +805,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{pid}/visual/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Capture */
+        post: operations["capture_api_v1_projects__pid__visual_references_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{pid}/visual/configs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Configs */
+        get: operations["configs_api_v1_projects__pid__visual_configs_get"];
+        put?: never;
+        /** Configure */
+        post: operations["configure_api_v1_projects__pid__visual_configs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{pid}/visual/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Runs */
+        get: operations["runs_api_v1_projects__pid__visual_runs_get"];
+        put?: never;
+        /** Start */
+        post: operations["start_api_v1_projects__pid__visual_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2245,6 +2298,144 @@ export interface components {
          * @enum {string}
          */
         Verification: "observed" | "verified" | "inferred" | "unverified" | "conflicting";
+        /** VisualCaptureRequest */
+        VisualCaptureRequest: {
+            /** Component Id */
+            component_id: string;
+            region: components["schemas"]["VisualRegion"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "off" | "on";
+        };
+        /** VisualConfig */
+        VisualConfig: {
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** References */
+            references: components["schemas"]["VisualReference"][];
+            /** Duration Ms */
+            duration_ms: number;
+            /** Evidence Id */
+            evidence_id: string;
+        };
+        /** VisualConfigRequest */
+        VisualConfigRequest: {
+            /** Reference Ids */
+            reference_ids: string[];
+            /**
+             * Duration Ms
+             * @default 8000
+             */
+            duration_ms: number;
+            /** Confirmed */
+            confirmed: boolean;
+        };
+        /** VisualReference */
+        VisualReference: {
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Component Id */
+            component_id: string;
+            /** Camera Id */
+            camera_id: string;
+            region: components["schemas"]["VisualRegion"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "off" | "on";
+            /** Frame Width */
+            frame_width: number;
+            /** Frame Height */
+            frame_height: number;
+            /** Contrast */
+            contrast: number;
+            /** Background */
+            background: number;
+            /** Evidence Id */
+            evidence_id: string;
+        };
+        /** VisualRegion */
+        VisualRegion: {
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+        };
+        /** VisualRun */
+        VisualRun: {
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Config Id */
+            config_id: string;
+            /** Source Id */
+            source_id: string;
+            /**
+             * Synthetic
+             * @default false
+             */
+            synthetic: boolean;
+            /**
+             * State
+             * @default running
+             * @enum {string}
+             */
+            state: "running" | "completed" | "failed";
+            /** Outcome */
+            outcome: ("pass" | "fail" | "inconclusive") | null;
+            /**
+             * Summary
+             * @default Observing camera; no board command is sent.
+             */
+            summary: string;
+            /** Samples */
+            samples: components["schemas"]["VisualSample"][];
+            /** Evidence Ids */
+            evidence_ids: string[];
+            /** Verifies Run Id */
+            verifies_run_id: string | null;
+            /** Resolved By Run Id */
+            resolved_by_run_id: string | null;
+            /** Checks */
+            checks: {
+                [key: string]: string;
+            };
+        };
+        /** VisualRunRequest */
+        VisualRunRequest: {
+            /** Config Id */
+            config_id: string;
+            /** Verifies Run Id */
+            verifies_run_id?: string | null;
+        };
+        /** VisualSample */
+        VisualSample: {
+            /** Component Id */
+            component_id: string;
+            /** Elapsed Ms */
+            elapsed_ms: number;
+            /** Brightness */
+            brightness: number | null;
+            /**
+             * Quality
+             * @enum {string}
+             */
+            quality: "valid" | "unavailable";
+            /** Evidence Id */
+            evidence_id: string;
+        };
         /** WiringVerificationRequest */
         WiringVerificationRequest: {
             /** Edge Id */
@@ -3670,7 +3861,9 @@ export interface operations {
     };
     camera_frame_api_v1_devices_camera_frame_jpg_get: {
         parameters: {
-            query?: never;
+            query?: {
+                raw?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3684,6 +3877,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -3704,6 +3906,173 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    capture_api_v1_projects__pid__visual_references_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VisualCaptureRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VisualReference"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    configs_api_v1_projects__pid__visual_configs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VisualConfig"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    configure_api_v1_projects__pid__visual_configs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VisualConfigRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VisualConfig"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    runs_api_v1_projects__pid__visual_runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VisualRun"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_api_v1_projects__pid__visual_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VisualRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VisualRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

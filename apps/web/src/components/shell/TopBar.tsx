@@ -22,6 +22,7 @@ export function TopBar(p: {
   onSettings: () => void;
   onOpenDrawer: (tab: "activity") => void;
   onProjects: () => void;
+  observationOnly?: boolean;
 }) {
   const serial = p.devices?.serial.connected;
   const cam = p.devices?.camera;
@@ -54,8 +55,8 @@ export function TopBar(p: {
             <Text type="supporting">Board</Text>
           </HStack>
           <HStack gap={1} vAlign="center">
-            <StatusDot variant={cam?.connected ? (cam.calibrated ? "success" : "warning") : "neutral"} label="Camera"
-                       tooltip={cam?.connected ? (cam.calibrated ? "Camera watching the arm — calibrated" : "Camera connected, needs calibration") : "Camera not connected"} />
+            <StatusDot variant={cam?.connected ? (p.observationOnly || cam.calibrated ? "success" : "warning") : "neutral"} label="Camera"
+                       tooltip={cam?.connected ? (p.observationOnly ? "Camera connected; LED regions configured in workspace" : cam.calibrated ? "Camera watching the arm — calibrated" : "Camera connected, needs calibration") : "Camera not connected"} />
             <Text type="supporting">Camera</Text>
           </HStack>
           <HStack gap={1} vAlign="center">

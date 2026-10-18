@@ -572,3 +572,27 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
   This avoids opening the unrestricted local development API to the LAN.
 - Camera transport preserves host receive timestamps and existing ArUco calibration.
   LED metrics remain separate; browser/synthetic tests are not iPhone hardware validation.
+
+### D-044 Observation-only LED visual checks with reusable region measurements — 2026-10-18
+- Owner chose a two-LED demo (GPIO18/19) and requested automatic brightness detection.
+  Add an alternate visual-check panel for projects with exactly two LEDs and no servo;
+  keep confirmed servo acceptance criteria and the existing servo agent flow unchanged.
+- General CV infrastructure is shared (camera transport, normalized regions, references,
+  typed samples, evidence, graph annotations); detectors and expectations remain explicit
+  and domain-specific. This slice checks two calibrated LED regions changing in turns,
+  not universal video understanding or electrical root-cause identification.
+- Existing free-running fade firmware is observed without serial commands or additional
+  instrumentation. User selects each ROI and labels fresh dim/bright reference snapshots,
+  then confirms immutable thresholds/window before an observation. No ArUco requirement.
+- Use ROI 80th percentile of max BGR intensity minus median scene intensity, normalized
+  against references. Calibration needs >=15 contrast separation and stable scene median;
+  >25-unit ambient drift invalidates samples. Gaps >750 ms or inadequate coverage yield
+  inconclusive. Occlusion/moved framing/reflections cannot always be detected: disclose
+  this limitation and never infer a specific electrical cause from brightness alone.
+- Persist visual runs separately from servo TestRun/Incident, with all calibration,
+  measurement, source/wiring context and evaluation evidence. A passing explicit Verify
+  linked to the same config resolves a failed visual run; ordinary repeats do not.
+  LED checks are deterministic and do not invoke StepFun/Gemini/Devin in this slice.
+- Calibration UI uses a clean, unannotated camera snapshot and SVG region overlay within
+  existing Astryx sections, collapsed once confirmed; this is the same canvas exception
+  as graph rendering. Only numeric measurements are stored, not raw camera images.

@@ -1813,12 +1813,34 @@
    "get": {
     "summary": "Camera Frame",
     "operationId": "camera_frame_api_v1_devices_camera_frame_jpg_get",
+    "parameters": [
+     {
+      "name": "raw",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "default": false,
+       "title": "Raw"
+      }
+     }
+    ],
     "responses": {
      "200": {
       "description": "Successful Response",
       "content": {
        "application/json": {
         "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
        }
       }
      }
@@ -1835,6 +1857,235 @@
       "content": {
        "application/json": {
         "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/projects/{pid}/visual/references": {
+   "post": {
+    "summary": "Capture",
+    "operationId": "capture_api_v1_projects__pid__visual_references_post",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/VisualCaptureRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/VisualReference"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/projects/{pid}/visual/configs": {
+   "post": {
+    "summary": "Configure",
+    "operationId": "configure_api_v1_projects__pid__visual_configs_post",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/VisualConfigRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/VisualConfig"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "get": {
+    "summary": "Configs",
+    "operationId": "configs_api_v1_projects__pid__visual_configs_get",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/VisualConfig"
+         },
+         "title": "Response Configs Api V1 Projects  Pid  Visual Configs Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/projects/{pid}/visual/runs": {
+   "get": {
+    "summary": "Runs",
+    "operationId": "runs_api_v1_projects__pid__visual_runs_get",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/VisualRun"
+         },
+         "title": "Response Runs Api V1 Projects  Pid  Visual Runs Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "summary": "Start",
+    "operationId": "start_api_v1_projects__pid__visual_runs_post",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/VisualRunRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/VisualRun"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
        }
       }
      }
@@ -6048,6 +6299,392 @@
     ],
     "title": "Verification",
     "description": "Confidence category for graph nodes/edges (PRD FR-03)."
+   },
+   "VisualCaptureRequest": {
+    "properties": {
+     "component_id": {
+      "type": "string",
+      "title": "Component Id"
+     },
+     "region": {
+      "$ref": "#/components/schemas/VisualRegion"
+     },
+     "state": {
+      "type": "string",
+      "enum": [
+       "off",
+       "on"
+      ],
+      "title": "State"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "component_id",
+     "region",
+     "state"
+    ],
+    "title": "VisualCaptureRequest"
+   },
+   "VisualConfig": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "project_id": {
+      "type": "string",
+      "title": "Project Id"
+     },
+     "references": {
+      "items": {
+       "$ref": "#/components/schemas/VisualReference"
+      },
+      "type": "array",
+      "title": "References"
+     },
+     "duration_ms": {
+      "type": "integer",
+      "title": "Duration Ms"
+     },
+     "evidence_id": {
+      "type": "string",
+      "title": "Evidence Id"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "project_id",
+     "references",
+     "duration_ms",
+     "evidence_id"
+    ],
+    "title": "VisualConfig"
+   },
+   "VisualConfigRequest": {
+    "properties": {
+     "reference_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "maxItems": 4,
+      "minItems": 4,
+      "title": "Reference Ids"
+     },
+     "duration_ms": {
+      "type": "integer",
+      "maximum": 20000.0,
+      "minimum": 6000.0,
+      "title": "Duration Ms",
+      "default": 8000
+     },
+     "confirmed": {
+      "type": "boolean",
+      "title": "Confirmed"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "reference_ids",
+     "confirmed"
+    ],
+    "title": "VisualConfigRequest"
+   },
+   "VisualReference": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "project_id": {
+      "type": "string",
+      "title": "Project Id"
+     },
+     "component_id": {
+      "type": "string",
+      "title": "Component Id"
+     },
+     "camera_id": {
+      "type": "string",
+      "title": "Camera Id"
+     },
+     "region": {
+      "$ref": "#/components/schemas/VisualRegion"
+     },
+     "state": {
+      "type": "string",
+      "enum": [
+       "off",
+       "on"
+      ],
+      "title": "State"
+     },
+     "frame_width": {
+      "type": "integer",
+      "title": "Frame Width"
+     },
+     "frame_height": {
+      "type": "integer",
+      "title": "Frame Height"
+     },
+     "contrast": {
+      "type": "number",
+      "title": "Contrast"
+     },
+     "background": {
+      "type": "number",
+      "title": "Background"
+     },
+     "evidence_id": {
+      "type": "string",
+      "title": "Evidence Id"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "project_id",
+     "component_id",
+     "camera_id",
+     "region",
+     "state",
+     "frame_width",
+     "frame_height",
+     "contrast",
+     "background",
+     "evidence_id"
+    ],
+    "title": "VisualReference"
+   },
+   "VisualRegion": {
+    "properties": {
+     "x": {
+      "type": "number",
+      "exclusiveMaximum": 1.0,
+      "minimum": 0.0,
+      "title": "X"
+     },
+     "y": {
+      "type": "number",
+      "exclusiveMaximum": 1.0,
+      "minimum": 0.0,
+      "title": "Y"
+     },
+     "width": {
+      "type": "number",
+      "maximum": 1.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Width"
+     },
+     "height": {
+      "type": "number",
+      "maximum": 1.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Height"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "x",
+     "y",
+     "width",
+     "height"
+    ],
+    "title": "VisualRegion"
+   },
+   "VisualRun": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "project_id": {
+      "type": "string",
+      "title": "Project Id"
+     },
+     "config_id": {
+      "type": "string",
+      "title": "Config Id"
+     },
+     "source_id": {
+      "type": "string",
+      "title": "Source Id"
+     },
+     "synthetic": {
+      "type": "boolean",
+      "title": "Synthetic",
+      "default": false
+     },
+     "state": {
+      "type": "string",
+      "enum": [
+       "running",
+       "completed",
+       "failed"
+      ],
+      "title": "State",
+      "default": "running"
+     },
+     "outcome": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "pass",
+         "fail",
+         "inconclusive"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Outcome"
+     },
+     "summary": {
+      "type": "string",
+      "title": "Summary",
+      "default": "Observing camera; no board command is sent."
+     },
+     "samples": {
+      "items": {
+       "$ref": "#/components/schemas/VisualSample"
+      },
+      "type": "array",
+      "title": "Samples"
+     },
+     "evidence_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Evidence Ids"
+     },
+     "verifies_run_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Verifies Run Id"
+     },
+     "resolved_by_run_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Resolved By Run Id"
+     },
+     "checks": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "type": "object",
+      "title": "Checks"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "id",
+     "project_id",
+     "config_id",
+     "source_id",
+     "synthetic",
+     "state",
+     "outcome",
+     "summary",
+     "samples",
+     "evidence_ids",
+     "verifies_run_id",
+     "resolved_by_run_id",
+     "checks"
+    ],
+    "title": "VisualRun"
+   },
+   "VisualRunRequest": {
+    "properties": {
+     "config_id": {
+      "type": "string",
+      "title": "Config Id"
+     },
+     "verifies_run_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Verifies Run Id"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "config_id"
+    ],
+    "title": "VisualRunRequest"
+   },
+   "VisualSample": {
+    "properties": {
+     "component_id": {
+      "type": "string",
+      "title": "Component Id"
+     },
+     "elapsed_ms": {
+      "type": "integer",
+      "title": "Elapsed Ms"
+     },
+     "brightness": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Brightness"
+     },
+     "quality": {
+      "type": "string",
+      "enum": [
+       "valid",
+       "unavailable"
+      ],
+      "title": "Quality"
+     },
+     "evidence_id": {
+      "type": "string",
+      "title": "Evidence Id"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "component_id",
+     "elapsed_ms",
+     "brightness",
+     "quality",
+     "evidence_id"
+    ],
+    "title": "VisualSample"
    },
    "WiringVerificationRequest": {
     "properties": {

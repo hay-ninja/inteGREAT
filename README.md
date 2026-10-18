@@ -1,5 +1,7 @@
 # inteGREAT
 
+Two-LED hardware demo: [camera calibration, seeded faults, and verification](docs/led-demo.md).
+
 Graph-first debugging workspace for ESP32 Arduino projects. Import an existing repo plus its hardware manifest,
 review the hardware/software dependency graph, run a test, and get evidence-backed hypotheses with clickable
 next steps — then verify the fix with the same test. No firmware instrumentation required.

@@ -165,7 +165,7 @@ function DeviceSummary({ status, onOpenSetup }: { status: DeviceStatus | null; o
   );
 }
 
-export function DeviceControls({ status, onStatus, onError }: { status: DeviceStatus | null; onStatus: (s: DeviceStatus) => void; onError: (m: string) => void }) {
+export function DeviceControls({ status, onStatus, onError, observationOnly = false }: { status: DeviceStatus | null; onStatus: (s: DeviceStatus) => void; onError: (m: string) => void; observationOnly?: boolean }) {
   const [port, setPort] = useState("");
   const [cams, setCams] = useState<number[] | null>(null);
   const [cam, setCam] = useState("0");
@@ -210,7 +210,7 @@ export function DeviceControls({ status, onStatus, onError }: { status: DeviceSt
             <StatusDot variant={c.connected ? (c.calibrated ? "success" : "warning") : "neutral"} label="camera" />
             <Text type="label">Camera</Text>
             <Text type="supporting">
-              {c.connected ? `${c.source_id} · ${c.fps} fps · ${c.calibrated ? "calibrated" : "needs calibration"}` : "not connected"}
+              {c.connected ? `${c.source_id} · ${c.fps} fps · ${observationOnly ? "LED regions configured in workspace" : c.calibrated ? "calibrated" : "needs calibration"}` : "not connected"}
             </Text>
           </HStack>
           {!c.connected ? (
@@ -246,15 +246,13 @@ export function DeviceControls({ status, onStatus, onError }: { status: DeviceSt
             </VStack>
           ) : (
             <HStack gap={1} vAlign="end">
-              <NumberInput label="Servo is at" size="sm" units="°" value={angle} onChange={setAngle} width={130} />
-              <Button label="Calibrate" size="sm" clickAction={() => run(api.cameraCalibrate(angle))} />
+              {!observationOnly && <NumberInput label="Servo is at" size="sm" units="°" value={angle} onChange={setAngle} width={130} />}
+              {!observationOnly && <Button label="Calibrate" size="sm" clickAction={() => run(api.cameraCalibrate(angle))} />}
               <Button label="Release" size="sm" variant="ghost" clickAction={() => run(api.cameraRelease()).then(() => setPairing(null))} />
             </HStack>
           )}
           {c.last_error && <Text type="supporting" color="secondary">{c.last_error}</Text>}
-          <Text type="supporting">Camera input supports preview and existing marker tracking. LED brightness measurements are not implemented yet.</Text>
-          <Text type="supporting">Two printed marker stickers let the camera measure the arm: id 1 on the moving arm, id 0 beside the servo.</Text>
-          <Text type="supporting">If the camera can't see the markers, the measurement is reported as unavailable — never as a fault. Calibrate at a known angle before a live test.</Text>
+          <Text type="supporting">{observationOnly ? "Return to the LED visual check to select regions, capture dim/bright references, and confirm the expectation. No markers are needed." : "Two printed marker stickers let the camera measure the arm: id 1 on the moving arm, id 0 beside the servo. Missing markers mean measurement unavailable. Calibrate at a known angle before testing."}</Text>
         </VStack>
       </Card>
       {c.connected && <img className="camera-preview" src="/api/v1/devices/camera/stream.mjpg" alt="Live camera preview" />}
