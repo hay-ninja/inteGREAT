@@ -2,7 +2,7 @@
 
 > Update this at the end of every verifiable slice. Keep it short; history lives in git, intent in `decisions.md`.
 
-**Last updated:** 2026-10-17 · **Current milestone:** all software milestones built; **blocked on hardware (H0/M5/M7) and a Gemini key**
+**Last updated:** 2026-10-17 · **Current milestone:** UI redesign done (D-021); software complete; **blocked on hardware (H0/M5/M7) and a Gemini key**
 
 ## Milestone plan (PRD §17 adapted)
 | # | Milestone | State |
@@ -27,6 +27,19 @@
 - **Test-verified only (not clicked through in a browser):** sim Fault A fix → rescan → Verify fix → resolved;
   agents round with validation; agent budget/new-evidence rule; save-as-replay.
 
+## UI redesign (D-021) — done 2026-10-17
+- Obsidian-style dark theme on **Astryx** (React 19, theme extends gothic, Inter/JetBrains Mono bundled).
+- Guided right panel: **Setup → Run → Debug → Verify**, one primary button per step; the primary moves to
+  "I fixed it — verify" once the suggested check is done. Alternatives + "More tools" (agents, read-only
+  tools, permissions, notes) are collapsed by default.
+- Hybrid graph: dots for code, pills for hardware; colour only for conflict/failed/suspect/observed.
+- Bottom drawer (Angle, Serial, Timeline, Devices, Tool audit) collapsed until a test runs.
+- Browser-verified: start screen → Fault A demo → suggest/confirm → sim run → Debug (allow dialog, inspect
+  dialog, hypothesis supported) → verify with replay `good` → "Fixed — verified" (labelled synthetic).
+- Frontend conventions for agents: `apps/web/ASTRYX.md` (Astryx rules) + D-021. Graph CSS only in
+  `src/styles.css` (`@layer app`, tokens only). Rebuild theme after editing `src/theme/obsidian/obsidianTheme.ts`:
+  `cd apps/web && npx astryx theme build src/theme/obsidian/obsidianTheme.ts`.
+
 ## Next (in order)
 1. **Gemini:** put `GEMINI_API_KEY` + `INTEGREAT_GEMINI_MODEL` in `.env`; run `scripts/gemini_smoke.py`;
    then click *Ask agents* on a Fault A incident. Expect schema friction — fix in `agents/schemas.py` only.
@@ -42,8 +55,9 @@
   are exclusive → *Release port* before reflashing.
 - `probe_cameras` takes ~0.5 s per index on Windows (DirectShow).
 - **React Flow:** nodes are rebuilt on every change; GraphView passes back each node's `measured` size or
-  React Flow hides nodes/edges. **WebSocket 431:** Vite proxy strips cookies.
+  React Flow hides nodes/edges. Auto-fit waits for `useNodesInitialized()` — fitting earlier is a no-op. **WebSocket 431:** Vite proxy strips cookies.
 - Stopping a background `npx vite` task can leave the Node child holding :5173 — kill it by PID.
+- Astryx 0.7.x is pre-1.0 and pinned exactly; `npx astryx doctor` warns about the theme module import (expected, D-021).
 - The simulated rig is honest about the fault model but is not hardware evidence; every sim run is
   `synthetic` and badged SIMULATED.
 - Agents never run tools themselves (D-004); they only see tool output for categories the engineer granted.

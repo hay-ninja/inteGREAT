@@ -1,0 +1,238 @@
+/** Collapsible bottom drawer: measurements and logs live here, out of the way until needed. */
+import { useEffect, useState } from "react";
+import { HStack } from "@astryxdesign/core/HStack";
+import { VStack } from "@astryxdesign/core/VStack";
+import { TabList, Tab } from "@astryxdesign/core/TabList";
+import { IconButton } from "@astryxdesign/core/IconButton";
+import { Button } from "@astryxdesign/core/Button";
+import { Text } from "@astryxdesign/core/Text";
+import { Table, pixel } from "@astryxdesign/core/Table";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
+import { Selector } from "@astryxdesign/core/Selector";
+import { NumberInput } from "@astryxdesign/core/NumberInput";
+import { StatusDot } from "@astryxdesign/core/StatusDot";
+import { Card } from "@astryxdesign/core/Card";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import {
+  api,
+  type DeviceStatus,
+  type Expectation,
+  type IntegreatEvent,
+  type Observation,
+  type SerialEvent,
+  type TestRun,
+  type ToolCall,
+} from "../../lib/api";
+import { SourceBadge } from "../flow/common";
+
+export type DrawerTab = "angle" | "serial" | "timeline" | "devices" | "audit";
+
+interface Props {
+  open: boolean;
+  onOpen: (o: boolean) => void;
+  tab: DrawerTab;
+  onTab: (t: DrawerTab) => void;
+  run: TestRun | null;
+  observations: Observation[];
+  serial: SerialEvent[];
+  expectation: Expectation | null;
+  events: IntegreatEvent[];
+  toolCalls: ToolCall[];
+  devices: DeviceStatus | null;
+  onDevices: (d: DeviceStatus) => void;
+  onSaveReplay: (runId: string) => void;
+  onError: (m: string) => void;
+}
+
+export function BottomDrawer(p: Props) {
+  return (
+    <VStack gap={0} height={p.open ? 260 : undefined}>
+      <HStack hAlign="between" vAlign="center" gap={2} paddingInline={2}>
+        <TabList value={p.tab} size="sm" onChange={(t) => { p.onTab(t as DrawerTab); p.onOpen(true); }}>
+          <Tab value="angle" label="Angle" />
+          <Tab value="serial" label="Serial" />
+          <Tab value="timeline" label="Timeline" />
+          <Tab value="devices" label="Devices" />
+          <Tab value="audit" label="Tool audit" />
+        </TabList>
+        <HStack gap={1} vAlign="center">
+          {p.run && <SourceBadge run={p.run} />}
+          {p.run?.state === "completed" && p.run.source.kind !== "replay" && (
+            <Button label="Save as replay" size="sm" variant="ghost" tooltip="Keep this run for offline demos"
+                    onClick={() => p.onSaveReplay(p.run!.id)} />
+          )}
+          <IconButton label={p.open ? "Hide panel" : "Show panel"} size="sm" variant="ghost"
+                      icon={p.open ? <ChevronDown size={16} /> : <ChevronUp size={16} />} onClick={() => p.onOpen(!p.open)} />
+        </HStack>
+      </HStack>
+      {p.open && (
+        <VStack gap={0} isScrollable height="100%" paddingInline={3} paddingBlock={2}>
+          {p.tab === "angle" && <AnglePlot obs={p.observations} exp={p.expectation} />}
+          {p.tab === "serial" && <SerialLog serial={p.serial} />}
+          {p.tab === "timeline" && <Timeline events={p.events} />}
+          {p.tab === "devices" && <Devices status={p.devices} onStatus={p.onDevices} onError={p.onError} />}
+          {p.tab === "audit" && <Audit calls={p.toolCalls} />}
+        </VStack>
+      )}
+    </VStack>
+  );
+}
+
+function AnglePlot({ obs, exp }: { obs: Observation[]; exp: Expectation | null }) {
+  if (!obs.length) return <EmptyState isCompact title="No measurements yet" description="Run a test to see the servo angle over time." />;
+  const W = 900, H = 170, pad = { l: 36, r: 8, t: 8, b: 20 };
+  const maxT = Math.max(exp?.deadline_ms ?? 0, ...obs.map((o) => o.elapsed_ms)) * 1.05;
+  const x = (t: number) => pad.l + (t / maxT) * (W - pad.l - pad.r);
+  const y = (v: number) => pad.t + (1 - v / 180) * (H - pad.t - pad.b);
+  const valid = obs.filter((o) => o.measurement_quality === "valid" && o.value != null);
+  const invalid = obs.filter((o) => o.measurement_quality !== "valid");
+  const path = valid.map((o, i) => `${i ? "L" : "M"}${x(o.elapsed_ms).toFixed(1)},${y(o.value!).toFixed(1)}`).join(" ");
+  return (
+    <svg className="plot" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Servo angle over time">
+      {exp && (
+        <>
+          <rect x={pad.l} width={W - pad.l - pad.r} y={y(exp.target + exp.tolerance)}
+                height={y(exp.target - exp.tolerance) - y(exp.target + exp.tolerance)} className="band" />
+          <line x1={x(exp.deadline_ms)} x2={x(exp.deadline_ms)} y1={pad.t} y2={H - pad.b} className="deadline" />
+          <text x={x(exp.deadline_ms) + 4} y={pad.t + 10} className="axis">{exp.deadline_ms} ms</text>
+          <text x={pad.l + 4} y={y(exp.target + exp.tolerance) - 3} className="axis">target {exp.target}° ± {exp.tolerance}°</text>
+        </>
+      )}
+      {[0, 90, 180].map((v) => <text key={v} x={2} y={y(v) + 4} className="axis">{v}°</text>)}
+      <path d={path} className="series" />
+      {valid.map((o) => <circle key={o.id} cx={x(o.elapsed_ms)} cy={y(o.value!)} r={2} className="pt" />)}
+      {invalid.map((o) => <text key={o.id} x={x(o.elapsed_ms) - 3} y={H - pad.b - 2} className="invalid-pt">×</text>)}
+      <text x={W - 170} y={H - 5} className="axis">{valid.length} valid · {invalid.length} missing frames</text>
+    </svg>
+  );
+}
+
+interface Row extends Record<string, unknown> { id: string; t: string; dir: string; raw: string; note: string }
+
+function SerialLog({ serial }: { serial: SerialEvent[] }) {
+  if (!serial.length) return <EmptyState isCompact title="No serial traffic" description="Lines sent and received during a test appear here." />;
+  const rows: Row[] = serial.map((s) => ({
+    id: s.id, t: `${s.elapsed_ms} ms`, dir: s.direction === "tx" ? "→ board" : "← board", raw: s.raw,
+    note: s.matched_function_ids.length ? `printed by ${s.matched_function_ids.map((f) => f.split("::")[1]).join(", ")}()` : "",
+  }));
+  return (
+    <Table<Row> data={rows} idKey="id" density="compact" textOverflow="truncate"
+               columns={[{ key: "t", header: "Time", width: pixel(80) }, { key: "dir", header: "", width: pixel(80) },
+                         { key: "raw", header: "Line" }, { key: "note", header: "" }]} />
+  );
+}
+
+const SHOWN = new Set(["project.imported", "graph.updated", "expectation.confirmed", "test.started", "test.completed",
+  "expectation.failed", "incident.created", "action.completed", "action.denied", "permissions.updated",
+  "agent.started", "agent.reported", "message.added", "test.verification_completed", "incident.resolved", "error"]);
+
+function Timeline({ events }: { events: IntegreatEvent[] }) {
+  const shown = events.filter((e) => SHOWN.has(e.type)).slice().reverse();
+  if (!shown.length) return <EmptyState isCompact title="Nothing yet" />;
+  interface TRow extends Record<string, unknown> { id: string; t: string; type: string; what: string }
+  const rows: TRow[] = shown.map((e) => ({ id: String(e.seq), t: new Date(e.timestamp_utc).toLocaleTimeString(),
+                                            type: e.type.replace(".", " "), what: summarize(e) }));
+  return (
+    <Table<TRow> data={rows} idKey="id" density="compact" textOverflow="truncate"
+                 columns={[{ key: "t", header: "Time", width: pixel(90) }, { key: "type", header: "Event", width: pixel(170) },
+                           { key: "what", header: "" }]} />
+  );
+}
+
+function summarize(e: IntegreatEvent): string {
+  const p = e.payload as Record<string, unknown>;
+  switch (e.type) {
+    case "expectation.failed": return String(p.reason ?? "");
+    case "incident.created": return String(p.title ?? "");
+    case "test.completed": { const r = p.result as { outcome?: string } | null; return `${p.attempt_kind} run → ${r?.outcome ?? p.state}`; }
+    case "test.verification_completed": return `verification ${p.outcome}`;
+    case "action.completed": return String(p.summary ?? p.result ?? "");
+    case "action.denied": return String(p.reason ?? "");
+    case "permissions.updated": return `${p.category} ${p.granted ? "allowed" : "revoked"}`;
+    case "agent.started": return `round ${p.round}: ${(p.agents as string[] | undefined)?.join(", ")}`;
+    case "agent.reported": return `${p.agent}: ${p.status}`;
+    case "graph.updated": return `graph v${p.version}`;
+    case "message.added": return String(p.text ?? "");
+    case "error": return String(p.message ?? "");
+    default: return "";
+  }
+}
+
+function Audit({ calls }: { calls: ToolCall[] }) {
+  if (!calls.length) return <EmptyState isCompact title="No tool calls yet" description="Every tool run, approval and denial is listed here." />;
+  interface ARow extends Record<string, unknown> { id: string; t: string; tool: string; who: string; decision: string; what: string }
+  const rows: ARow[] = [...calls].reverse().map((c) => ({ id: c.id, t: new Date(c.started_at_utc).toLocaleTimeString(),
+    tool: c.tool_name, who: c.caller, decision: c.decision.replace("_", " "), what: c.error ?? c.summary }));
+  return (
+    <Table<ARow> data={rows} idKey="id" density="compact" textOverflow="truncate"
+                 columns={[{ key: "t", header: "Time", width: pixel(90) }, { key: "tool", header: "Tool", width: pixel(170) },
+                           { key: "who", header: "By", width: pixel(120) }, { key: "decision", header: "Decision", width: pixel(120) },
+                           { key: "what", header: "Result" }]} />
+  );
+}
+
+function Devices({ status, onStatus, onError }: { status: DeviceStatus | null; onStatus: (s: DeviceStatus) => void; onError: (m: string) => void }) {
+  const [port, setPort] = useState("");
+  const [cams, setCams] = useState<number[] | null>(null);
+  const [cam, setCam] = useState("0");
+  const [angle, setAngle] = useState(0);
+  useEffect(() => { if (!port && status?.serial.ports.length) setPort(status.serial.ports[0].port); }, [status, port]);
+  if (!status) return <EmptyState isCompact title="Loading devices…" />;
+  const run = (p: Promise<DeviceStatus>) => p.then(onStatus).catch((e) => onError(e.message));
+  const s = status.serial, c = status.camera;
+  return (
+    <HStack gap={4} vAlign="start" wrap="wrap">
+      <Card padding={3} width={340}>
+        <VStack gap={2}>
+          <HStack gap={1} vAlign="center">
+            <StatusDot variant={s.connected ? "success" : "neutral"} label={s.connected ? "connected" : "not connected"} />
+            <Text type="label">ESP32 serial</Text>
+            <Text type="supporting">{s.connected ? `${s.port} · ${s.baud}` : "not connected"}</Text>
+          </HStack>
+          {s.connected ? (
+            <Button label="Release port" tooltip="Free the port so the Arduino IDE can flash" onClick={() => run(api.serialRelease())} />
+          ) : (
+            <HStack gap={1} vAlign="end">
+              <Selector label="Port" size="sm" value={port} onChange={setPort} width={220} placeholder="No ports found"
+                        options={s.ports.map((x) => ({ value: x.port, label: x.port, description: x.description }))} />
+              <Button label="Connect" variant="primary" size="sm" isDisabled={!port} onClick={() => run(api.serialConnect(port))} />
+            </HStack>
+          )}
+          {s.last_error && <Text type="supporting" color="secondary">{s.last_error}</Text>}
+          <Text type="supporting">Opened with reset lines held low, so the board doesn't reboot.</Text>
+        </VStack>
+      </Card>
+      <Card padding={3} width={380}>
+        <VStack gap={2}>
+          <HStack gap={1} vAlign="center">
+            <StatusDot variant={c.connected ? (c.calibrated ? "success" : "warning") : "neutral"} label="camera" />
+            <Text type="label">Camera</Text>
+            <Text type="supporting">
+              {c.connected ? `${c.source_id} · ${c.fps} fps · ${c.calibrated ? "calibrated" : "needs calibration"}` : "not connected"}
+            </Text>
+          </HStack>
+          {!c.connected ? (
+            cams === null ? (
+              <Button label="Find cameras" clickAction={() => api.cameraProbe().then((x) => { setCams(x); if (x.length) setCam(String(x[0])); }).catch((e) => onError(e.message))} />
+            ) : (
+              <HStack gap={1} vAlign="end">
+                <Selector label="Camera" size="sm" value={cam} onChange={setCam} width={160} placeholder="None found"
+                          options={cams.map((i) => ({ value: String(i), label: `Camera ${i}` }))} />
+                <Button label="Connect" variant="primary" size="sm" isDisabled={!cams.length} onClick={() => run(api.cameraConnect(+cam))} />
+              </HStack>
+            )
+          ) : (
+            <HStack gap={1} vAlign="end">
+              <NumberInput label="Servo is at" size="sm" units="°" value={angle} onChange={setAngle} width={130} />
+              <Button label="Calibrate" size="sm" variant={c.calibrated ? "secondary" : "primary"} onClick={() => run(api.cameraCalibrate(angle))} />
+              <Button label="Release" size="sm" variant="ghost" onClick={() => run(api.cameraRelease())} />
+            </HStack>
+          )}
+          <Text type="supporting">ArUco id 1 on the horn, id 0 beside the servo.</Text>
+        </VStack>
+      </Card>
+      {c.connected && <img className="camera-preview" src="/api/v1/devices/camera/stream.mjpg" alt="Live camera preview" />}
+    </HStack>
+  );
+}
+

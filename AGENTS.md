@@ -22,7 +22,8 @@ import repo + hardware manifest → dependency graph → run a test → evidence
 ## Layout
 - `apps/api/integreat/` — FastAPI modular monolith (package `integreat`). `models/` is the single source
   of truth for contracts. Map of modules and "where to change things": `docs/architecture.md`.
-- `apps/web/` — Vite + React + `@xyflow/react`. Types generated from backend OpenAPI.
+- `apps/web/` — Vite + React 19 + `@xyflow/react` + **Astryx** design system (rules: `apps/web/ASTRYX.md`,
+  intent: D-021). Types generated from backend OpenAPI. Keep the UI calm: one primary button per step.
 - `fixtures/` — demo firmware, manifests, recorded serial/CV JSONL (synthetic files say so in name/header).
 - `docs/` — STATUS, decisions, architecture, hardware-setup (rig checklist), demo-script.
 

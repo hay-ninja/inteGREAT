@@ -8,6 +8,7 @@ export type GraphNode = S["GraphNode"];
 export type GraphEdge = S["GraphEdge"];
 export type Subsystem = S["Subsystem"];
 export type Expectation = S["Expectation"];
+export type ExpectationResult = S["ExpectationResult"];
 export type ExpectationEdit = S["ExpectationEdit"];
 export type TestRun = S["TestRun"];
 export type Observation = S["Observation"];

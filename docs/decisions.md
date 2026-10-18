@@ -123,3 +123,23 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
 ### D-020 Cut per PRD §17: Gemini frame interpretation and SSH gateway — 2026-10-17
 - `LLMProvider.analyze_image_optional` exists (Gemini impl included) but is not wired into tools/UI.
 - No SSH/Linux gateway tools. Local USB serial is first-class. Both are P1 if time allows.
+
+### D-021 UI redesign: Obsidian look on Astryx, guided steps, hybrid graph — 2026-10-17 — owner choices
+- **Owner intent:** intuitive UI, intentional buttons, *few visible options* (avoid information overload),
+  "Obsidian-ish" like the knowledge-mapping app.
+- **Chosen:** Obsidian-faithful colours (charcoal `#1e1e1e`, muted text, one purple accent `#8b7cf6`;
+  colour only for status) · hybrid graph nodes (dots for code, compact pills for hardware) · **guided
+  steps** panel (Set up → Run → Investigate → Verify, ONE primary button per step; advanced tools behind
+  "More") · Astryx design system with a theme extending `gothic`.
+- **Implementation notes:**
+  - React upgraded 18 → 19 (Astryx peer dep). Astryx packages pinned **exactly** at 0.7.1 (pre-1.0,
+    releases every few days; canaries daily) — bump deliberately with `astryx upgrade --from 0.7.1`.
+  - Theme: `apps/web/src/theme/obsidian/obsidianTheme.ts` → `npx astryx theme build …` → wired in
+    `src/theme/index.ts`. The CLI-generated `astryx-themes.ts` was dropped: it pulled gothic's Google Fonts
+    (incl. blackletter display faces). Fonts are bundled locally (@fontsource-variable Inter / JetBrains
+    Mono) so offline demos look identical. `astryx doctor` will warn "theme-module-import"; expected.
+  - Gothic's slow theatrical motion and large type scale are overridden (Obsidian is snappy, 14px base).
+  - Astryx rule "no raw div / no hex": followed for app chrome. Exceptions: React Flow node renderers and
+    the SVG angle plot (a canvas library and a chart need their own markup); they use theme tokens only.
+  - Astryx agent notes live in `apps/web/ASTRYX.md` (written by `astryx init --agent-docs-path`), not in
+    our AGENTS.md.

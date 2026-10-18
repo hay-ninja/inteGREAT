@@ -1,0 +1,61 @@
+import { HStack } from "@astryxdesign/core/HStack";
+import { Text } from "@astryxdesign/core/Text";
+import { Selector } from "@astryxdesign/core/Selector";
+import { StatusDot } from "@astryxdesign/core/StatusDot";
+import { MoreMenu } from "@astryxdesign/core/MoreMenu";
+import type { AgentStatus, DeviceStatus, Project, Subsystem } from "../../lib/api";
+
+/** Minimal chrome: where you are, what you're focused on, are devices ready. Everything else is in "More". */
+export function TopBar(p: {
+  project: Project;
+  subsystems: Subsystem[];
+  focus: string;
+  onFocus: (sid: string) => void;
+  devices: DeviceStatus | null;
+  agents: AgentStatus | null;
+  onRescan: () => void;
+  onOpenDrawer: (tab: "devices" | "audit" | "timeline") => void;
+  onProjects: () => void;
+}) {
+  const serial = p.devices?.serial.connected;
+  const cam = p.devices?.camera;
+  return (
+    <HStack hAlign="between" vAlign="center" gap={3} width="100%">
+      <HStack gap={2} vAlign="center">
+        <Text type="body" weight="bold">inteGREAT</Text>
+        <Text type="supporting" maxLines={1}>{p.project.name}</Text>
+      </HStack>
+      <Selector label="Focus" isLabelHidden variant="ghost" size="sm" width={220} value={p.focus || "all"}
+                onChange={(v) => p.onFocus(v === "all" ? "" : v)}
+                options={[{ value: "all", label: "Whole system" },
+                          ...p.subsystems.map((s) => ({ value: s.id, label: s.label }))]} />
+      <HStack gap={3} vAlign="center">
+        <HStack gap={3} vAlign="center">
+          <HStack gap={1} vAlign="center">
+            <StatusDot variant={serial ? "success" : "neutral"} label="ESP32 serial"
+                       tooltip={serial ? `ESP32 on ${p.devices?.serial.port}` : "ESP32 not connected"} />
+            <Text type="supporting">ESP32</Text>
+          </HStack>
+          <HStack gap={1} vAlign="center">
+            <StatusDot variant={cam?.connected ? (cam.calibrated ? "success" : "warning") : "neutral"} label="Camera"
+                       tooltip={cam?.connected ? (cam.calibrated ? "Camera ready" : "Camera needs calibration") : "Camera not connected"} />
+            <Text type="supporting">Camera</Text>
+          </HStack>
+          <HStack gap={1} vAlign="center">
+            <StatusDot variant={p.agents?.available ? "accent" : "neutral"} label="AI agents"
+                       tooltip={p.agents?.available ? `AI agents on (${p.agents.model})` : `AI agents off: ${p.agents?.reason ?? ""}`} />
+            <Text type="supporting">AI</Text>
+          </HStack>
+        </HStack>
+        <MoreMenu label="More" alignment="end" items={[
+          { label: "Rescan repository", description: "After you change the firmware", onClick: p.onRescan },
+          { label: "Devices", description: "Connect ESP32 and camera", onClick: () => p.onOpenDrawer("devices") },
+          { label: "Tool audit", description: "Every tool call and approval", onClick: () => p.onOpenDrawer("audit") },
+          { label: "Timeline", onClick: () => p.onOpenDrawer("timeline") },
+          { type: "divider" },
+          { label: "Switch project", onClick: p.onProjects },
+        ]} />
+      </HStack>
+    </HStack>
+  );
+}

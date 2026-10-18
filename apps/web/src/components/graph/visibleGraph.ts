@@ -17,6 +17,9 @@ export interface VNode {
   inheritedHighlight?: Highlight; // from a hidden descendant
   dimmed: boolean;
   matched: boolean;
+  w: number;
+  h: number;
+  childCount: number;
 }
 
 export interface VEdge {
@@ -33,8 +36,15 @@ export interface VEdge {
   dimmed: boolean;
 }
 
-export const NODE_W = 190;
-export const NODE_H = 52;
+export const HW_KINDS = new Set(["mcu", "pin", "component", "power_source", "interface"]);
+
+/** Approximate rendered size, used only for layout spacing (hybrid nodes: dots for code, pills for hardware). */
+export function nodeSize(n: GraphNode): { w: number; h: number } {
+  const chars = n.label.length;
+  if (HW_KINDS.has(n.kind)) return { w: Math.max(80, 44 + chars * 7.2), h: 30 };
+  const dot = n.kind === "subsystem" ? 14 : n.kind === "source_module" ? 10 : 7;
+  return { w: dot + 30 + chars * (n.kind === "subsystem" ? 7.8 : 6.8), h: 22 };
+}
 
 const VERIF_SEVERITY: Record<Verification, number> = {
   verified: 0,
@@ -138,20 +148,27 @@ export function buildVisibleGraph(
 
   // Layout: left→right flow from software to hardware.
   const dg = new dagre.graphlib.Graph();
-  dg.setGraph({ rankdir: "LR", nodesep: 22, ranksep: 70, marginx: 20, marginy: 20 });
+  dg.setGraph({ rankdir: "LR", nodesep: 26, ranksep: 90, marginx: 30, marginy: 30 });
   dg.setDefaultEdgeLabel(() => ({}));
-  for (const n of vis) dg.setNode(n.id, { width: NODE_W, height: NODE_H });
+  const sizes = new Map(vis.map((n) => [n.id, nodeSize(n)]));
+  for (const n of vis) dg.setNode(n.id, { width: sizes.get(n.id)!.w, height: sizes.get(n.id)!.h });
   // Edge directions already run software → pins → components → power (powered_by points at the supply).
   for (const e of edges) dg.setEdge(e.source, e.target, { weight: e.relation === "contains" ? 3 : 1 });
   dagre.layout(dg);
 
+  const children = new Map<string, number>();
+  for (const n of g.nodes) if (n.parent_id) children.set(n.parent_id, (children.get(n.parent_id) ?? 0) + 1);
   const nodes: VNode[] = vis.map((n) => {
     const p = dg.node(n.id);
+    const { w, h } = sizes.get(n.id)!;
     return {
       id: n.id,
       node: n,
-      x: p.x - NODE_W / 2,
-      y: p.y - NODE_H / 2,
+      x: p.x - w / 2,
+      y: p.y - h / 2,
+      w,
+      h,
+      childCount: children.get(n.id) ?? 0,
       expandable: isExpandable(n, g.nodes),
       expanded: expanded.has(n.id),
       highlight: hl.get(n.id),
