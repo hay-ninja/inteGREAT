@@ -136,7 +136,6 @@ interface Props {
   onEdgeSelect: (edgeIds: string[], lifted: boolean) => void;
   onExpandAll: () => void;
   onCollapseAll: () => void;
-  onClearFocus: (() => void) | null;
   fitKey: string;
 }
 
@@ -239,8 +238,6 @@ function Inner(p: Props) {
                 tooltip="Reveal every part hidden inside the grouped boxes" onClick={p.onExpandAll} />
         <Button label="Collapse groups" size="sm" variant="secondary"
                 tooltip="Fold the detailed parts back into their groups" onClick={p.onCollapseAll} />
-        {p.onClearFocus && <Button label="Show whole system" size="sm" variant="secondary"
-                tooltip="Leave the subsystem focus — show the full map again" onClick={p.onClearFocus} />}
         {hiddenNote && <Button label={`${hiddenNote} — show everything`} size="sm" variant="ghost" onClick={() => p.onLayer("combined")} />}
       </HStack>
     </LayoutHeader>} content={<LayoutContent padding={0} isScrollable={false} ref={canvasRef}>

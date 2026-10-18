@@ -504,7 +504,6 @@ export default function App() {
                        onEdgeSelect={(ids) => { setSelectedEdgeIds(ids); setSelectedId(null); }}
                        onExpandAll={() => setExpanded(new Set(graph.nodes.filter((n) => n.kind === "subsystem" || n.kind === "source_module").map((n) => n.id)))}
                        onCollapseAll={() => setExpanded(new Set())}
-                       onClearFocus={focusIds ? () => { scopeRef.current = ""; setFocusIds(null); setFocusSub(""); setFitKey(`all-${Date.now()}`); } : null}
                        fitKey={`${fitKey}-${expanded.size}`} />
             )}
             <GraphInspector open={!!selectedNode || !!selectedEdges.length} onClose={() => { setSelectedId(null); setSelectedEdgeIds([]); }}>
