@@ -127,8 +127,12 @@ export default function App() {
   const loadProject = useCallback(async (p: Project, fresh: boolean) => {
     const version = ++loadVersion.current;
     const [g, subs, exps, incs] = await Promise.all([api.graph(p.id), api.subsystems(p.id), api.expectations(p.id), api.incidents(p.id)]);
-    const preferredScope = g.nodes.find((n) => n.kind === "component" && n.subsystem_id)?.subsystem_id ?? subs[0]?.id;
-    const scoped = preferredScope ? await api.graph(p.id, preferredScope) : null;
+    // A component's subsystem_id can reference a subsystem that isn't a graph node
+    // (renamed or stem-grouped) — validate against the subsystems list and never let
+    // a bad scope 404 abort opening the project; fall back to the whole graph.
+    const candidate = g.nodes.find((n) => n.kind === "component" && n.subsystem_id)?.subsystem_id;
+    const preferredScope = (candidate && subs.some((s) => s.id === candidate)) ? candidate : subs[0]?.id;
+    const scoped = preferredScope ? await api.graph(p.id, preferredScope).catch(() => null) : null;
     if (version !== loadVersion.current) return;
     projectRef.current = p.id;
     setProject(p); setGraph(g); setSubsystems(subs); streamReset(); setRun(null); runRef.current = null;

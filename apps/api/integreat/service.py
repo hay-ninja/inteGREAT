@@ -64,6 +64,7 @@ from .models import (
     LogLiteral,
     ManualResultRequest,
     NetlistPreview,
+    NodeKind,
     NetlistPreviewRequest,
     Observation,
     ObservationSourceSpec,
@@ -383,6 +384,18 @@ class Service:
     def subsystems(self, pid: str) -> list[Subsystem]:
         project = self.project(pid)
         subs = self.store.list(K_SUBSYS, Subsystem, parent_id=pid)
+        if not subs:
+            # Projects imported before the subsystem collection was persisted have
+            # subsystem nodes in the graph but nothing here — derive it so scope
+            # navigation still works without a re-import.
+            g = self.store.get(K_GRAPH, pid, GraphSnapshot)
+            subs = [Subsystem(id=n.id, label=n.label,
+                              module_ids=[m.id for m in g.nodes
+                                          if m.kind == NodeKind.source_module and m.subsystem_id == n.id],
+                              component_ids=[c.id for c in g.nodes
+                                             if c.kind in (NodeKind.component, NodeKind.power_source)
+                                             and c.subsystem_id == n.id])
+                    for n in g.nodes if n.kind == NodeKind.subsystem]
         if project.subsystem_names:
             subs = [s.model_copy(update={"label": project.subsystem_names[s.id]})
                     if s.id in project.subsystem_names else s for s in subs]
