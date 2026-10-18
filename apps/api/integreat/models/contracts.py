@@ -219,6 +219,10 @@ class Expectation(Model):
     measurement_source: str = "camera"
     ack_pattern: str | None = None  # serial line prefix that counts as firmware acknowledgement
     on_level: str | None = None  # level the code drives for the "on" state (binary metrics; None = unresolved)
+    # steady = end-state check (current behaviour); toggle = oscillation must reach
+    # min_transitions within the window (FLICKER/BLINK-style commands — D-060).
+    pattern: Literal["steady", "toggle"] = "steady"
+    min_transitions: int = 4  # state changes required for a toggle pattern to pass
     min_motion_deg: float = 5.0  # displacement below this counts as "no physical motion" (analog metrics)
     min_valid_samples: int = 3
     confirmed_by_engineer: bool = False
@@ -231,10 +235,19 @@ class ExpectationEdit(Model):
     tolerance: float | None = None
     deadline_ms: int | None = None
     trigger_value: str | None = None
+    pattern: Literal["steady", "toggle"] | None = None
+    min_transitions: int | None = None
+
+
+class ProposeExpectationRequest(Model):
+    """Optional targeting for rigs with more than one testable component (D-057)."""
+
+    component_id: str | None = None  # graph node id; default = first known component
+    command: str | None = None       # command literal; default = the preferred ON command
 
 
 class ObservationSourceSpec(Model):
-    """replay = recorded/synthetic file; sim = simulated rig through the live pipeline; live = real devices."""
+    """replay = recorded/synthetic file; sim = simulated environment through the live pipeline; live = real devices."""
 
     kind: Literal["replay", "live", "sim"]
     scenario: str | None = Field(default=None, pattern=r"^[a-z0-9_]+$")
@@ -259,7 +272,8 @@ class Fact(Model):
     analog form (displacement), `physical_state` the binary form (state reached) — same slot,
     different metric family."""
 
-    key: Literal["command_sent", "command_acknowledged", "physical_motion", "physical_state"]
+    key: Literal["command_sent", "command_acknowledged", "physical_motion", "physical_state",
+                 "state_transitions", "first_response"]
     label: str
     value: Literal["yes", "no", "unknown"]
     evidence_ids: list[str] = Field(default_factory=list)
@@ -858,6 +872,7 @@ class CameraStatus(Model):
     source_id: str | None
     fps: float
     calibrated: bool
+    calibrations: list[str] = Field(default_factory=list)  # "metric:component_id" keys ready to measure
     offset_deg: float | None
     last_error: str | None
 
@@ -953,7 +968,32 @@ class VisualRun(Model):
 
 
 class CalibrateRequest(Model):
-    known_angle_deg: float = Field(ge=-90, le=270)
+    mode: Literal["angle", "led_baseline"] = "angle"
+    component_id: str | None = None
+    known_angle_deg: float | None = Field(default=None, ge=-90, le=270)
+
+
+class LocateLedRequest(Model):
+    """Blink-to-find (D-054): engineer-initiated serial toggles; the camera diffs on vs off
+    frames and the changed blob is the LED. Commands are engineer-confirmed fixed strings."""
+    component_id: str
+    on_command: str = Field(min_length=1, max_length=64)
+    off_command: str = Field(min_length=1, max_length=64)
+    cycles: int = Field(default=2, ge=1, le=5)
+
+
+class LedLocateResult(Model):
+    found: bool
+    roi: list[int] | None = None          # accepted ROI when exactly one candidate
+    candidates: list[list[int]] = []      # all candidate ROIs when ambiguous, largest first
+    message: str = ""
+
+
+class LedRoiRequest(Model):
+    """Manual or pick-a-candidate LED region for one component (D-054)."""
+    component_id: str
+    roi: list[int] = Field(min_length=4, max_length=4)  # [x, y, w, h] in frame pixels
+    calibrate_baseline: bool = True  # assert the LED is currently OFF and record baseline
 
 
 class SaveReplayRequest(Model):

@@ -2,7 +2,28 @@
 
 > Update this at the end of every verifiable slice. Keep it short; history lives in git, intent in `decisions.md`.
 
-**Last updated:** 2026-10-18 · **Current milestone:** dynamic graph generalization + LED demo on `feature/dsg-agent-arch` (D-036–D-038): pin-mediated actuation, inferred hardware/subsystems, board-keyed ids, `led_state` binary metrics, inverted-logic diagnosis, Devin org auto-derive. **Live hardware (H0/M5/M7) still outstanding.**
+**Last updated:** 2026-10-18 · **Current milestone:** all fetched branches consolidated into main (D-061); combined regression/build and browser smoke checks pass. **Live hardware (H0/M5/M7) still outstanding.**
+
+## Branch consolidation — 2026-10-18 (D-061)
+- Integrated origin/feature/dsg-agent-arch at f0d360a into main, preserving Sentry,
+  phone/browser/USB cameras, music/button fixtures, visual LED checks, keyed LED CV,
+  multi-component expectations, command-sent gating, history and hosted replay.
+- Command tests are the default; two-LED/no-servo projects can explicitly switch to
+  camera-only checks. Setup uses mode-specific prerequisites and keeps servo calibration.
+- Combined frame endpoint supports raw calibration snapshots and component overlays.
+  Added a synthetic-image regression proving raw previews bypass annotation.
+- Verification: full backend suite **218 passed** plus the new focused regression
+  **1 passed**; frontend **17 passed**; TypeScript and production build pass.
+  The earlier CSSProperties typecheck errors were sandbox dependency-access failures;
+  typechecking with normal access passes without changing graph styles.
+- Browser smoke: existing Edit details form scrolls to its bottom; Halloween demo
+  imports and renders; both test workflows open; observation-only setup has camera-only
+  prerequisites. Refreshed the idle localhost API; no devices connected or commands sent.
+- Decision IDs from the feature branch were reconciled as D-051–D-060. Both firmware
+  fixtures remain separate: esp32_halloween is the seeded command-test demo;
+  esp32_halloween_lights is the original two-LED/buzzer/button music sketch.
+- Known limits: physical wiring/camera validation still required. Vite reports the
+  existing large-bundle advisory; tests report the existing Starlette/httpx deprecation.
 
 ## Project settings scrolling — 2026-10-18
 - Project settings form body now uses Astryx `isScrollable` and `minHeight={0}` so it
@@ -98,7 +119,7 @@ this adds context without changing P0 scope.
 | M8 | Expansion: graph layers (D-023), Event Flow (D-024), StepFun orchestration + Devin repair (D-025) | **done in software** — real adapters + deterministic fallbacks tested; **live StepFun/Gemini/Devin calls blocked: no API keys** |
 
 ## What works now (verified 2026-10-18, `feature/dsg-agent-arch`)
-- **Tests:** 136 backend (pytest) + 17 frontend (vitest) passing; `tsc -b` clean; production build passing.
+- **Tests:** 174 backend (pytest) + 17 frontend (vitest) passing; `tsc -b` clean; production build passing.
 - **LED demo end-to-end (all replay + sim, no hardware):** import `esp32_led_demo*` fixtures →
   `led_state` expectation (`LED ON`, `on_level: HIGH` resolved from source) → three faults
   diagnosed distinctly — wrong-pin `GPIO_CONFIG_MISMATCH`, dead-lead `POSSIBLE_POWER_OR_SIGNAL_FAULT`,
@@ -350,6 +371,11 @@ What remains is hardware validation.
    graph version history UI.
 
 ## Known issues / gotchas
+- **COM6 serial recovery (2026-10-18):** CH340 driver `3.9.2024.9` enumerated normally but
+  refused Windows `CreateFile` with WinError 1 / "Incorrect function" even after replug.
+  Administrator restart of only the CH340 PnP device restored access; the real API connected
+  COM6 at 115200 with `last_error: null`. See `hardware-setup.md` troubleshooting. This verifies
+  port opening only; H0 command exchange/reset behavior and complete hardware validation remain open.
 - ESP32 resets on serial open unless DTR/RTS are low (handled, unverified on hardware). Windows COM ports
   are exclusive → *Release port* before reflashing.
 - `probe_cameras` takes ~0.5 s per index on Windows (DirectShow).
@@ -369,6 +395,9 @@ What remains is hardware validation.
 - Backend tests: `cd apps/api && .venv/Scripts/python -m pytest -q` · Frontend: `cd apps/web && npx tsc -b && npm test`
 - After changing backend models: `apps/api/.venv/Scripts/python scripts/gen_api_types.py && (cd apps/web && npm run gen:types)`
 - Synthetic replays: `scripts/gen_synthetic_replays.py` · Markers: `scripts/make_aruco_markers.py` · Gemini check: `scripts/gemini_smoke.py`
+- Hosted replay bundle: `apps/api/.venv/Scripts/python scripts/capture_demo_replay.py` (API on :8000) →
+  `apps/web/public/replay/demo.json`; then `cd apps/web && npm run build` and serve `dist/` statically.
+  Verify with `node apps/web/replay_test.mjs` against `http://localhost:8080`.
 
 ## IDE panels + landing page (D-033) — done 2026-10-18
 - Resizable side panels: rail via SideNav `resizable`, guided steps panel via
@@ -412,8 +441,7 @@ What remains is hardware validation.
 - Frontend typecheck, 17 frontend tests, and production build pass. Backend regression:
   126 passed; two subsequently added API connect/preview/release tests also pass
   (19 phone-camera tests total). Only the dependency's Starlette/httpx deprecation warning.
-- No real phone camera tested. LED brightness evaluation remains unimplemented; live test
-  readiness/calibration still follows the servo-marker contract.
+- No real phone camera tested. LED brightness evaluation landed later (D-054).
 
 ## iPhone browser camera — 2026-10-18 (D-043; upstream called it D-036)
 - Rig setup adds iPhone / Safari (no app) pairing, copyable revocable link, and polling
@@ -482,3 +510,130 @@ What remains is hardware validation.
 - Manifest clarified with an explicit two-LED/button wiring summary, active levels,
   and the firmware's 35 ms button debounce. Loader and endpoint validation pass
   (7 components, 11 connections). Physical wiring verification remains outstanding.
+
+
+## History view + provenance labels (D-051) — done 2026-10-18
+- Fourth flow view **History**: scrollable timeline of every project run (passes
+  included — new `GET /projects/{pid}/tests` since passes never open incidents).
+  Click a run → it becomes the selected run: incidents resume in Debug (open ones
+  actionable, resolved read-only), passes render a read-only RunRecord, and Event
+  flow / serial drawer follow the selection.
+- Provenance renamed UI-wide after "Simulated · connected" confused (it was the
+  `connected` scenario id, not a status): "Live hardware" / "Simulated rig — wired
+  as declared" / "Recorded replay — name". Sim picker copy states "no AI involved".
+- Verified: `tsc -b` clean, 17/17 vitest, 163/163 pytest (incl. new runs-list test),
+  `vite build` clean.
+
+## Live environment wording + split drawer (D-052) — done 2026-10-18
+- "rig" renamed UI-wide: **Environment setup** dialog/button/menu, "Set up the live
+  environment", "Simulated environment — {condition}", "Live environment" source
+  segment, graph region "the physical environment", `sim://environment` port.
+- Bottom drawer: top-edge drag resizes height (persists), drag down closes, tab click
+  reopens. New **Camera** tab streams `/devices/camera/stream.mjpg` with honest
+  empty/error states and a "raw view is not a measurement" caption.
+- Split view: button opens a second pane with its own tab set (camera + activity is
+  the obvious pair); divider drags; drag to right edge or × closes the split.
+- Verified: `tsc -b` clean, 17/17 vitest, build clean; headless drag test grew the
+  drawer +160px, moved the split divider ~200px, drag-closed both split and drawer,
+  reopened via tab; live camera feed rendered in the Camera pane; zero console errors.
+- Polish: "Board messages" → "Serial output"; 16px grip spacer under the resize
+  handle so its 15px hitbox can't eat tab/button clicks; open/close is a chevron
+  IconButton (VS Code panel chrome).
+
+## Scroll responsiveness (D-053) — done 2026-10-18
+- Root cause of sluggish scroll during runs: every `test.observation`/`test.serial`
+  WS event (~15+/sec) triggered `setEvents` + `setSerial` + `setFlowSeq`, re-rendering
+  the whole workspace tree at ~15Hz, and `flowSeq`/`refreshSeq` made HistoryView +
+  EventFlowView refetch on every bump (~15 fetches/sec).
+- Fix: event stream is batched into a 200ms flush (single setEvents/setSerial/flowSeq
+  per flush; lifecycle events stay immediate; seq-dedupe preserved; queues cleared on
+  project switch). HistoryView/EventFlowView refetches capped at one per 1.5s.
+- Drawer leaf components (`SerialLog`, `Timeline`, `Audit`, `DeviceSummary`,
+  `CameraPane`) wrapped in `React.memo` + `onEnvSetup` stabilized via `useCallback`,
+  so the 4s device poll and busy-state toggles no longer rebuild tables.
+- Verified: `tsc -b` clean, 17/17 vitest, build clean; drawer_test (all gestures,
+  zero console errors); scroll_test wheels over the drawer — 579px on 8 ticks,
+  no dead zones, no pageerrors.
+
+## Live LED computer vision (D-054) — done 2026-10-18
+- Live CV path is metric-aware: `CameraManager` keys estimators per
+  `source_id` × `metric:component_id`; an `led_state` live run picks the LED
+  estimator for that component, and the run gate requires *its* baseline — a servo
+  angle calibration no longer satisfies an LED expectation (and vice versa).
+- `LedStateEstimator` accepts a fixed pixel ROI (locator-provided) with the
+  ArUco-anchored offset as fallback; `calibrate()` records the off-baseline only.
+- **Blink-to-find** (`POST /devices/camera/locate-led`): engineer-confirmed fixed
+  serial commands toggle the LED; averaged off/on frames are diffed → candidate
+  ROIs. One candidate → auto-set; many → engineer picks; zero → honest empty.
+- **Manual ROI** (`POST /devices/camera/led-roi`) + `mode: "led_baseline"` on the
+  existing calibrate route (angle mode unchanged). Environment setup dialog shows
+  the LED section only for `led_state` expectations: blink button, candidate
+  region buttons, manual x,y,w,h box, re-baseline.
+- Calibration is **in-memory** — re-setup after backend restart is deliberate.
+- Preview: `frame.jpg`/`stream.mjpg` accept `?metric=`/`?component=`; without them
+  the overlay draws every configured LED ROI plus the angle readout.
+- Verified: 174/174 pytest (11 new LED-CV tests incl. locator units, keyed
+  estimators, both gating directions), 17/17 vitest, `tsc -b`, `vite build`.
+  **Not run on real hardware** — all verification is synthetic frames/loop serial.
+- Follow-up (same day): environment setup dialog body now scrolls
+  (`.setup-dialog-body`); the LED section embeds the live feed with a
+  drag-to-mark overlay — drag a box around the LED to set its region, or click
+  an outlined blink candidate on the video. Typed x,y,w,h stays as fallback.
+  Verified: `tsc -b` clean, 17/17 vitest, `vite build`.
+
+## Side inspector + failure-path trace (D-055) — done 2026-10-18
+- Graph-inspect modal → side panel docked inside the canvas (scrollable body,
+  Escape/× close, graph stays interactive behind it).
+- Failed expectations now light the whole signal path (deterministic BFS, no AI):
+  controlling code → MCU pin → wiring through series parts → component → power.
+  Rails/junctions (pins with 2+ wires, e.g. shared GND) are marked but not
+  traversed; terminals (mcu/subsystem/module/function/power) stop expansion.
+  Observed/conflict marks keep precedence; path edges animate.
+- Verified: 174 pytest, tsc clean, 17/17 vitest; `inspector_test.mjs` +
+  `trace_test.mjs` headless — path red+animated, sibling circuit unaffected,
+  panel docks right and scrolls.
+
+## Stream store for scroll responsiveness (D-056) — done 2026-10-18
+- `lib/stream.ts`: `useSyncExternalStore` snapshot `{events, serial, seq}` fed by
+  the WS handler via `streamEvent` (200ms batch) — App no longer re-renders on
+  stream events at all (D-053 batched but still re-rendered ~5x/sec). Only
+  subscribers update: drawer panes, History, EventFlow.
+- `streamReplaceSerial` (run select/completed refetch/new test), `streamReset`
+  (project switch), `streamFlush` (completed). Non-run events also push so the
+  timeline keeps lifecycle entries; seq-dedupe preserved.
+- Drawer tables capped (serial 800 / timeline+audit 500 rows).
+- Verified: tsc clean, 17/17 vitest, build clean, drawer_test all gestures,
+  scroll_test 579px on 8 wheel ticks, zero console errors.
+
+## Halloween demo rig + hosted replay (D-057–D-059) — done 2026-10-18
+- **Fixture:** `fixtures/esp32_halloween/` + `fixtures/manifests/esp32_halloween.yaml` —
+  two LEDs, two fault stories. Ghost LED: `active_low` wiring but firmware drives
+  HIGH for "on" → `INVERTED_LOGIC` ("LED responded but ended wrong"). Pumpkin
+  candle LED: `FLICKER` acknowledged (`ACK FLICKER`/`DONE FLICKER`) yet LED stays
+  dark → `POSSIBLE_POWER_OR_SIGNAL_FAULT` branch.
+- **Targeted proposals (D-057):** `/expectations/propose` takes optional
+  `component_id`/`command`; multi-component rigs get a component picker, and an
+  expectation picker appears when a project holds >1 expectation. Confirming an
+  edited `trigger_value` re-resolves `ack_pattern` (ACK-prefixed literals win
+  over suffix matches like `DONE FLICKER` — stale `ACK GHOST ON` can no longer
+  cause a false `MISSING_SERIAL_ACK`).
+- **Repair gating (D-058):** "Prepare software fix with Devin" is also offered on
+  the signal/power branch, and verified-clean manual checks count as software
+  evidence — an *unverified* physical fault still can't launch a remote fix.
+  Capture drove a real Devin session (`repair:6ed9621d75` → `needs_input`,
+  surfaced honestly as waiting-for-engineer, not success).
+- **Replay robustness (D-059):** request-key canonicalization (`90.0` vs `90`)
+  and `expectation_id` fallback matching for recorded runs.
+- **Capture:** `scripts/capture_demo_replay.py` records the halloween project
+  (both incidents, manual checks, repair preflight/jobs) — it is the only demo
+  card now; legacy servo/LED fixtures were dropped from the picker (files kept
+  for tests). Bundle at `apps/web/public/replay/demo.json`. Scoped-graph
+  requests are derived from the imported project (no hardcoded subsystem).
+- **Verified:** 178 pytest, 17/17 vitest, `tsc -b` clean, `vite build` clean.
+  `apps/web/replay_test.mjs` against static `dist/` on :8080 — ALL PASS:
+  hosted banner, graph + layer switching, inverted hypothesis, ghost resolved,
+  pumpkin incident w/ signal-power causes + Devin action, GPIO mismatch,
+  tied hypotheses + manual check, 4-lane event flow, no 800px overflow, only
+  expected hosted-mode 404s (health probe, MJPEG camera).
+- `viewing` (chapter pick) now resets on project switch — a stale Debug pick no
+  longer hides the Test view of the next project.

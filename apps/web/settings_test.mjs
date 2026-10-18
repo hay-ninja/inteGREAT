@@ -87,14 +87,14 @@ if (await srcPick.isVisible().catch(() => false)) {
   const liveOpt = page.getByText(/^Live/).last();
   if (await liveOpt.isVisible().catch(() => false)) { await liveOpt.click(); await sleep(600); }
 }
-// Close the dialog — only the persistent top-bar badge should carry "Live rig" now.
+// Close the dialog — only the persistent top-bar badge should carry "Live environment" now.
 await page.getByRole("button", { name: "Cancel" }).first().click().catch(() => page.keyboard.press("Escape"));
 await sleep(500);
 await page.screenshot({ path: `${shots}/s07-live.png` });
-console.log("live chip:", await page.getByText("Live rig").first().isVisible().catch(() => false));
+console.log("live chip:", await page.getByText("Live environment").first().isVisible().catch(() => false));
 console.log("live notice or setup button:",
   await page.getByText("Live hardware debugging").isVisible().catch(() => false),
-  await page.getByRole("button", { name: "Set up the live rig" }).first().isVisible().catch(() => false));
+  await page.getByRole("button", { name: "Set up the live environment" }).first().isVisible().catch(() => false));
 
 console.log("console errors:", errors.length ? errors.slice(0, 5) : "none");
 await browser.close();

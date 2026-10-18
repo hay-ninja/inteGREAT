@@ -98,7 +98,7 @@ class SimRig:
 class SimSerial:
     """Same surface as SerialDevice for what the test runner needs."""
 
-    port = "sim://rig"
+    port = "sim://environment"
 
     def __init__(self, rig: SimRig):
         self.rig = rig

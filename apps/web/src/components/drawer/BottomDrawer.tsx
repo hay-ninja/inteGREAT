@@ -1,14 +1,19 @@
-/** Collapsible bottom drawer: measurements and logs live here, out of the way until needed. */
-import { useEffect, useState } from "react";
+import { NumberInput } from "@astryxdesign/core/NumberInput";
+/** Collapsible bottom drawer: measurements and logs live here, out of the way until needed.
+ *  Height drags like a VS Code panel (drag the top edge; drag down past the header to close),
+ *  and a second pane can be split off beside the first — e.g. camera output next to activity. */
+import { memo, useEffect, useState } from "react";
 import { HStack } from "@astryxdesign/core/HStack";
 import { VStack } from "@astryxdesign/core/VStack";
 import { TabList, Tab } from "@astryxdesign/core/TabList";
 import { Button } from "@astryxdesign/core/Button";
+import { IconButton } from "@astryxdesign/core/IconButton";
+import { ChevronDown, ChevronUp, SquareSplitHorizontal, X } from "lucide-react";
+import { useResizable, ResizeHandle } from "@astryxdesign/core/Resizable";
 import { Text } from "@astryxdesign/core/Text";
 import { Table, pixel } from "@astryxdesign/core/Table";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Selector } from "@astryxdesign/core/Selector";
-import { NumberInput } from "@astryxdesign/core/NumberInput";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { StatusDot } from "@astryxdesign/core/StatusDot";
 import { Card } from "@astryxdesign/core/Card";
@@ -21,8 +26,16 @@ import {
   type ToolCall,
 } from "../../lib/api";
 import { Eyebrow, SourceBadge } from "../flow/common";
+import { useStream } from "../../lib/stream";
 
-export type DrawerTab = "serial" | "devices" | "activity";
+export type DrawerTab = "serial" | "devices" | "activity" | "camera";
+
+const TAB_LABEL: Record<DrawerTab, string> = {
+  serial: "Serial output",
+  devices: "Devices",
+  activity: "Activity",
+  camera: "Camera",
+};
 
 interface Props {
   open: boolean;
@@ -30,60 +43,149 @@ interface Props {
   tab: DrawerTab;
   onTab: (t: DrawerTab) => void;
   run: TestRun | null;
-  serial: SerialEvent[];
-  events: IntegreatEvent[];
   toolCalls: ToolCall[];
   devices: DeviceStatus | null;
-  onRigSetup: () => void;
+  onEnvSetup: () => void;
   onSaveReplay: (runId: string) => void;
   onError: (m: string) => void;
 }
 
-export function BottomDrawer(p: Props) {
+function DrawerTabs({ value, onChange }: { value: DrawerTab; onChange: (t: DrawerTab) => void }) {
   return (
-    <VStack gap={0} height={p.open ? 260 : undefined}>
+    <TabList value={value} size="sm" onChange={(t) => onChange(t as DrawerTab)}>
+      {(Object.keys(TAB_LABEL) as DrawerTab[]).map((t) => <Tab key={t} value={t} label={TAB_LABEL[t]} />)}
+    </TabList>
+  );
+}
+
+/** One tab's content — shared by the single view, the left pane, and the split pane.
+    Serial + events come from the stream store so stream updates re-render only the
+    drawer, not the whole workspace. */
+function PaneContent({ tab, p }: { tab: DrawerTab; p: Props }) {
+  const stream = useStream();
+  if (tab === "serial") return <SerialLog serial={stream.serial} />;
+  if (tab === "devices") return <DeviceSummary status={p.devices} onOpenSetup={p.onEnvSetup} />;
+  if (tab === "camera") return <CameraPane devices={p.devices} onOpenSetup={p.onEnvSetup} />;
+  return (
+    <VStack gap={3}>
+      <VStack gap={1}>
+        <Eyebrow>Investigation events</Eyebrow>
+        <Timeline events={stream.events} />
+      </VStack>
+      <VStack gap={1}>
+        <Eyebrow>Tool audit — every run, approval, and denial</Eyebrow>
+        <Audit calls={p.toolCalls} />
+      </VStack>
+    </VStack>
+  );
+}
+
+export function BottomDrawer(p: Props) {
+  // Vertical: the whole drawer height. Collapsible — drag the top edge down past the
+  // header threshold to close, and clicking a tab re-opens it (open state stays in App).
+  const drawer = useResizable({
+    direction: "vertical", defaultSize: 260, minSize: 140, maxSize: "70%",
+    collapsible: true, collapsedSize: 44, autoSaveId: "integreat.drawer",
+    isCollapsed: !p.open, onCollapseChange: (c) => p.onOpen(!c),
+  });
+  // Right pane of the split. Collapsible — dragging the divider to the right edge
+  // closes the split, like dragging a terminal split back together in VS Code.
+  const [split, setSplit] = useState(false);
+  const [rightTab, setRightTab] = useState<DrawerTab>("activity");
+  const pane = useResizable({
+    direction: "horizontal", defaultSize: "45%", minSize: 280, maxSize: "70%",
+    collapsible: true, collapsedSize: 100, autoSaveId: "integreat.drawer.split",
+    isCollapsed: !split, onCollapseChange: (c) => setSplit(!c),
+  });
+  const openSplit = () => {
+    setRightTab((t) => (t === p.tab ? (p.tab === "camera" ? "activity" : "camera") : t));
+    setSplit(true);
+    p.onOpen(true);
+  };
+  return (
+    <VStack gap={0} height={p.open ? drawer.size : undefined}>
+      <ResizeHandle direction="vertical" isReversed hasDivider resizable={drawer.props} label="Resize logs panel" />
+      {/* The handle's invisible hitbox extends ~15px below its 1px line — this grip zone
+          absorbs it so tabs and buttons stay fully clickable (VS Code sash behaviour). */}
+      <div aria-hidden style={{ height: 16 }} />
       <HStack hAlign="between" vAlign="center" gap={2} paddingInline={2} wrap="wrap">
-        <TabList value={p.tab} size="sm" onChange={(t) => { p.onTab(t as DrawerTab); p.onOpen(true); }}>
-          <Tab value="serial" label="Board messages" />
-          <Tab value="devices" label="Devices" />
-          <Tab value="activity" label="Activity" />
-        </TabList>
+        <DrawerTabs value={p.tab} onChange={(t) => { p.onTab(t); p.onOpen(true); }} />
         <HStack gap={1} vAlign="center">
           {p.run && <SourceBadge run={p.run} />}
           {p.run?.state === "completed" && p.run.source.kind !== "replay" && (
             <Button label="Save as replay" size="sm" variant="ghost" tooltip="Keep this run for offline demos"
                     onClick={() => p.onSaveReplay(p.run!.id)} />
           )}
-          <Button label={p.open ? "Focus graph" : "Show logs"} size="sm" variant="ghost" onClick={() => p.onOpen(!p.open)} />
+          <IconButton label={split ? "Close split view" : "Split into two panes"} size="sm" variant="ghost"
+                      tooltip={split ? "Back to one pane" : "Show two panels side by side — e.g. camera next to activity"}
+                      icon={<SquareSplitHorizontal size={14} />} onClick={() => (split ? setSplit(false) : openSplit())} />
+          <IconButton label={p.open ? "Collapse panel" : "Expand panel"} size="sm" variant="ghost"
+                      tooltip={p.open ? "Collapse to the tab row" : "Expand the panel"}
+                      icon={p.open ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+                      onClick={() => p.onOpen(!p.open)} />
         </HStack>
       </HStack>
-      {p.open && (
+      {p.open && !split && (
         <VStack gap={0} isScrollable height="100%" paddingInline={3} paddingBlock={2}>
-          {p.tab === "serial" && <SerialLog serial={p.serial} />}
-          {p.tab === "devices" && <DeviceSummary status={p.devices} onOpenSetup={p.onRigSetup} />}
-          {p.tab === "activity" && (
-            <VStack gap={3}>
-              <VStack gap={1}>
-                <Eyebrow>Investigation events</Eyebrow>
-                <Timeline events={p.events} />
-              </VStack>
-              <VStack gap={1}>
-                <Eyebrow>Tool audit — every run, approval, and denial</Eyebrow>
-                <Audit calls={p.toolCalls} />
-              </VStack>
-            </VStack>
-          )}
+          <PaneContent tab={p.tab} p={p} />
         </VStack>
+      )}
+      {p.open && split && (
+        <HStack gap={0} height="100%" vAlign="stretch">
+          <VStack gap={0} isScrollable height="100%" paddingInline={3} paddingBlock={2} style={{ flex: 1, minWidth: 0 }}>
+            <PaneContent tab={p.tab} p={p} />
+          </VStack>
+          <ResizeHandle direction="horizontal" isReversed hasDivider resizable={pane.props} label="Resize split pane" />
+          <VStack gap={1} height="100%" paddingInline={3} paddingBlock={1} style={{ width: pane.size, minWidth: 0, flexShrink: 0 }}>
+            <HStack hAlign="between" vAlign="center">
+              <DrawerTabs value={rightTab} onChange={setRightTab} />
+              <IconButton label="Close split view" size="sm" variant="ghost" icon={<X size={13} />} onClick={() => setSplit(false)} />
+            </HStack>
+            <VStack gap={0} isScrollable height="100%" paddingBlock={1}>
+              <PaneContent tab={rightTab} p={p} />
+            </VStack>
+          </VStack>
+        </HStack>
       )}
     </VStack>
   );
 }
 
+/** Raw camera feed for orientation during a test. Measurements still come from the
+    estimator — this picture is never itself evidence. */
+const CameraPane = memo(function CameraPane({ devices, onOpenSetup }: { devices: DeviceStatus | null; onOpenSetup: () => void }) {
+  const c = devices?.camera;
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [c?.connected, c?.source_id]);
+  if (!c?.connected) {
+    return (
+      <VStack gap={2}>
+        <EmptyState isCompact title="No camera connected"
+                    description="Connect a camera in environment setup to watch the live environment during a test." />
+        <Button label="Open environment setup" size="sm" onClick={onOpenSetup} />
+      </VStack>
+    );
+  }
+  if (failed) {
+    return <EmptyState isCompact title="Camera feed unavailable"
+                       description="The camera is connected but the stream didn't answer — reconnect it in environment setup." />;
+  }
+  return (
+    <VStack gap={1} height="100%">
+      <Text type="supporting">
+        {c.source_id}{c.calibrated ? " · calibrated" : " · needs calibration"} — raw view; measurements come from the estimator, not this picture.
+      </Text>
+      <img className="drawer-camera" src="/api/v1/devices/camera/stream.mjpg"
+           alt="Live camera view of the test environment" onError={() => setFailed(true)} />
+    </VStack>
+  );
+});
+
 interface Row extends Record<string, unknown> { id: string; t: string; dir: string; raw: string; note: string }
 
-function SerialLog({ serial }: { serial: SerialEvent[] }) {
+const SerialLog = memo(function SerialLog({ serial }: { serial: SerialEvent[] }) {
   if (!serial.length) return <EmptyState isCompact title="No messages yet" description="Everything sent to and heard back from the board during a test appears here." />;
-  const rows: Row[] = serial.map((s) => ({
+  const rows: Row[] = serial.slice(-800).map((s) => ({
     id: s.id, t: `${s.elapsed_ms} ms`, dir: s.direction === "tx" ? "→ board" : "← board", raw: s.raw,
     note: s.matched_function_ids.length ? `printed by ${s.matched_function_ids.map((f) => f.split("::")[1]).join(", ")}()` : "",
   }));
@@ -92,14 +194,14 @@ function SerialLog({ serial }: { serial: SerialEvent[] }) {
                columns={[{ key: "t", header: "Time", width: pixel(80) }, { key: "dir", header: "Direction", width: pixel(80) },
                          { key: "raw", header: "Message" }, { key: "note", header: "From code" }]} />
   );
-}
+});
 
 const SHOWN = new Set(["project.imported", "graph.updated", "expectation.confirmed", "test.started", "test.completed",
   "expectation.failed", "incident.created", "action.completed", "action.denied", "permissions.updated",
   "agent.started", "agent.reported", "message.added", "test.verification_completed", "incident.resolved", "error"]);
 
-function Timeline({ events }: { events: IntegreatEvent[] }) {
-  const shown = events.filter((e) => SHOWN.has(e.type)).slice().reverse();
+const Timeline = memo(function Timeline({ events }: { events: IntegreatEvent[] }) {
+  const shown = events.filter((e) => SHOWN.has(e.type)).slice(-500).reverse();
   if (!shown.length) return <EmptyState isCompact title="Nothing yet" />;
   interface TRow extends Record<string, unknown> { id: string; t: string; type: string; what: string }
   const rows: TRow[] = shown.map((e) => ({ id: String(e.seq), t: new Date(e.timestamp_utc).toLocaleTimeString(),
@@ -109,7 +211,7 @@ function Timeline({ events }: { events: IntegreatEvent[] }) {
                  columns={[{ key: "t", header: "Time", width: pixel(90) }, { key: "type", header: "Event", width: pixel(170) },
                            { key: "what", header: "" }]} />
   );
-}
+});
 
 function summarize(e: IntegreatEvent): string {
   const p = e.payload as Record<string, unknown>;
@@ -130,10 +232,10 @@ function summarize(e: IntegreatEvent): string {
   }
 }
 
-function Audit({ calls }: { calls: ToolCall[] }) {
+const Audit = memo(function Audit({ calls }: { calls: ToolCall[] }) {
   if (!calls.length) return <EmptyState isCompact title="No tool calls yet" description="Every tool run, approval and denial is listed here." />;
   interface ARow extends Record<string, unknown> { id: string; t: string; tool: string; who: string; decision: string; what: string }
-  const rows: ARow[] = [...calls].reverse().map((c) => ({ id: c.id, t: new Date(c.started_at_utc).toLocaleTimeString(),
+  const rows: ARow[] = calls.slice(-500).reverse().map((c) => ({ id: c.id, t: new Date(c.started_at_utc).toLocaleTimeString(),
     tool: c.tool_name, who: c.caller, decision: c.decision.replace("_", " "), what: c.error ?? c.summary }));
   return (
     <Table<ARow> data={rows} idKey="id" density="compact" textOverflow="truncate"
@@ -141,10 +243,10 @@ function Audit({ calls }: { calls: ToolCall[] }) {
                            { key: "who", header: "By", width: pixel(120) }, { key: "decision", header: "Decision", width: pixel(120) },
                            { key: "what", header: "Result" }]} />
   );
-}
+});
 
-/** Status-only view — actual connect/calibrate actions live in the single Rig setup dialog. */
-function DeviceSummary({ status, onOpenSetup }: { status: DeviceStatus | null; onOpenSetup: () => void }) {
+/** Status-only view — actual connect/calibrate actions live in the single environment setup dialog. */
+const DeviceSummary = memo(function DeviceSummary({ status, onOpenSetup }: { status: DeviceStatus | null; onOpenSetup: () => void }) {
   const s = status?.serial, c = status?.camera;
   return (
     <HStack gap={4} vAlign="center" wrap="wrap">
@@ -160,12 +262,13 @@ function DeviceSummary({ status, onOpenSetup }: { status: DeviceStatus | null; o
           {c?.connected ? `${c.source_id} · ${c.calibrated ? "calibrated" : "needs calibration"}` : "not connected"}
         </Text>
       </HStack>
-      <Button label="Open rig setup" size="sm" onClick={onOpenSetup} />
+      <Button label="Open environment setup" size="sm" onClick={onOpenSetup} />
     </HStack>
   );
-}
+});
 
-export function DeviceControls({ status, onStatus, onError, observationOnly = false }: { status: DeviceStatus | null; onStatus: (s: DeviceStatus) => void; onError: (m: string) => void; observationOnly?: boolean }) {
+export function DeviceControls({ status, onStatus, onError, observationOnly = false, ledMode = false }: { status: DeviceStatus | null; onStatus: (s: DeviceStatus) => void; onError: (m: string) => void; observationOnly?: boolean; ledMode?: boolean }) {
+  const [angle, setAngle] = useState(0);
   const [port, setPort] = useState("");
   const [cams, setCams] = useState<number[] | null>(null);
   const [cam, setCam] = useState("0");
@@ -177,7 +280,6 @@ export function DeviceControls({ status, onStatus, onError, observationOnly = fa
     const timer = window.setInterval(() => api.devices().then(onStatus).catch((e) => onError(e.message)), 2000);
     return () => window.clearInterval(timer);
   }, [pairing, onStatus, onError]);
-  const [angle, setAngle] = useState(0);
   useEffect(() => { if (!port && status?.serial.ports.length) setPort(status.serial.ports[0].port); }, [status, port]);
   if (!status) return <EmptyState isCompact title="Loading devices…" />;
   const run = (p: Promise<DeviceStatus>) => p.then(onStatus).catch((e) => onError(e.message));
@@ -246,13 +348,13 @@ export function DeviceControls({ status, onStatus, onError, observationOnly = fa
             </VStack>
           ) : (
             <HStack gap={1} vAlign="end">
-              {!observationOnly && <NumberInput label="Servo is at" size="sm" units="°" value={angle} onChange={setAngle} width={130} />}
-              {!observationOnly && <Button label="Calibrate" size="sm" clickAction={() => run(api.cameraCalibrate(angle))} />}
+              {!observationOnly && !ledMode && <NumberInput label="Servo is at" size="sm" units="°" value={angle} onChange={setAngle} width={130} />}
+              {!observationOnly && !ledMode && <Button label="Calibrate" size="sm" clickAction={() => run(api.cameraCalibrate(angle))} />}
               <Button label="Release" size="sm" variant="ghost" clickAction={() => run(api.cameraRelease()).then(() => setPairing(null))} />
             </HStack>
           )}
           {c.last_error && <Text type="supporting" color="secondary">{c.last_error}</Text>}
-          <Text type="supporting">{observationOnly ? "Return to the LED visual check to select regions, capture dim/bright references, and confirm the expectation. No markers are needed." : "Two printed marker stickers let the camera measure the arm: id 1 on the moving arm, id 0 beside the servo. Missing markers mean measurement unavailable. Calibrate at a known angle before testing."}</Text>
+          <Text type="supporting">{observationOnly ? "Return to the LED visual check to select regions, capture dim/bright references, and confirm the expectation. No markers are needed." : ledMode ? "Select each LED region and record its baseline below. No markers are needed." : "Two printed marker stickers let the camera measure the arm: id 1 on the moving arm, id 0 beside the servo. Missing markers mean measurement unavailable. Calibrate at a known angle before testing."}</Text>
         </VStack>
       </Card>
       {c.connected && <img className="camera-preview" src="/api/v1/devices/camera/stream.mjpg" alt="Live camera preview" />}

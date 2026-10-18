@@ -108,6 +108,7 @@
 
   /* MJPEG preview image (an <img> Astryx has no component for) */
   .camera-preview { max-height: 160px; border-radius: var(--radius-element); border: 1px solid var(--color-border); }
+  .drawer-camera { max-width: 100%; min-height: 0; flex: 1; object-fit: contain; border-radius: var(--radius-element); border: 1px solid var(--color-border); background: #000; }
 
   /* ---------------- section labels + chapter strip ----------------
      Plain section labels and a numbered chapter strip. Kept deliberately quiet — no
@@ -118,8 +119,8 @@
   .eyebrow .num { color: var(--color-text-disabled); font-weight: var(--font-weight-regular); }
   .eyebrow-muted .num { color: var(--color-text-disabled); }
 
-  /* View strip — Test / Debug / Analyze are views, not sequential steps (D-041) */
-  .chapters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* View strip — Test / Debug / Analyze / History are views, not sequential steps (D-041/D-051) */
+  .chapters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
               border: 1px solid var(--color-border); border-radius: var(--radius-element);
               background: var(--color-background-card); overflow: hidden; }
   .chapter { appearance: none; background: none; border: 0; border-right: 1px solid var(--color-border);
@@ -152,7 +153,7 @@
               letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-text-primary);
               line-height: 1.05; }
   .wordmark .waccent { color: var(--color-accent); }
-  /* hairline divider zoning the top bar: context (left) vs live rig state (right) */
+  /* hairline divider zoning the top bar: context (left) vs live environment state (right) */
   .topbar-divider { align-self: stretch; width: 1px; background: var(--color-border); }
   /* per-card ⋯ menu on the projects hub — tucked into the card corner */
   .card-menu { position: absolute; top: 6px; right: 6px; z-index: 1; }
@@ -165,4 +166,53 @@
   .led-region-picker { width: 100%; display: block; cursor: crosshair; touch-action: none; }
   .led-region-picker rect { fill: none; stroke: var(--color-text-secondary); stroke-width: 2; }
   .led-region-picker rect.selected { stroke: var(--color-text-primary); stroke-width: 3; }
+}
+
+@layer app {
+
+  /* History view rows (D-051) */
+  .history-row { appearance: none; background: none; border: 1px solid var(--color-border);
+                 border-radius: var(--radius-element); padding: 8px 12px; width: 100%;
+                 text-align: left; cursor: pointer; }
+  .history-row:hover { background: var(--color-background-muted); }
+  .history-row[aria-selected="true"] { border-color: var(--color-border-focus, var(--color-accent)); }
+
+  /* Every modal scrolls instead of clipping past the viewport. Astryx <dialog> is a
+     column flexbox whose children shrink to fit — so the cap + scroll must live on
+     the children (min-height:0 lets them shrink below content height, then scroll). */
+  dialog[open]:not(#\#):not(#\#) { max-height: calc(100dvh - 24px); overflow: hidden; }
+  dialog[open]:not(#\#) > * { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  dialog[open]:not(#\#) > * > * { flex-shrink: 0; }
+
+  /* Side-docked graph inspector — scrolls internally, never overflows the canvas. */
+  .graph-inspector { position: absolute; top: 10px; left: 10px; bottom: 10px; z-index: 20;
+    width: min(420px, 92%); display: flex; flex-direction: column;
+    background: var(--color-background-card); border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-card); box-shadow: 0 12px 40px rgb(0 0 0 / 0.5); }
+  .graph-inspector-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+
+  /* Environment setup dialog — content scrolls inside the dialog (D-054 follow-up). */
+  .setup-dialog-body { max-height: calc(90dvh - 72px); overflow-y: auto; overscroll-behavior: contain; }
+
+  /* LED region picker — drag a box on the live feed (D-054 follow-up). */
+  .roi-view { position: relative; max-width: 100%; user-select: none; }
+  .roi-view img { display: block; width: 100%; max-height: 300px; object-fit: contain;
+                  border-radius: var(--radius-element); border: 1px solid var(--color-border); background: #000; }
+  .roi-layer { position: absolute; inset: 0; cursor: crosshair; touch-action: none; }
+  .roi-box { position: absolute; border: 2px solid transparent; border-radius: 2px; padding: 0; background: none; }
+  .roi-current { border-color: #46a24a; }
+  .roi-other { border-color: var(--color-border-emphasized); opacity: 0.6; pointer-events: none; }
+  .roi-candidate { border-color: var(--color-accent); background: rgb(128 160 255 / 0.15);
+                   cursor: pointer; pointer-events: auto; }
+  .roi-candidate:hover, .roi-candidate:focus-visible { background: rgb(128 160 255 / 0.3); }
+  .roi-drag { border-color: var(--color-accent); border-style: dashed; pointer-events: none; }
+
+  /* two-click region picking: corner marker + pending hint */
+  .roi-corner { position: absolute; background: var(--color-accent); border-radius: 1px;
+                pointer-events: none; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6); }
+  .roi-hint { position: absolute; left: 8px; bottom: 8px; display: flex; gap: 8px;
+              align-items: center; padding: 3px 8px; border-radius: 4px;
+              background: rgb(0 0 0 / 0.65); color: #eee; font-size: 11px; }
+  .roi-reset { background: none; border: none; color: var(--color-accent);
+               font: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
 }

@@ -21,11 +21,15 @@ from ..models import (
     ExecuteActionRequest,
     Expectation,
     ExpectationEdit,
+    ProposeExpectationRequest,
     GraphSnapshot,
     ImportRequest,
     Incident,
     IntegreatEvent,
     InvestigationView,
+    LedLocateResult,
+    LedRoiRequest,
+    LocateLedRequest,
     ManualResultRequest,
     MessageRequest,
     Model,
@@ -50,7 +54,6 @@ from ..models import (
     WiringVerificationRequest,
 )
 from ..observations.camera_adapter import CameraError, probe_cameras
-from ..observations.cv_angle import annotate
 from ..observations.serial_adapter import SerialError
 from ..service import Service, ServiceError
 from ..tools.registry import RISKY_CATEGORIES, list_tools
@@ -208,8 +211,9 @@ def list_expectations(pid: str, request: Request):
 
 
 @router.post("/projects/{pid}/expectations/propose", response_model=Expectation)
-def propose_expectation(pid: str, request: Request):
-    return svc(request).propose_expectation(pid)
+def propose_expectation(pid: str, request: Request, req: ProposeExpectationRequest | None = None):
+    return svc(request).propose_expectation(pid, component_id=req.component_id if req else None,
+                                            command=req.command if req else None)
 
 
 @router.post("/projects/{pid}/expectations/{eid}/confirm", response_model=Expectation)
@@ -223,6 +227,12 @@ def start_test(pid: str, req: StartTestRequest, request: Request, bg: Background
     run = s.create_test_run(pid, req)
     bg.add_task(s.execute_test_run, run.id)
     return run
+
+
+@router.get("/projects/{pid}/tests", response_model=list[TestRun])
+def list_tests(pid: str, request: Request):
+    """All runs for the project, newest first — the History view (D-051)."""
+    return svc(request).list_test_runs(pid)
 
 
 @router.get("/projects/{pid}/incidents", response_model=list[Incident])
@@ -399,38 +409,52 @@ async def camera_release(request: Request):
 def camera_calibrate(req: CalibrateRequest, request: Request):
     d = svc(request).devices
     try:
-        d.camera.calibrate(req.known_angle_deg)
+        d.camera.calibrate(mode=req.mode, component_id=req.component_id,
+                           known_angle_deg=req.known_angle_deg)
     except (CameraError, ValueError) as e:
         raise ServiceError(409, "calibration_failed", str(e)) from e
     return d.status()
 
 
-def _jpeg(d, raw: bool = False) -> bytes | None:
+@router.post("/devices/camera/locate-led", response_model=LedLocateResult)
+async def locate_led(req: LocateLedRequest, request: Request):
+    """Blink-to-find (D-054): engineer-initiated fixed serial commands toggle the LED;
+    frame differencing finds the component. Candidates returned for the engineer to pick."""
+    return await svc(request).locate_led(req)
+
+
+@router.post("/devices/camera/led-roi", response_model=DeviceStatus)
+def led_roi(req: LedRoiRequest, request: Request):
+    """Confirm/set the ROI for one component's LED (manual pick or located candidate, D-054)."""
+    return svc(request).set_led_roi(req)
+
+
+def _jpeg(d, metric: str | None = None, component_id: str | None = None, raw: bool = False) -> bytes | None:
     f = d.camera.source.latest() if d.camera.connected else None
     if f is None:
         return None
-    image = f.image if raw else annotate(f.image, d.camera.estimator().estimate(f.image))
-    ok, buf = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 70])
+    ok, buf = cv2.imencode(".jpg", f.image if raw else d.camera.annotate(f.image, metric, component_id),
+                           [cv2.IMWRITE_JPEG_QUALITY, 70])
     return buf.tobytes() if ok else None
 
 
 @router.get("/devices/camera/frame.jpg")
-def camera_frame(request: Request, raw: bool = False):
-    data = _jpeg(svc(request).devices, raw=raw)
+def camera_frame(request: Request, metric: str | None = None, component: str | None = None, raw: bool = False):
+    data = _jpeg(svc(request).devices, metric, component, raw=raw)
     if data is None:
         raise ServiceError(409, "camera_unavailable", "no camera frame available")
     return Response(content=data, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
 @router.get("/devices/camera/stream.mjpg")
-async def camera_stream(request: Request):
+async def camera_stream(request: Request, metric: str | None = None, component: str | None = None):
     d = svc(request).devices
     if not d.camera.connected:
         raise ServiceError(409, "camera_unavailable", "no camera connected")
 
     async def gen():
         while not await request.is_disconnected() and d.camera.connected:
-            data = await asyncio.to_thread(_jpeg, d)
+            data = await asyncio.to_thread(_jpeg, d, metric, component)
             if data:
                 yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + data + b"\r\n"
             await asyncio.sleep(1 / 12)

@@ -105,7 +105,7 @@ export function LandingScreen({ onEnter }: { onEnter: () => void }) {
           <Card padding={5}>
             <HStack hAlign="between" vAlign="center" gap={4} wrap="wrap">
               <VStack gap={1} maxWidth={560}>
-                <Heading level={3}>Try it on a simulated rig</Heading>
+                <Heading level={3}>Try it on a simulated environment</Heading>
                 <Text type="body" color="secondary">
                   Three failure stories are built in — a wrong pin in the code, a disconnected signal
                   lead, and an LED wired active-low while the code drives it high. Nothing touches real

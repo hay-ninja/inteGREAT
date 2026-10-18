@@ -99,17 +99,25 @@ export function HostedDemoBanner() {
   );
 }
 
+/** Sim scenario ids read like device status ("connected") — show them as conditions (D-051). */
+const SCENARIO_LABEL: Record<string, string> = {
+  connected: "wired as declared",
+  signal_disconnected: "signal lead off",
+  power_disconnected: "power lead off",
+  marker_occluded: "camera marker hidden",
+};
+
 export function SourceBadge({ run }: { run: TestRun }) {
   const s = run.source;
-  const scenario = (s.scenario ?? "").replaceAll("_", " ");
-  const label = s.kind === "live" ? "Live hardware" : s.kind === "sim" ? `Simulated · ${scenario}`
-    : `${run.synthetic ? "Synthetic replay" : "Recorded replay"} · ${scenario}`;
+  const scenario = SCENARIO_LABEL[s.scenario ?? ""] ?? (s.scenario ?? "").replaceAll("_", " ");
+  const label = s.kind === "live" ? "Live hardware" : s.kind === "sim" ? `Simulated environment — ${scenario}`
+    : `${run.synthetic ? "Synthetic replay" : "Recorded replay"} — ${scenario}`;
   return <HStack gap={1} vAlign="center"><StatusDot variant={s.kind === "live" ? "success" : "neutral"} label={label} /><Text type="supporting">{label}</Text></HStack>;
 }
 
 /** Where test data comes from: two small choices instead of one long list. */
 const SOURCE_PLAIN: Record<string, string> = {
-  sim: "Pretend hardware — safe to explore. Nothing physical is connected.",
+  sim: "A software model of the environment — no AI involved. Nothing physical is connected.",
   replay: "A saved recording of an earlier run. Nothing happens on the device.",
   live: "The real board, component, and camera on the bench.",
 };
@@ -132,11 +140,11 @@ export function SourcePicker({ value, onChange, sources, liveReady }: {
       <SegmentedControl label="Where the test runs" value={kind} onChange={pick} layout="fill" size="sm">
         <SegmentedControlItem value="sim" label="Simulated" />
         <SegmentedControlItem value="replay" label="Replay" />
-        <SegmentedControlItem value="live" label="Live rig" />
+        <SegmentedControlItem value="live" label="Live environment" />
       </SegmentedControl>
       <Text type="supporting">
         {SOURCE_PLAIN[kind] ?? ""}
-        {kind === "live" && !liveReady ? " Open Rig setup to connect the board and calibrate the camera." : ""}
+        {kind === "live" && !liveReady ? " Open environment setup to connect the board and calibrate the camera." : ""}
       </Text>
       {kind !== "live" && (
         <Selector label={kind === "sim" ? "Simulated condition" : "Recording"} isLabelHidden size="sm"

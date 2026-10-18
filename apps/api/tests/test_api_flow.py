@@ -36,6 +36,20 @@ def test_good_run_passes_without_incident(client):
     assert run["incident_id"] is None and run["synthetic"] is True
 
 
+def test_project_tests_lists_all_runs_newest_first(client):
+    """The History view's source: passes (no incident) and failures both appear (D-044)."""
+    p, exp = import_and_confirm(client)
+    good = run_test(client, p["id"], exp["id"], "good")
+    bad = run_test(client, p["id"], exp["id"], "fault_a_wrong_gpio")
+    runs = client.get(f"{API}/projects/{p['id']}/tests").json()
+    ids = [r["id"] for r in runs]
+    assert good["id"] in ids and bad["id"] in ids
+    assert ids == sorted(ids, key=lambda i: next(r["started_at_utc"] for r in runs if r["id"] == i), reverse=True)
+    by_id = {r["id"]: r for r in runs}
+    assert by_id[good["id"]]["incident_id"] is None
+    assert by_id[bad["id"]]["incident_id"] is not None
+
+
 def test_fault_a_full_loop(client):
     p, exp = import_and_confirm(client)
     run = run_test(client, p["id"], exp["id"], "fault_a_wrong_gpio")

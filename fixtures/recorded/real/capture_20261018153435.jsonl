@@ -1,0 +1,27 @@
+{"_meta": {"synthetic": false, "scenario": "capture_20261018153435", "command": null, "description": "Recorded from live run test:7b168f6ecb; result fail", "recorded_at_utc": "2026-10-18T15:32:32.631616+00:00"}}
+{"t_ms": 0, "source": "cv", "frame": 2351, "value": 0.0, "quality": "valid", "raw": 81.4}
+{"t_ms": 68, "source": "cv", "frame": 2354, "value": 0.0, "quality": "valid", "raw": 81.7}
+{"t_ms": 181, "source": "cv", "frame": 2357, "value": 0.0, "quality": "valid", "raw": 81.6}
+{"t_ms": 276, "source": "cv", "frame": 2360, "value": 0.0, "quality": "valid", "raw": 81.2}
+{"t_ms": 373, "source": "cv", "frame": 2363, "value": 0.0, "quality": "valid", "raw": 80.9}
+{"t_ms": 468, "source": "cv", "frame": 2366, "value": 0.0, "quality": "valid", "raw": 80.7}
+{"t_ms": 548, "source": "cv", "frame": 2368, "value": 0.0, "quality": "valid", "raw": 80.5}
+{"t_ms": 644, "source": "cv", "frame": 2371, "value": 0.0, "quality": "valid", "raw": 80.4}
+{"t_ms": 741, "source": "cv", "frame": 2374, "value": 0.0, "quality": "valid", "raw": 80.2}
+{"t_ms": 836, "source": "cv", "frame": 2377, "value": 0.0, "quality": "valid", "raw": 80.1}
+{"t_ms": 916, "source": "cv", "frame": 2379, "value": 0.0, "quality": "valid", "raw": 80.0}
+{"t_ms": 1011, "source": "cv", "frame": 2382, "value": 0.0, "quality": "valid", "raw": 79.8}
+{"t_ms": 1109, "source": "cv", "frame": 2385, "value": 0.0, "quality": "valid", "raw": 79.7}
+{"t_ms": 1172, "source": "cv", "frame": 2387, "value": 0.0, "quality": "valid", "raw": 79.7}
+{"t_ms": 1268, "source": "cv", "frame": 2390, "value": 0.0, "quality": "valid", "raw": 79.7}
+{"t_ms": 1381, "source": "cv", "frame": 2393, "value": 0.0, "quality": "valid", "raw": 79.6}
+{"t_ms": 1476, "source": "cv", "frame": 2396, "value": 0.0, "quality": "valid", "raw": 79.5}
+{"t_ms": 1573, "source": "cv", "frame": 2399, "value": 0.0, "quality": "valid", "raw": 79.4}
+{"t_ms": 1668, "source": "cv", "frame": 2402, "value": 0.0, "quality": "valid", "raw": 79.3}
+{"t_ms": 1780, "source": "cv", "frame": 2405, "value": 0.0, "quality": "valid", "raw": 79.3}
+{"t_ms": 1845, "source": "cv", "frame": 2407, "value": 0.0, "quality": "valid", "raw": 79.2}
+{"t_ms": 1941, "source": "cv", "frame": 2410, "value": 0.0, "quality": "valid", "raw": 79.2}
+{"t_ms": 2036, "source": "cv", "frame": 2413, "value": 0.0, "quality": "valid", "raw": 79.2}
+{"t_ms": 2149, "source": "cv", "frame": 2416, "value": 0.0, "quality": "valid", "raw": 78.9}
+{"t_ms": 2244, "source": "cv", "frame": 2419, "value": 0.0, "quality": "valid", "raw": 78.9}
+{"t_ms": 2341, "source": "cv", "frame": 2422, "value": 0.0, "quality": "valid", "raw": 78.6}

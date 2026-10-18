@@ -2,7 +2,7 @@
  * Guided debugging flow (D-021): Set up → Run → Investigate → Verify.
  * Rule of thumb: each step shows ONE primary button. Alternatives and advanced tools are collapsed.
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { VStack } from "@astryxdesign/core/VStack";
 import { HStack } from "@astryxdesign/core/HStack";
 import { Text } from "@astryxdesign/core/Text";
@@ -17,6 +17,7 @@ import { NumberInput } from "@astryxdesign/core/NumberInput";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { Switch } from "@astryxdesign/core/Switch";
+import { Selector } from "@astryxdesign/core/Selector";
 import { Spinner } from "@astryxdesign/core/Spinner";
 import { TabList, Tab } from "@astryxdesign/core/TabList";
 import { Badge } from "@astryxdesign/core/Badge";
@@ -34,6 +35,7 @@ import {
   type TestRun,
 } from "../../lib/api";
 import { CausalChain, EvidenceList, Eyebrow, Facts, SourceBadge, SourcePicker } from "./common";
+import { useStream } from "../../lib/stream";
 import { latestRun, nextCheck } from "./flowState";
 
 /**
@@ -42,14 +44,16 @@ import { latestRun, nextCheck } from "./flowState";
  * Rule of thumb: each view shows ONE primary button. Alternatives are collapsed.
  */
 
-const VIEWS = ["Test", "Debug", "Analyze"] as const;
-type FlowView = "test" | "debug" | "analyze";
+const VIEWS = ["Test", "Debug", "Analyze", "History"] as const;
+type FlowView = "test" | "debug" | "analyze" | "history";
 
 export interface FlowProps {
   projectId: string;
   conflictNote: string | null;
   expectation: Expectation | null;
-  onExpectation: (e: Expectation) => void;
+  expectations: Expectation[];
+  testables: { id: string; label: string }[];
+  onExpectation: (e: Expectation | null) => void;
   run: TestRun | null;
   running: boolean;
   view: InvestigationView | null;
@@ -71,6 +75,8 @@ export interface FlowProps {
   onError: (m: string) => void;
   onOpenDevices: () => void;
   onEvidence: (e: Evidence) => void;
+  onSelectRun: (r: TestRun) => void;
+  viewRequest: { view: FlowView; seq: number } | null;
   projectReview: ReactNode;
 }
 
@@ -83,6 +89,9 @@ export function FlowPanel(p: FlowProps) {
   const auto = autoView(p);
   const [viewing, setViewing] = useState<FlowView | null>(null);
   useEffect(() => setViewing(null), [auto]);
+  useEffect(() => setViewing(null), [p.projectId]); // don't leak a view pick across projects
+  const requestSeq = p.viewRequest?.seq;
+  useEffect(() => { if (p.viewRequest) setViewing(p.viewRequest.view); }, [requestSeq]); // eslint-disable-line react-hooks/exhaustive-deps
   const view = viewing ?? auto;
 
   return (
@@ -105,7 +114,9 @@ export function FlowPanel(p: FlowProps) {
         })}
       </div>
       {view === "test" && <>{p.projectReview}<TestView {...p} /></>}
-      {view === "debug" && (p.view ? <DebugView {...p} view={p.view} /> : (
+      {view === "debug" && (p.view ? <DebugView {...p} view={p.view} />
+        : p.run?.incident_id ? <Spinner label="Loading investigation…" />
+        : p.run?.result ? <RunRecord {...p} run={p.run} /> : (
         <VStack gap={3}>
           <Eyebrow>Debug</Eyebrow>
           <Heading level={2} type="display-3">Nothing to debug yet</Heading>
@@ -116,7 +127,8 @@ export function FlowPanel(p: FlowProps) {
         </VStack>
       ))}
       {view === "analyze" && <AnalyzeView {...p} />}
-      <Text type="supporting">Space — next action · 1–3 views · D graph · E event flow</Text>
+      {view === "history" && <HistoryView {...p} />}
+      <Text type="supporting">Space — next action · 1–4 views · D graph · E event flow</Text>
     </VStack>
   );
 }
@@ -146,22 +158,44 @@ export function Notice({ tone, title, body, end }: {
 /** Plain-English name for what the camera measures, derived from the expectation's metric. */
 const NOUNS: Record<string, string> = { led_state: "the light", servo_angle_deg: "the arm" };
 const noun = (exp?: { metric: string } | null) => NOUNS[exp?.metric ?? ""] ?? "the component";
-const goalText = (exp: { metric: string; unit: string; target: number; tolerance: number; deadline_ms: number }) =>
+const goalText = (exp: { metric: string; unit: string; target: number; tolerance: number; deadline_ms: number;
+                         pattern?: string; min_transitions?: number }) =>
   exp.unit === "state"
-    ? `${noun(exp)} should ${exp.target === 1 ? "turn on" : "turn off"} within ${exp.deadline_ms} ms`
+    ? exp.pattern === "toggle"
+      ? `${noun(exp)} should toggle at least ${exp.min_transitions ?? 4} times within ${exp.deadline_ms} ms`
+      : `${noun(exp)} should ${exp.target === 1 ? "turn on" : "turn off"} within ${exp.deadline_ms} ms`
     : `${noun(exp)} should reach ${exp.target}° ± ${exp.tolerance}° within ${exp.deadline_ms} ms`;
+
+/** Compact expectation switcher shown when a project has more than one test (D-057). */
+function ExpectationPicker(p: FlowProps) {
+  if (p.expectations.length < 2) return null;
+  const compLabel = (id: string) => p.testables.find((t) => t.id === id)?.label ?? id;
+  return (
+    <Selector label="Test" isLabelHidden size="sm" width={300} placement="below"
+              value={p.expectation?.id ?? p.expectations[0].id}
+              onChange={(v) => { const e = p.expectations.find((x) => x.id === v); if (e) p.onExpectation(e); }}
+              options={p.expectations.map((e) => ({
+                value: e.id,
+                label: `${e.trigger.value} — ${compLabel(e.component_id)}`,
+              }))} />
+  );
+}
 
 function TestView(p: FlowProps) {
   const exp = p.expectation;
-  const [draft, setDraft] = useState({ target: 90, tolerance: 8, deadline_ms: 2000, trigger: "MOVE 90" });
+  const [draft, setDraft] = useState({ target: 90, tolerance: 8, deadline_ms: 2000, trigger: "MOVE 90",
+                                      pattern: "steady" as "steady" | "toggle", minTrans: 4 });
+  const [comp, setComp] = useState("");
   const [cites, setCites] = useState<Evidence[]>([]);
   useEffect(() => {
     if (!exp) return;
-    setDraft({ target: exp.target, tolerance: exp.tolerance, deadline_ms: exp.deadline_ms, trigger: exp.trigger.value });
+    setDraft({ target: exp.target, tolerance: exp.tolerance, deadline_ms: exp.deadline_ms,
+               trigger: exp.trigger.value, pattern: exp.pattern, minTrans: exp.min_transitions });
     api.evidence(p.projectId, exp.proposed_from_evidence_ids).then(setCites).catch(() => setCites([]));
   }, [exp, p.projectId]);
 
   if (!exp) {
+    const target = comp || p.testables[0]?.id;
     return (
       <VStack gap={3}>
         <Eyebrow>Test — define what should happen</Eyebrow>
@@ -170,8 +204,15 @@ function TestView(p: FlowProps) {
           inteGREAT reads the firmware and suggests a test. You confirm it before it decides pass or fail.
         </Text>
         {p.conflictNote && <Notice tone="warning" title="Already spotted a problem" body={p.conflictNote} />}
+        {p.testables.length > 1 && (
+          <Selector label="Component" size="sm" width={300} placement="below"
+                    value={target} onChange={setComp}
+                    options={p.testables.map((t) => ({ value: t.id, label: t.label }))} />
+        )}
         <Button label="Suggest a test from the code" variant="primary" className="flow-primary"
-                clickAction={() => api.proposeExpectation(p.projectId).then(p.onExpectation).catch((e) => p.onError(e.message))} />
+                clickAction={() => api.proposeExpectation(p.projectId, p.testables.length > 1 ? target : undefined)
+                  .then(p.onExpectation).catch((e) => p.onError(e.message))} />
+        {p.expectations.length > 0 && <ExpectationPicker {...p} />}
       </VStack>
     );
   }
@@ -180,6 +221,7 @@ function TestView(p: FlowProps) {
     const evById = new Map(cites.map((c) => [c.id, c]));
     return (
       <VStack gap={3}>
+        <ExpectationPicker {...p} />
         <Eyebrow>Test — confirm it first</Eyebrow>
         <Heading level={2} type="display-3">Confirm the test</Heading>
         <Text type="body" color="secondary">Send a command, then the camera checks whether {noun(exp)} responded.</Text>
@@ -188,12 +230,33 @@ function TestView(p: FlowProps) {
             <Eyebrow>Test parameters</Eyebrow>
             <Text type="supporting">inteGREAT sends this command to the board, then watches {noun(exp)} to check it actually responded.</Text>
             <TextInput label="Command to send" value={draft.trigger} onChange={(v) => setDraft({ ...draft, trigger: v })} />
-            <HStack gap={2}>
-              <NumberInput label="Target" units={exp.unit === "state" ? "state" : exp.unit} value={draft.target} onChange={(v) => setDraft({ ...draft, target: v })} />
-              <NumberInput label="± tolerance" units={exp.unit === "state" ? "state" : exp.unit} value={draft.tolerance} min={0} onChange={(v) => setDraft({ ...draft, tolerance: v })} />
-              <NumberInput label="Within" units="ms" value={draft.deadline_ms} min={100} step={100}
-                           onChange={(v) => setDraft({ ...draft, deadline_ms: v })} />
-            </HStack>
+            {exp.unit === "state" ? (
+              <HStack gap={2} vAlign="end">
+                <Selector label="Behaviour" size="sm" width={240} placement="below"
+                          value={draft.pattern === "toggle" ? "toggle" : draft.target === 1 ? "steady_on" : "steady_off"}
+                          onChange={(v) => setDraft(v === "toggle"
+                            ? { ...draft, pattern: "toggle" }
+                            : { ...draft, pattern: "steady", target: v === "steady_on" ? 1 : 0 })}
+                          options={[
+                            { value: "steady_on", label: "Ends ON" },
+                            { value: "steady_off", label: "Ends OFF" },
+                            { value: "toggle", label: "Toggles repeatedly (flicker/blink)" },
+                          ]} />
+                {draft.pattern === "toggle" && (
+                  <NumberInput label="At least" units="changes" value={draft.minTrans} min={2}
+                               onChange={(v) => setDraft({ ...draft, minTrans: v })} />
+                )}
+                <NumberInput label="Within" units="ms" value={draft.deadline_ms} min={100} step={100}
+                             onChange={(v) => setDraft({ ...draft, deadline_ms: v })} />
+              </HStack>
+            ) : (
+              <HStack gap={2}>
+                <NumberInput label="Target" units={exp.unit} value={draft.target} onChange={(v) => setDraft({ ...draft, target: v })} />
+                <NumberInput label="± tolerance" units={exp.unit} value={draft.tolerance} min={0} onChange={(v) => setDraft({ ...draft, tolerance: v })} />
+                <NumberInput label="Within" units="ms" value={draft.deadline_ms} min={100} step={100}
+                             onChange={(v) => setDraft({ ...draft, deadline_ms: v })} />
+              </HStack>
+            )}
           </VStack>
         </Card>
         <Collapsible defaultIsOpen={false} trigger={<Text type="supporting">Why this test?</Text>}>
@@ -204,7 +267,8 @@ function TestView(p: FlowProps) {
         </Collapsible>
         <Button label="Confirm test" variant="primary" className="flow-primary"
                 clickAction={() => api.confirmExpectation(p.projectId, exp.id, {
-                  target: draft.target, tolerance: draft.tolerance, deadline_ms: draft.deadline_ms, trigger_value: draft.trigger,
+                  target: draft.target, tolerance: draft.tolerance, deadline_ms: draft.deadline_ms,
+                  trigger_value: draft.trigger, pattern: draft.pattern, min_transitions: draft.minTrans,
                 }).then(p.onExpectation).catch((e) => p.onError(e.message))} />
       </VStack>
     );
@@ -218,6 +282,7 @@ function TestView(p: FlowProps) {
   const passed = last?.result?.outcome === "pass" && !incidentOpen;
   return (
     <VStack gap={3}>
+      <ExpectationPicker {...p} />
       <Eyebrow>Test</Eyebrow>
       <Heading level={2} type="display-3">{resolved ? "Start fresh, or re-run" : "Run the test"}</Heading>
       <Card padding={3} variant="muted">
@@ -241,10 +306,10 @@ function TestView(p: FlowProps) {
       <SourcePicker value={p.source} onChange={p.onSource} sources={p.sources} liveReady={p.liveReady} />
       {p.source === "live" && p.liveReady && (
         <Notice tone="warning" title="Live hardware debugging"
-                body="This run sends the command to the real board — the rig may physically move. Measurements come from the serial line and camera, not simulation." />
+                body="This run sends the command to the real board — the live environment may physically move. Measurements come from the serial line and camera, not simulation." />
       )}
       {p.source === "live" && !p.liveReady
-        ? <Button label="Set up the live rig" variant="primary" className="flow-primary" onClick={p.onOpenDevices} />
+        ? <Button label="Set up the live environment" variant="primary" className="flow-primary" onClick={p.onOpenDevices} />
         : resolved
           ? <Button label="Start a new test" variant="primary" className="flow-primary" onClick={p.onNewTest} />
           : incidentOpen && repeat
@@ -256,6 +321,9 @@ function TestView(p: FlowProps) {
         <Text type="supporting">
           A failure or missing measurement opens an investigation in Debug — re-running here keeps it in the same incident.
         </Text>
+      )}
+      {!incidentOpen && (
+        <Button label="Plan a different test" variant="ghost" size="sm" onClick={() => p.onExpectation(null)} />
       )}
     </VStack>
   );
@@ -482,7 +550,7 @@ function VerifyLauncher(p: FlowProps & { view: InvestigationView; label: string;
         <HStack gap={1}>
           <Button label="Run verification" variant="primary" isLoading={p.busyActionId === verify.id}
                   isDisabled={p.source === "live" && !p.liveReady} onClick={() => { setOpen(false); p.onAction(verify); }} />
-          {p.source === "live" && !p.liveReady && <Button label="Set up rig" onClick={() => { setOpen(false); p.onOpenDevices(); }} />}
+          {p.source === "live" && !p.liveReady && <Button label="Set up environment" onClick={() => { setOpen(false); p.onOpenDevices(); }} />}
           <Button label="Cancel" variant="ghost" onClick={() => setOpen(false)} />
         </HStack>
       </VStack>
@@ -588,7 +656,7 @@ function VerifyRecord(p: FlowProps & { view: InvestigationView }) {
     );
   }
   const v = view.followup_runs.find((r) => r.id === inc.resolved_by_test_run_id);
-  const title = v?.source.kind === "sim" ? "Verified on the simulated rig"
+  const title = v?.source.kind === "sim" ? "Verified on the simulated environment"
     : v?.source.kind === "replay" ? `Verified on ${v.synthetic ? "synthetic" : "recorded"} replay`
     : v?.source.kind === "live" ? "Fixed — verified on live hardware" : "Verification record unavailable";
   return (
@@ -709,6 +777,109 @@ function AnalyzeView(p: FlowProps) {
           <MoreTools {...p} view={view} />
         </>
       )}
+    </VStack>
+  );
+}
+
+// ------------------------------------------------------------------ History view (D-051)
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return "queued";
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+/** The workspace's memory: every run for this project, newest first (D-051).
+    Rows with an incident resume it in Debug; passes open a read-only record. */
+function HistoryView(p: FlowProps) {
+  const [runs, setRuns] = useState<TestRun[]>([]);
+  const [labels, setLabels] = useState<Record<string, string>>({});
+  const [err, setErr] = useState("");
+  const streamSeq = useStream().seq;
+  const lastFetch = useRef(0);
+  useEffect(() => {
+    let live = true;
+    const load = () => {
+      lastFetch.current = Date.now();
+      Promise.all([api.projectTests(p.projectId), api.expectations(p.projectId)])
+        .then(([rs, exps]) => {
+          if (!live) return;
+          setRuns(rs);
+          setLabels(Object.fromEntries(exps.map((e) => [e.id, e.trigger.value])));
+        })
+        .catch((e) => live && setErr((e as Error).message));
+    };
+    // Runs bump the stream seq ~5x/sec; refetching that often fights scrolling. Cap it.
+    const wait = Date.now() - lastFetch.current;
+    const t = wait < 1500 ? window.setTimeout(load, 1500 - wait) : (load(), 0);
+    return () => { live = false; window.clearTimeout(t); };
+  }, [p.projectId, streamSeq]);
+  const selected = p.run?.id;
+  return (
+    <VStack gap={3}>
+      <Eyebrow>History — every run for this project</Eyebrow>
+      <Heading level={2} type="display-3">Test history</Heading>
+      {err && <Notice tone="warning" title="Couldn't load history" body={err} />}
+      {!err && runs.length === 0 && (
+        <Text type="body" color="secondary">No test runs yet — run a test in the Test view.</Text>
+      )}
+      <VStack gap={1}>
+        {runs.map((r) => {
+          const outcome = r.result?.outcome;
+          return (
+            <button key={r.id} type="button" className="history-row" aria-selected={r.id === selected}
+                    onClick={() => p.onSelectRun(r)}>
+              <HStack gap={2} vAlign="center">
+                {r.state !== "completed" ? <Spinner size="sm" />
+                  : <StatusDot label={outcome ?? "queued"}
+                               variant={outcome === "pass" ? "success" : outcome === "fail" ? "error" : "warning"} />}
+                <Text type="body">{labels[r.expectation_id] ?? r.expectation_id}</Text>
+                {r.attempt_kind !== "initial" && <Badge variant="neutral" label={r.attempt_kind} />}
+                {r.incident_id && <Badge variant="neutral" label="investigation" />}
+                <span style={{ flex: 1 }} />
+                <Text type="supporting" color="secondary"><RunSourceLabel run={r} /></Text>
+                <Text type="supporting" color="secondary">{timeAgo(r.started_at_utc)}</Text>
+              </HStack>
+            </button>
+          );
+        })}
+      </VStack>
+      <Text type="supporting">Select a run to load it — failures resume their investigation, passes open a record. Event flow (E) shows its timeline.</Text>
+    </VStack>
+  );
+}
+
+/** One-line provenance for a run row: where its measurements came from. */
+function RunSourceLabel({ run }: { run: TestRun }) {
+  const k = run.source.kind;
+  return <>{k === "live" ? "Live hardware" : k === "sim" ? "Simulated environment" : run.synthetic ? "Synthetic replay" : "Recorded replay"}</>;
+}
+
+/** Read-only record for a run that never opened an incident (a pass). Debug = "the
+    selected run" — this is the no-incident branch. */
+function RunRecord(p: FlowProps & { run: TestRun }) {
+  const r = p.run, res = r.result!;
+  return (
+    <VStack gap={3}>
+      <Eyebrow>Debug — run record</Eyebrow>
+      <HStack hAlign="between" vAlign="center" wrap="wrap">
+        <Heading level={2} type="display-3">
+          {res.outcome === "pass" ? "Test passed" : res.outcome === "inconclusive" ? "Measurement unavailable" : "Test failed"}
+        </Heading>
+        <SourceBadge run={r} />
+      </HStack>
+      {res.final_valid_value != null && (
+        <Text type="supporting">{p.expectation?.unit === "state"
+          ? `Camera saw ${res.final_valid_value === 1 ? "on" : "off"} — expected ${p.expectation.target === 1 ? "on" : "off"}`
+          : `Camera measured ${res.final_valid_value.toFixed(1)}° — expected ${p.expectation?.target ?? "?"}°`}</Text>
+      )}
+      <Facts result={res} />
+      <Notice tone="neutral" title="No investigation was opened"
+              body="This run passed (or produced no fault). Press E for its event timeline; History lists every run." />
+      <Button label="Back to current test" variant="ghost" size="sm" onClick={p.onNewTest} />
     </VStack>
   );
 }

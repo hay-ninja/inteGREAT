@@ -160,3 +160,29 @@ def test_camera_loss_does_not_become_led_failure(client, led_project):
     config = configure(client, base, refs)
     camera.missing = True
     assert client.post(base + "/runs", json={"config_id": config["id"]}).status_code == 409
+
+
+def test_preview_supports_raw_calibration_and_component_overlays(client, led_project, monkeypatch):
+    """Merged camera workflows share one endpoint without contaminating raw references."""
+    import cv2
+
+    adapter = client.app.state.service.devices.camera
+    calls = []
+
+    def overlay(image, metric, component_id):
+        calls.append((metric, component_id))
+        return np.full_like(image, 240)
+
+    monkeypatch.setattr(adapter, "annotate", overlay)
+    url = "/api/v1/devices/camera/frame.jpg"
+    raw = client.get(url + "?raw=true&metric=led_state&component=component:led_1")
+    assert raw.status_code == 200
+    image = cv2.imdecode(np.frombuffer(raw.content, dtype=np.uint8), cv2.IMREAD_COLOR)
+    assert image[90, 90, 0] < 20
+    assert calls == []
+
+    annotated = client.get(url + "?metric=led_state&component=component:led_2")
+    assert annotated.status_code == 200
+    image = cv2.imdecode(np.frombuffer(annotated.content, dtype=np.uint8), cv2.IMREAD_COLOR)
+    assert image[90, 90, 0] > 230
+    assert calls == [("led_state", "component:led_2")]

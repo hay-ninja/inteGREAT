@@ -1,57 +1,91 @@
-# Demo script (~5 min)
+# Demo script (~5–6 min)
 
 Say the limits out loud: inteGREAT shows what is **observed, verified, inferred or unknown**. It does not
-measure voltage or PWM, does not flash firmware, and never runs commands an AI wrote.
+measure voltage or PWM, does not flash firmware, never runs commands an AI wrote, and never auto-applies
+a patch. Every run is badged — **Live hardware** / **Simulated environment** / **Synthetic replay** /
+**Recorded replay** — and the hosted demo says so in the banner.
 
-## 0. Before the audience arrives
-- `apps/api/.venv/Scripts/python scripts/dev.py`; open http://localhost:5173.
-- Live: **Rig setup** → serial connected, camera connected + calibrated. Run one good test.
-- Fallback: pick **Recorded: …** replays (or **Sim** sources). The UI badges every run's source — say so.
+## 0. Which demo are we running
 
-## 1. Graph first (60 s)
-- Import the project (Fault A firmware). The **Combined** view shows two labelled regions —
-  software on the left, the physical rig on the right — with the **red conflicting edge** crossing
-  them: "Before any test, the source configures GPIO19 but the engineer-verified wiring is GPIO18."
-- Flip the **Hardware** layer: only the rig — "ESP32 DevKitC — controller — runs your program",
-  "Servo motor — moves a shaft", "GPIO18 — servo control pin". The header chip says how many source
-  items are hidden; one click brings them back.
-- Flip the **Software** layer: code plus dashed *reference* hardware the code touches — "this is
-  the boundary: configured pin vs wired pin".
-- Expand Motor Control → `servo_control.cpp` → functions. Click the GPIO18 wire → evidence shows the manifest line.
+- **Hosted replay (zero risk):** static site serving `dist/` — no backend needed. Works offline-of-
+  backend by design; the "Hosted demo" banner discloses that everything is a recorded bundle.
+  Verify beforehand: `node apps/web/replay_test.mjs` against `http://localhost:8080`.
+- **Local sim/replay (recommended on stage):** `apps/api/.venv/Scripts/python scripts/dev.py` →
+  http://localhost:5173. Same story, full interactivity (Analyze with real providers, real Devin
+  session on the repair step).
+- **Live rig (bonus, never the spine):** needs H0 done (`docs/hardware-setup.md`). If it works, the
+  iPhone-browser camera path makes a good moment — judge's phone as the CV source.
 
-## 2. Test → failure (60 s)
-- *Suggest a test from the code* → show the cited source lines → **Confirm test**.
-- **Run Test**. Watch the angle plot stay flat; the three facts: command sent ✓, firmware ACK ✓, motion ✗.
-  "The firmware said it moved. The camera says it didn't. Those are different facts."
+## 0b. Before the audience arrives
 
-## 3. Investigate (90 s)
-- Ranked hypotheses: #1 Incorrect GPIO mapping (with evidence), #2 signal/power (unmeasured).
-- Click **Inspect GPIO mapping** → permission prompt → *Grant for this investigation* → excerpt shows
-  `#define SERVO_PIN 19` next to the manifest's GPIO18. Hypothesis becomes **supported**.
-- Switch to **Event flow**: four lanes — command → serial ACK → camera samples → result.
-  Step through with the scrubber: "command sent at 0 ms, ACK at 41 ms, the camera saw nothing move,
-  verdict at ~2.4 s". Point at the note: *host-clock correlated, not synchronized — ordering is not
-  causation*. Click an event's graph link to jump back to the node it concerns.
-- (If providers are configured) **Ask AI to review evidence**: StepFun picks which Gemini specialists
-  to run — "Provider per stage" shows who did what — each cites evidence; invented ids are rejected
-  (expand an agent card → "Rejected by validation"). Show the Tool audit tab.
+- Hosted: build is current (`npm run build` in `apps/web`), `dist/replay/demo.json` matches
+  `apps/web/public/replay/demo.json`, static server on :8080.
+- Local: API on :8000, `STEP_API_KEY`/`GEMINI_API_KEY` in `.env` if you want Analyze live (otherwise
+  show the honest "provider unavailable" state — deterministic core still works, that IS the message).
+- Reset the browser: `localStorage.clear()` + reload (the replay test does this; do it by hand for a
+  live demo so the projects hub starts fresh).
 
-## 4. Fix → verify (60 s)
-- Live: Devices → *Release port*, fix `SERVO_PIN` to 18 in the IDE, reflash, reconnect, **Rescan**.
-- **I made a repair — verify it** → review the same command/thresholds → **Run verification** → angle
-  reaches 90° → incident **RESOLVED**, graph marks the passing observation. Completion names its source.
-- Optional (Devin configured): under the leading hypothesis click **Prepare software fix with
-  Devin**. The dialog shows the exact base commit, warns uncommitted files are NOT sent, then opens
-  ONE remote session on an isolated branch. "Devin proposes a diff and runs its own tests remotely —
-  a remote test is not a hardware verification. The engineer still reviews, applies, re-flashes, and
-  verifies here."
+## 1. Hook → graph first (60 s)
 
-## 5. Fault B (60 s, if time)
-- Import correct firmware; unplug the servo signal lead (power down first). Run Test → signal vs power tied.
-- **Check signal connection** → choose *Disconnected* → **Record check result** → that hypothesis becomes
-  supported. Reconnect → **I made a repair — verify it** → **Run verification**.
+- Landing → **Open the workspace** → the demo card: **esp32_halloween** ("two LEDs, two faults —
+  inverted ghost + dead candle"). **Load demo**.
+- The **Combined** graph shows the boundary honestly: dashed "configures pin" edges from
+  `esp32_halloween.ino` into GPIO18/GPIO19, both LEDs wired under the Halloween porch lights
+  subsystem. **Deliberately no red** — the wiring matches the code; the bug isn't visible
+  statically. Say: "the map is consistent — and the system still fails. That gap is the point."
+- Flip **Hardware** layer → only the rig (board, pins, both LEDs, GND, 3V3 rail). Flip **Software**
+  → code plus dashed boundary refs. Point at `GHOST ON`/`FLICKER` command literals found in source.
+- (Contrast for judges who ask: a wrong-pin fault *would* light the code↔wiring edge red
+  pre-run — the graph marks conflicts it can prove, not suspicions.)
+
+## 2. Arc A — the ghost LED inverted-logic fault (75 s)
+
+- The ghost expectation is already confirmed (default on open). **Run the test** — pick
+  `halloween inverted` if the source picker shows.
+- Result card: command sent ✓, firmware ACKed `ACK GHOST ON` ✓ — and the LED *did* change — but ended
+  **off**. "This is not 'nothing happened' — the LED responded. It ended wrong."
+- **Debug** → **Potential causes** tab → leading hypothesis: **Inverted drive logic (code level vs
+  wiring polarity)**. The manifest's `active_low` wiring vs firmware's HIGH-for-on — a diagnosis a
+  pin-mismatch rule can't produce.
+- **Verify it** → pick `halloween ghost good` replay → **Run verification** → the LED ends on →
+  incident **RESOLVED** ("Was: fail → Now: pass"). The fix in the story: firmware drives LOW for on,
+  or the LED gets rewired active-high.
+
+## 3. Arc B — the pumpkin candle, dead despite ACK (90 s)
+
+- **History** tab → the `FLICKER` run row (badged *investigation*) → Debug opens on the second
+  incident: "Pumpkin candle LED (GPIO18) did not reach expected state 1".
+- Serial drawer shows the smoking gun timeline: `FLICKER` → `ACK FLICKER` (39 ms) → `DONE FLICKER`
+  (1.1 s) — "the board ran the command to completion; the light never flickered. The bug is between
+  'done' and photons."
+- **Potential causes**: tied signal/power hypotheses → **Check signal connection** (manual check:
+  engineer inspects, records result) — and, once physical checks clear, **Prepare software fix with
+  Devin**. Say the honest part: "an *unverified* wiring suspicion can't launch a remote code fix —
+  the gate is real. Verified-clean checks shift suspicion to firmware."
+- On a live backend this opens ONE Devin session (bounded prompt, repo snapshot, evidence ids). If
+  the session reaches `needs_input`, that state is shown as waiting-on-engineer — nobody claims a
+  fix that didn't land. The actual bug in the fixture: a `uint8_t` loop counter that wraps at 255 —
+  the kind of thing rules flag as 'software-side' and a repair agent can diff in seconds.
+
+## 4. Event flow + honest ambiguity (60 s)
+
+- With the pumpkin run still selected, open the **Timeline** rail → Event Flow: 4 lanes — command →
+  serial ACK (`FLICKER` / `ACK FLICKER` / `DONE FLICKER`) → camera samples (a flat row of `0`) →
+  verdict — with the step scrubber. Say the correlation caveat: host-clock correlated, ordering ≠
+  causation.
+- Point at the tied hypotheses again: signal and power stay **tied** until an engineer looks — the
+  rules say "we can't tell these apart yet" instead of guessing. Recording *Connected* weakens the
+  physical branch (and unlocks the Devin action); recording *Disconnected* makes it **supported** —
+  the engineer's observation is first-class evidence, not a note on the side.
+- Optional: **Analyze** tab (live backend with keys) — StepFun triage → Gemini specialists → critique
+  → synthesis, with per-stage provider attribution and "Evidence cited" chips. Bounded: one fan-out,
+  one follow-up; invented evidence ids are rejected.
 
 ## If something breaks
-- Serial vanished: Devices → Connect again (board was unplugged or another app grabbed the port).
-- Marker lost: result is **inconclusive**, not a servo fault — fix the camera view and Repeat test.
-- Gemini down: agents report unavailable; everything else still works. Keep going.
+
+- Hosted demo, no test button → click the **Test** chapter (the view remembers the last tab).
+- Hosted demo, an action 404s → it wasn't recorded in the bundle; re-run `capture_demo_replay.py`
+  and rebuild. The fallback covers source-variant run requests but not arbitrary new flows.
+- "Measurement unavailable" / `marker_lost` → that's honest inconclusive, not a fault — say so.
+- Providers down → Analyze shows unavailable; rules, graph, hypotheses, event flow all still work.
+- Serial gone (live) → Devices → reconnect; Windows COM ports are exclusive (release before flash).

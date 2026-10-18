@@ -672,3 +672,195 @@ mark old entries `SUPERSEDED by D-0xx`. The goal is to preserve **intent** — t
 - Report observer state locally at startup. Preserve sanitization, fail-open behavior,
   10% default trace sampling, per-operation Logs and the outbound-only control boundary.
   Explicit simulation export also respects the off switch.
+
+### D-051 History view + provenance labels — 2026-10-18
+- User asked for test/debugging history on the workspace — a scrollable list of past
+  runs to click through ("like Roblox assessment factories"), instead of a workspace
+  that only shows the latest failure.
+- New fourth view **History** (`.chapters` now 4 columns; keyboard 1–4 already worked).
+  `GET /projects/{pid}/tests` returns every `TestRun` newest-first — a separate runs
+  list was needed because passing runs never open an incident, so
+  `/projects/{pid}/incidents` was not sufficient.
+- Selection semantics (chosen with user): a clicked row becomes *the selected run*.
+  Runs with `incident_id` resume their investigation in Debug — open ones are fully
+  actionable (existing state machine), resolved ones render the existing read-only
+  resolved view. Runs without an incident (passes) render a new read-only `RunRecord`
+  branch in Debug. The selection also sets `run`/`runRef`, so the Event flow canvas,
+  run selector and serial drawer follow it.
+- `FlowPanel` gained a `viewRequest` prop so history clicks land the user on Debug.
+- Provenance labels renamed across the UI after "Simulated · connected" confused the
+  user (it was `sim` + scenario id `connected`, not a device status): badges now say
+  `Live hardware` / `Simulated rig — {condition}` / `Recorded|Synthetic replay — {name}`;
+  the top-bar mode chip uses the same wording; scenario ids map to plain conditions
+  ("wired as declared", "signal lead off", …). The sim SourcePicker copy now says
+  plainly it is a software model, no AI involved.
+
+### D-052 Live environment wording + draggable split drawer — 2026-10-18
+- User-facing "rig" renamed to "environment" everywhere: "Environment setup"
+  (was Rig setup), "Set up the live environment", "Simulated environment — {condition}",
+  "Live environment" source segment, graph region "the physical environment", and the
+  `sim://environment` port label. `RigSetupDialog` became `EnvironmentSetupDialog`;
+  backend internals (`SimRig`, module names) are code identifiers and were left.
+- Bottom drawer is now a VS Code-style panel: top-edge `ResizeHandle` (vertical
+  `useResizable`, `collapsible`) — drag down past the header to close, click a tab to
+  reopen; size persists via `autoSaveId`.
+- Drawer gains a fourth tab, **Camera**: the existing `/devices/camera/stream.mjpg`
+  feed with honest states (not connected → setup CTA; stream error → unavailable note;
+  caption states the raw view is never itself a measurement).
+- Split view: an IconButton opens a second pane beside the first — each pane has its own
+  tab set (left uses the header TabList, right its own), the divider drags via a
+  horizontal `useResizable`, and dragging it to the right edge closes the split
+  (`collapsible` → controlled `split` state), matching "drag it back".
+- Follow-up polish (same day): "Board messages" renamed "Serial output". The resize
+  handle's invisible hitbox extends ~15px below its 1px line and was eating the top
+  half of tab/button clicks — a fixed 16px grip spacer now absorbs it (the pill grip
+  sits in that zone, like VS Code's panel sash). Text open/close buttons became
+  chevron IconButtons (collapse/expand), matching the VS Code panel chrome.
+
+### D-053 Batched event-stream updates for scroll responsiveness — 2026-10-18
+- **Problem:** scrolling felt laggy during/after runs. Each `test.observation` and
+  `test.serial` websocket event (~15+/sec) caused three React state updates, so the
+  entire workspace re-rendered ~15 times a second; `flowSeq`/`refreshSeq` also made
+  `HistoryView` and `EventFlowView` fire a fetch per event.
+- **Choice:** batch stream events into a 200ms flush window in `App.tsx`
+  (`queueStreamEvent`/`flushEvents`): one `setEvents`, one `setSerial`, one
+  `flowSeq` bump per window. Lifecycle events (`test.started`, `test.completed`,
+  agent/incident/tool events) still apply immediately and `test.completed` forces a
+  flush so UI state never lags the run. Refetches in the two views are capped to one
+  per 1.5s with a trailing call. Drawer tables are `React.memo`'d so the 4s device
+  poll doesn't rebuild them. Serial still feels live (5 updates/sec) but renders and
+  fetches dropped ~3-15x. Trade-off accepted: serial lines appear up to 200ms later
+  than the wire — imperceptible next to human scroll/reading speed.
+
+### D-054 LED computer vision: locator ≠ measurement, keyed estimators — 2026-10-18
+- **Problem:** live CV was still servo-shaped — `CameraManager` hardcoded one
+  `ArucoAngleEstimator` per source and `/devices/camera/calibrate` only accepted
+  `known_angle_deg`, so a live `led_state` run could never be calibrated. And for LEDs the
+  locator question is harder than the measurement question: how does the camera *find* the LED?
+- **Choice:** separate *locating* from *measuring*. `LedStateEstimator` accepts a fixed pixel
+  ROI; when unset it still falls back to the ArUco-anchored offset. The artifact every locator
+  produces is the same — ROI + off-baseline — so the measurement stays deterministic.
+- **Blink-to-find** (`POST /devices/camera/locate-led`): engineer-initiated serial toggles
+  (`on_command`/`off_command`, fixed strings in the request — never agent-authored), frames
+  averaged per state, `absdiff` → threshold → `connectedComponents` → padded ROIs. Exactly one
+  candidate → ROI + baseline auto-set. Multiple → returned as `candidates` for the engineer to
+  pick (multi-LED scenes never guess). Zero → honest not-found; the UI offers the manual box.
+- **Manual ROI** (`POST /devices/camera/led-roi`): `[x,y,w,h]` in preview pixels;
+  `calibrate_baseline` asserts the LED is OFF and records the baseline in the same call.
+- **Keyed estimators:** `CameraManager.estimators[source_id]["metric:component_id"]` — one
+  camera can watch several components; calibration is in-memory only (re-setup after restart is
+  a deliberate trade-off). `CameraStatus.calibrations` lists ready keys; the legacy `calibrated`
+  flag now means "any angle estimator calibrated" so servo behavior is unchanged.
+- **Run gate is metric-aware:** a live `led_state` expectation requires `led_state:{component}`
+  calibration — a servo baseline does not satisfy it, and vice versa.
+- **Serial safety boundary:** locate uses the existing engineer-owned serial connection with
+  fixed command strings and runs only inside environment setup — it never enters the tool
+  registry, so agents can't reach it.
+- Not done: persistent calibration storage, marker-board multi-LED coordinate maps, and any
+  ML/LLM locator (PRD §5 keeps CV deterministic).
+
+### D-055 Side-docked graph inspector + deterministic failure-path trace — 2026-10-18
+- **Problem:** the node/edge inspector was a centered modal (`Dialog`, 680px) that
+  overflowed on tall content and hid the graph it described. On failure, only the
+  measured component went red — "one red line", nothing about *where along the
+  signal chain* the fault could live.
+- **Inspector:** `GraphInspector` is now a side panel (`<aside>`) absolutely
+  docked inside the canvas `LayoutContent` — the graph stays visible/interactive,
+  tall content scrolls inside `.graph-inspector-body` (`overscroll-behavior:
+  contain`), Escape/× close. Not a modal; no backdrop.
+- **Failure path (NOT an AI feature):** `_failure_path` in `service.py` does a
+  bounded BFS over `contains`/`connected_to`/`powered_by`/`controls`/`configures`
+  edges from the failed component — code → configured MCU pin → wiring chain
+  through intermediate parts (series resistors) → the component → power. Works
+  with providers down; provenance is pure graph structure.
+  - **Bounds:** `mcu`/`subsystem`/`source_module`/`function`/`power_source` are
+    terminals (marked, never expanded — otherwise the MCU's containment would
+    light the whole board). A pin touched by 2+ `connected_to` wires is a
+    rail/junction (e.g. shared GND) — marked but not traversed, so sibling
+    circuits on the same rail don't get implicated.
+  - Applied via `setdefault` *after* observed/conflict marks — a serial-matched
+    function keeps "observed" (we saw it run), the rest of the chain glows
+    `failed_expectation`. Failed-path edges are animated in GraphView so the
+    trace visibly flows.
+- Verified: 174 pytest, tsc clean, 17/17 vitest; headless screenshot shows the
+  GPIO18→resistor→LED1→GND chain red+animated while LED2's circuit stays
+  neutral; inspector panel docks right, scrolls, Escape closes.
+
+### D-056 External stream store (supersedes D-053 batching) — 2026-10-18
+- **Problem:** D-053's in-component batching still re-rendered the whole
+  workspace ~5x/sec during runs (App held `events`/`serial`/`flowSeq` state) —
+  and the merge showed how easily the machinery could be clobbered.
+- **Choice:** stream data moved to `lib/stream.ts`, a `useSyncExternalStore`
+  store. The WS handler pushes events (200ms flush window, seq-dedupe);
+  BottomDrawer reads `useStream()` directly, History/EventFlow subscribe for
+  their refresh trigger. App state now only changes on lifecycle events, so
+  stream traffic produces zero App-tree renders. Drawer tables capped at
+  800/500 rows to bound rebuild cost per flush.
+
+### D-057 Targeted expectations + ack re-resolution — 2026-10-18
+- **Problem:** a two-LED rig (halloween fixture) could only get one proposed
+  expectation — the proposer walked the first actuation path it found, and the
+  UI kept a single expectation per project. Worse, editing `trigger_value`
+  (e.g. `GHOST ON` → `FLICKER`) left the proposed `ack_pattern` (`ACK GHOST
+  ON`) behind → a false `MISSING_SERIAL_ACK` even though serial showed
+  `ACK FLICKER`.
+- **Choice:** `POST /expectations/propose` accepts optional `component_id` +
+  `command`; an explicit engineer command is used verbatim (no auto-appended
+  ` ON`). The Test view gets a component picker before "Suggest a test" on
+  multi-component rigs and an expectation picker when >1 expectation exists;
+  the selected expectation drives confirm/run. On confirm, a changed
+  `trigger_value` re-resolves `ack_pattern` from parsed log literals,
+  preferring literals that *start with* `ACK ` over incidental suffix matches
+  (`DONE FLICKER` also ends with `FLICKER` — it must never win).
+- Multi-expectation ordering matters for the demo: the last-confirmed
+  expectation is the workspace default on fresh open, so capture confirms the
+  primary arc's expectation last.
+
+### D-058 Devin repair reachable only past verified physical checks — 2026-10-18
+- **Problem:** `prepare_software_fix` was offered on `GPIO_CONFIG_MISMATCH` /
+  `INVERTED_LOGIC` but never on the signal/power branch — so a pure firmware
+  bug (e.g. the halloween `uint8_t` flicker-loop wrap) could never reach the
+  repair arc, even after the engineer had *verified* the wiring healthy.
+- **Choice:** the power/signal hypothesis actions now include "Prepare software
+  fix with Devin", and `_software_evidence` counts verified-clean manual checks
+  (signal connected AND power present → suspicion shifts to code) alongside
+  not-ruled-out `GPIO_CONFIG_MISMATCH`/`INVERTED_LOGIC`. An *unverified*
+  power/signal incident still cannot launch a remote fix — the preflight gate
+  is unchanged. `needs_input` (Devin suspended/waiting) is surfaced as-is;
+  nothing claims the session finished.
+
+### D-059 Replay request keys canonicalized + expectation fallback — 2026-10-18
+- **Problem:** hosted-demo POST routes are keyed by SHA-1 of the serialized
+  body. Python's `json.dumps` emits `90.0` where JS `JSON.stringify` emits
+  `90` — a confirm recorded through the API 404'd when the hosted frontend
+  replayed the same logical request. A judge picking a different replay source
+  also produced a different run-request body → honest `hosted_demo` error even
+  though the right run was recorded.
+- **Choice:** `key_for` (capture) and the hosted `replayReq` normalize
+  integral floats before hashing (`90.0` → `90`), and `replayReq` falls back
+  to matching recorded `POST /tests` responses by `expectation_id` when no
+  exact body key matches — the recorded run *for that expectation* is served
+  regardless of which source variant the judge picked. Matching stays
+  expectation-scoped so the wrong run can't leak across expectations.
+
+### D-060 Toggle expectations and command-sent evidence — 2026-10-18
+- Integrated from feature/dsg-agent-arch (original branch D-053). FLICKER/BLINK
+  expectations may require a minimum number of state transitions within a window,
+  instead of merely ending in a state. A recording of another command cannot be
+  counted as evidence that the selected command was sent.
+- Live capture keeps its original provenance. Synthetic replay remains labeled;
+  neither recorded nor synthetic observations imply a new hardware measurement.
+
+### D-061 Consolidate branches without replacing either LED workflow — 2026-10-18
+- Merge feature/dsg-agent-arch into main, retaining phone/browser/USB camera paths,
+  observer-only Sentry, existing music/button firmware, history, keyed LED estimators,
+  multi-component command tests, and camera-only visual checks.
+- Command tests are the default. Projects with two LEDs and no servo can explicitly
+  switch to camera-only checks, which require no serial command or connection.
+  Environment setup adapts its instructions and prerequisites to the selected mode;
+  servo angle calibration remains available for servo tests.
+- Frame previews accept both component/metric overlays and raw snapshots so region
+  calibration does not accidentally consume an annotated image.
+- Colliding branch decision IDs D-044 through D-053 have been renumbered D-051
+  through D-060 here. Main's original D-044 through D-050 retain their meanings.
+  No PRD requirements change. Physical hardware validation remains outstanding.

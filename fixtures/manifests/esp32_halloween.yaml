@@ -1,0 +1,57 @@
+# Halloween porch prop: two LEDs on one ESP32, driven by USB serial commands.
+# The pumpkin LED on GPIO18 is active-high. The ghost LED on GPIO19 is wired
+# ACTIVE-LOW — anode to 3V3 through a resistor, GPIO19 sinks the cathode — and
+# the stock firmware still drives HIGH for "on" (the inverted-logic demo fault).
+schema: integreat-manifest/v1
+board:
+  id: esp32
+  label: ESP32-WROOM development board (exact variant unconfirmed)
+  mcu: esp32
+
+subsystems:
+  - id: lighting
+    label: Halloween porch lights
+    source_globs: ["*.ino"]
+    components: [pumpkin_led, ghost_led]
+
+components:
+  - id: pumpkin_led
+    type: led
+    label: Pumpkin candle LED (GPIO18)
+    pins: [anode, cathode]
+  - id: ghost_led
+    type: led
+    label: Ghost LED (GPIO19)
+    pins: [anode, cathode]
+    attributes:
+      active_low: true
+
+power_sources:
+  - id: board_3v3
+    label: ESP32 3V3 rail
+    terminals: [3V3]
+
+connections:
+  - id: pumpkin_signal
+    from: mcu.GPIO18
+    to: pumpkin_led.anode
+    kind: signal
+    verification: verified
+    note: Through a 330 ohm series resistor on the bench
+  - id: pumpkin_ground
+    from: pumpkin_led.cathode
+    to: mcu.GND
+    kind: ground
+    verification: verified
+  - id: ghost_power
+    from: board_3v3.3V3
+    to: ghost_led.anode
+    kind: power
+    verification: verified
+    note: Anode tied to the 3V3 rail through a 330 ohm resistor
+  - id: ghost_signal
+    from: mcu.GPIO19
+    to: ghost_led.cathode
+    kind: signal
+    verification: verified
+    note: GPIO19 sinks the cathode — LOW lights the ghost

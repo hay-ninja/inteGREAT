@@ -147,11 +147,14 @@ async function replayReq<T>(method: string, path: string, body?: unknown): Promi
   }
   let hit = bundle.routes[key];
   if (hit === undefined && method === "POST" && /^\/projects\/[^/]+\/tests$/.test(path)) {
-    // Each demo project recorded exactly one run — serve it whatever scenario the
-    // judge picked; the result's SourceBadge still labels the recording honestly.
+    // Serve the recorded run for this expectation whatever scenario the judge picked —
+    // the result's SourceBadge still labels the recording honestly. Multi-expectation
+    // rigs (the Halloween seed has two LEDs) match on expectation_id.
     const prefix = `${method} ${path}::`;
     const alts = Object.keys(bundle.routes).filter((k) => k.startsWith(prefix));
-    if (alts.length === 1) hit = bundle.routes[alts[0]];
+    const eid = (body as { expectation_id?: string } | undefined)?.expectation_id;
+    hit = (alts.length === 1 ? bundle.routes[alts[0]]
+         : alts.map((k) => bundle.routes[k] as TestRun).find((r) => r.expectation_id === eid)) as T;
   }
   if (hit === undefined) {
     throw new ApiError(503, "hosted_demo",
@@ -224,6 +227,7 @@ export const api = {
     req<Project>("PATCH", `/projects/${enc(pid)}/graph/verification`, { edge_id, verification, note }),
   expectations: (pid: string) => req<Expectation[]>("GET", `/projects/${enc(pid)}/expectations`),
   incidents: (pid: string) => req<Incident[]>("GET", `/projects/${enc(pid)}/incidents`),
+  projectTests: (pid: string) => req<TestRun[]>("GET", `/projects/${enc(pid)}/tests`),
   saveReplay: (runId: string, name: string) => req<ReplayInfo>("POST", `/tests/${enc(runId)}/save-replay`, { name }),
   setPermission: (iid: string, category: PermissionCategory, granted: boolean) =>
     req<PermissionGrant[]>("POST", `/investigations/${enc(iid)}/permissions`, { category, granted }),
@@ -245,6 +249,12 @@ export const api = {
   visualStart: (pid: string, config_id: string, verifies_run_id?: string) => req<VisualRun>("POST", `/projects/${enc(pid)}/visual/runs`, { config_id, verifies_run_id }),
   cameraRelease: () => req<DeviceStatus>("POST", "/devices/camera/release"),
   cameraCalibrate: (known_angle_deg: number) => req<DeviceStatus>("POST", "/devices/camera/calibrate", { known_angle_deg }),
+  cameraCalibrateLed: (component_id: string) =>
+    req<DeviceStatus>("POST", "/devices/camera/calibrate", { mode: "led_baseline", component_id }),
+  cameraLocateLed: (component_id: string, on_command: string, off_command: string, cycles = 2) =>
+    req<S["LedLocateResult"]>("POST", "/devices/camera/locate-led", { component_id, on_command, off_command, cycles }),
+  cameraSetLedRoi: (component_id: string, roi: number[], calibrate_baseline = true) =>
+    req<DeviceStatus>("POST", "/devices/camera/led-roi", { component_id, roi, calibrate_baseline }),
   graph: (pid: string, scope?: string) =>
     req<GraphSnapshot>("GET", `/projects/${enc(pid)}/graph${scope ? `?scope_node_id=${enc(scope)}` : ""}`),
   subsystems: (pid: string) => req<Subsystem[]>("GET", `/projects/${enc(pid)}/subsystems`),
@@ -252,7 +262,9 @@ export const api = {
     ids.length
       ? req<Evidence[]>("GET", `/projects/${enc(pid)}/evidence?${ids.map((i) => `ids=${enc(i)}`).join("&")}`)
       : Promise.resolve([] as Evidence[]),
-  proposeExpectation: (pid: string) => req<Expectation>("POST", `/projects/${enc(pid)}/expectations/propose`),
+  proposeExpectation: (pid: string, componentId?: string) =>
+    req<Expectation>("POST", `/projects/${enc(pid)}/expectations/propose`,
+                   componentId ? { component_id: componentId } : undefined),
   confirmExpectation: (pid: string, eid: string, edit: ExpectationEdit) =>
     req<Expectation>("POST", `/projects/${enc(pid)}/expectations/${enc(eid)}/confirm`, edit),
   startTest: (pid: string, expectation_id: string, source: ObservationSourceSpec) =>

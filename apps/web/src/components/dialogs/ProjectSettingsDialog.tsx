@@ -97,7 +97,7 @@ export function ProjectSettingsDialog({ project, subsystems, onClose, onSaved, o
           <Eyebrow>Project</Eyebrow>
           <TextInput label="Name" value={name} onChange={setName} />
           <TextArea label="Context for debugging" isOptional value={context} onChange={setContext} rows={4}
-                    description="Notes about the rig, known quirks, or what you're testing. Shown to AI review and included in repair briefs as engineer notes — never treated as a measurement." />
+                    description="Notes about the live environment, known quirks, or what you're testing. Shown to AI review and included in repair briefs as engineer notes — never treated as a measurement." />
         </VStack>
 
         <VStack gap={3}>

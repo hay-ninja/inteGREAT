@@ -370,7 +370,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Tests
+         * @description All runs for the project, newest first — the History view (D-051).
+         */
+        get: operations["list_tests_api_v1_projects__pid__tests_get"];
         put?: never;
         /** Start Test */
         post: operations["start_test_api_v1_projects__pid__tests_post"];
@@ -771,6 +775,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/devices/camera/locate-led": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Locate Led
+         * @description Blink-to-find (D-054): engineer-initiated fixed serial commands toggle the LED;
+         *     frame differencing finds the component. Candidates returned for the engineer to pick.
+         */
+        post: operations["locate_led_api_v1_devices_camera_locate_led_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/camera/led-roi": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Led Roi
+         * @description Confirm/set the ROI for one component's LED (manual pick or located candidate, D-054).
+         */
+        post: operations["led_roi_api_v1_devices_camera_led_roi_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/devices/camera/frame.jpg": {
         parameters: {
             query?: never;
@@ -992,8 +1037,16 @@ export interface components {
         };
         /** CalibrateRequest */
         CalibrateRequest: {
+            /**
+             * Mode
+             * @default angle
+             * @enum {string}
+             */
+            mode: "angle" | "led_baseline";
+            /** Component Id */
+            component_id?: string | null;
             /** Known Angle Deg */
-            known_angle_deg: number;
+            known_angle_deg?: number | null;
         };
         /** CameraConnectRequest */
         CameraConnectRequest: {
@@ -1015,6 +1068,8 @@ export interface components {
             fps: number;
             /** Calibrated */
             calibrated: boolean;
+            /** Calibrations */
+            calibrations: string[];
             /** Offset Deg */
             offset_deg: number | null;
             /** Last Error */
@@ -1253,6 +1308,17 @@ export interface components {
             /** On Level */
             on_level: string | null;
             /**
+             * Pattern
+             * @default steady
+             * @enum {string}
+             */
+            pattern: "steady" | "toggle";
+            /**
+             * Min Transitions
+             * @default 4
+             */
+            min_transitions: number;
+            /**
              * Min Motion Deg
              * @default 5
              */
@@ -1282,6 +1348,10 @@ export interface components {
             deadline_ms?: number | null;
             /** Trigger Value */
             trigger_value?: string | null;
+            /** Pattern */
+            pattern?: ("steady" | "toggle") | null;
+            /** Min Transitions */
+            min_transitions?: number | null;
         };
         /**
          * ExpectationOutcome
@@ -1334,7 +1404,7 @@ export interface components {
              * Key
              * @enum {string}
              */
-            key: "command_sent" | "command_acknowledged" | "physical_motion" | "physical_state";
+            key: "command_sent" | "command_acknowledged" | "physical_motion" | "physical_state" | "state_transitions" | "first_response";
             /** Label */
             label: string;
             /**
@@ -1659,6 +1729,56 @@ export interface components {
             /** Causal Chain */
             causal_chain: components["schemas"]["CausalStep"][];
         };
+        /** LedLocateResult */
+        LedLocateResult: {
+            /** Found */
+            found: boolean;
+            /** Roi */
+            roi: number[] | null;
+            /**
+             * Candidates
+             * @default []
+             */
+            candidates: number[][];
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+        };
+        /**
+         * LedRoiRequest
+         * @description Manual or pick-a-candidate LED region for one component (D-054).
+         */
+        LedRoiRequest: {
+            /** Component Id */
+            component_id: string;
+            /** Roi */
+            roi: number[];
+            /**
+             * Calibrate Baseline
+             * @default true
+             */
+            calibrate_baseline: boolean;
+        };
+        /**
+         * LocateLedRequest
+         * @description Blink-to-find (D-054): engineer-initiated serial toggles; the camera diffs on vs off
+         *     frames and the changed blob is the LED. Commands are engineer-confirmed fixed strings.
+         */
+        LocateLedRequest: {
+            /** Component Id */
+            component_id: string;
+            /** On Command */
+            on_command: string;
+            /** Off Command */
+            off_command: string;
+            /**
+             * Cycles
+             * @default 2
+             */
+            cycles: number;
+        };
         /** ManualResultRequest */
         ManualResultRequest: {
             /** Action Id */
@@ -1746,7 +1866,7 @@ export interface components {
         };
         /**
          * ObservationSourceSpec
-         * @description replay = recorded/synthetic file; sim = simulated rig through the live pipeline; live = real devices.
+         * @description replay = recorded/synthetic file; sim = simulated environment through the live pipeline; live = real devices.
          */
         "ObservationSourceSpec-Input": {
             /**
@@ -1759,7 +1879,7 @@ export interface components {
         };
         /**
          * ObservationSourceSpec
-         * @description replay = recorded/synthetic file; sim = simulated rig through the live pipeline; live = real devices.
+         * @description replay = recorded/synthetic file; sim = simulated environment through the live pipeline; live = real devices.
          */
         "ObservationSourceSpec-Output": {
             /**
@@ -1895,6 +2015,16 @@ export interface components {
              * @default false
              */
             rescan: boolean;
+        };
+        /**
+         * ProposeExpectationRequest
+         * @description Optional targeting for rigs with more than one testable component (D-057).
+         */
+        ProposeExpectationRequest: {
+            /** Component Id */
+            component_id?: string | null;
+            /** Command */
+            command?: string | null;
         };
         /** Provenance */
         Provenance: {
@@ -3033,7 +3163,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ProposeExpectationRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -3078,6 +3212,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Expectation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tests_api_v1_projects__pid__tests_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestRun"][];
                 };
             };
             /** @description Validation Error */
@@ -3859,9 +4024,77 @@ export interface operations {
             };
         };
     };
+    locate_led_api_v1_devices_camera_locate_led_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocateLedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedLocateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    led_roi_api_v1_devices_camera_led_roi_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LedRoiRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     camera_frame_api_v1_devices_camera_frame_jpg_get: {
         parameters: {
             query?: {
+                metric?: string | null;
+                component?: string | null;
                 raw?: boolean;
             };
             header?: never;
@@ -3892,7 +4125,10 @@ export interface operations {
     };
     camera_stream_api_v1_devices_camera_stream_mjpg_get: {
         parameters: {
-            query?: never;
+            query?: {
+                metric?: string | null;
+                component?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3906,6 +4142,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

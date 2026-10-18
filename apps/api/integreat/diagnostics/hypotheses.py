@@ -131,6 +131,18 @@ def build(incident_id: str, findings: list[RuleFinding], wired_pin_label: str | 
                 related_node_ids=f.nodes,
                 expected_outcomes=[ExpectedOutcome(result="Supply/ground declared", interpretation="Check those connections by hand"),
                                    ExpectedOutcome(result="Missing in graph", interpretation="Hardware context incomplete; update manifest/netlist")]))
+            fix = act(DiagnosticAction(
+                id=f"action:{incident_id}:prepare_fix", incident_id=incident_id,
+                kind=ActionKind.prepare_software_fix, label="Prepare software fix with Devin",
+                rationale=("If the bench checks clear the wiring and supply, the remaining cause is "
+                           "firmware behaviour. Devin Cloud can review the code against the evidence "
+                           "on an isolated branch — nothing is applied locally, merged, or flashed."),
+                related_node_ids=f.nodes,
+                expected_outcomes=[
+                    ExpectedOutcome(result="Reviewable diff/PR",
+                                    interpretation="Engineer reviews, applies it by hand, reflashes, then Verify fix"),
+                    ExpectedOutcome(result="No result / failed job",
+                                    interpretation="Incident unchanged; keep checking the physical path")]))
             note = " A GPIO mismatch was also found and explains the symptom more directly." if secondary else ""
             response = "the camera saw no state change" if binary else "the camera saw no motion"
             hyps.append(Hypothesis(
@@ -138,13 +150,13 @@ def build(incident_id: str, findings: list[RuleFinding], wired_pin_label: str | 
                 status=HypothesisStatus.unverified,
                 explanation=(f"The firmware appears to have handled the command but {response}. "
                              f"inteGREAT cannot observe whether a drive signal reached {noun}." + note),
-                recommended_action_ids=[sig, verify], **common))
+                recommended_action_ids=[sig, fix, verify], **common))
             hyps.append(Hypothesis(
                 id=f"{hid}_power", title=f"Power or ground not reaching {noun}", rank=rank,
                 status=HypothesisStatus.unverified,
                 explanation=(f"No response is also consistent with missing power or a missing common ground to {noun}. "
                              "Supply voltage is not measured." + note),
-                recommended_action_ids=[pwr, expand, verify], **common))
+                recommended_action_ids=[pwr, expand, fix, verify], **common))
 
         elif f.code == FaultCode.MISSING_SERIAL_ACK:
             hyps.append(Hypothesis(

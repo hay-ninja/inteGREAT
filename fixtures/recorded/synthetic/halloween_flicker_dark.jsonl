@@ -1,0 +1,21 @@
+{"_meta": {"synthetic": true, "scenario": "halloween_flicker_dark", "description": "FLICKER is ACKed and DONE prints, but the pumpkin LED never lights — the firmware-side burst never ran.", "command": "FLICKER", "generated_by": "hand-authored for the halloween demo"}}
+{"t_ms": 0, "source": "host", "raw": "FLICKER"}
+{"t_ms": 0, "source": "cv", "frame": 0, "quality": "valid", "value": 0.0}
+{"t_ms": 41, "source": "serial", "raw": "ACK FLICKER"}
+{"t_ms": 66, "source": "cv", "frame": 1, "quality": "valid", "value": 0.0}
+{"t_ms": 88, "source": "serial", "raw": "DONE FLICKER"}
+{"t_ms": 132, "source": "cv", "frame": 2, "quality": "valid", "value": 0.0}
+{"t_ms": 198, "source": "cv", "frame": 3, "quality": "valid", "value": 0.0}
+{"t_ms": 264, "source": "cv", "frame": 4, "quality": "valid", "value": 0.0}
+{"t_ms": 330, "source": "cv", "frame": 5, "quality": "valid", "value": 0.0}
+{"t_ms": 396, "source": "cv", "frame": 6, "quality": "valid", "value": 0.0}
+{"t_ms": 462, "source": "cv", "frame": 7, "quality": "valid", "value": 0.0}
+{"t_ms": 528, "source": "cv", "frame": 8, "quality": "valid", "value": 0.0}
+{"t_ms": 594, "source": "cv", "frame": 9, "quality": "valid", "value": 0.0}
+{"t_ms": 660, "source": "cv", "frame": 10, "quality": "valid", "value": 0.0}
+{"t_ms": 726, "source": "cv", "frame": 11, "quality": "valid", "value": 0.0}
+{"t_ms": 792, "source": "cv", "frame": 12, "quality": "valid", "value": 0.0}
+{"t_ms": 858, "source": "cv", "frame": 13, "quality": "valid", "value": 0.0}
+{"t_ms": 924, "source": "cv", "frame": 14, "quality": "valid", "value": 0.0}
+{"t_ms": 990, "source": "cv", "frame": 15, "quality": "valid", "value": 0.0}
+{"t_ms": 1056, "source": "cv", "frame": 16, "quality": "valid", "value": 0.0}

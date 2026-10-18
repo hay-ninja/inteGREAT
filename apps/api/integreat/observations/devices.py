@@ -18,13 +18,16 @@ class DeviceManager:
         except Exception:  # noqa: BLE001 — port enumeration failing must not break status
             ports = []
         cam = self.camera.source
-        est = self.camera.estimators.get(cam.source_id) if cam else None
+        per = self.camera.estimators.get(cam.source_id, {}) if cam else {}
+        angle = next((e for e in per.values() if hasattr(e, "offset_deg")), None)
         return DeviceStatus(
             serial=SerialStatus(connected=self.serial.connected, port=self.serial.port if self.serial.connected else None,
                                 baud=self.serial.baud, last_error=self.serial.last_error, ports=ports),
             camera=CameraStatus(connected=self.camera.connected, source_id=cam.source_id if cam else None,
-                                fps=round(getattr(cam, "fps", 0.0), 1), calibrated=bool(est and est.calibrated),
-                                offset_deg=est.offset_deg if est else None,
+                                fps=round(getattr(cam, "fps", 0.0), 1),
+                                calibrated=bool(angle and angle.calibrated),
+                                calibrations=self.camera.calibrated_keys(),
+                                offset_deg=getattr(angle, "offset_deg", None),
                                 last_error=getattr(cam, "last_error", None)))
 
     def shutdown(self) -> None:

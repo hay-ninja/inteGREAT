@@ -725,6 +725,23 @@
       }
      }
     ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/ProposeExpectationRequest"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Req"
+       }
+      }
+     }
+    },
     "responses": {
      "200": {
       "description": "Successful Response",
@@ -839,6 +856,48 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/TestRun"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "get": {
+    "summary": "List Tests",
+    "description": "All runs for the project, newest first \u2014 the History view (D-051).",
+    "operationId": "list_tests_api_v1_projects__pid__tests_get",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Pid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/TestRun"
+         },
+         "title": "Response List Tests Api V1 Projects  Pid  Tests Get"
         }
        }
       }
@@ -1809,11 +1868,121 @@
     }
    }
   },
+  "/api/v1/devices/camera/locate-led": {
+   "post": {
+    "summary": "Locate Led",
+    "description": "Blink-to-find (D-054): engineer-initiated fixed serial commands toggle the LED;\nframe differencing finds the component. Candidates returned for the engineer to pick.",
+    "operationId": "locate_led_api_v1_devices_camera_locate_led_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LocateLedRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LedLocateResult"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/devices/camera/led-roi": {
+   "post": {
+    "summary": "Led Roi",
+    "description": "Confirm/set the ROI for one component's LED (manual pick or located candidate, D-054).",
+    "operationId": "led_roi_api_v1_devices_camera_led_roi_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LedRoiRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DeviceStatus"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/v1/devices/camera/frame.jpg": {
    "get": {
     "summary": "Camera Frame",
     "operationId": "camera_frame_api_v1_devices_camera_frame_jpg_get",
     "parameters": [
+     {
+      "name": "metric",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Metric"
+      }
+     },
+     {
+      "name": "component",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Component"
+      }
+     },
      {
       "name": "raw",
       "in": "query",
@@ -1851,12 +2020,56 @@
    "get": {
     "summary": "Camera Stream",
     "operationId": "camera_stream_api_v1_devices_camera_stream_mjpg_get",
+    "parameters": [
+     {
+      "name": "metric",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Metric"
+      }
+     },
+     {
+      "name": "component",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Component"
+      }
+     }
+    ],
     "responses": {
      "200": {
       "description": "Successful Response",
       "content": {
        "application/json": {
         "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
        }
       }
      }
@@ -2526,18 +2739,42 @@
    },
    "CalibrateRequest": {
     "properties": {
+     "mode": {
+      "type": "string",
+      "enum": [
+       "angle",
+       "led_baseline"
+      ],
+      "title": "Mode",
+      "default": "angle"
+     },
+     "component_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Component Id"
+     },
      "known_angle_deg": {
-      "type": "number",
-      "maximum": 270.0,
-      "minimum": -90.0,
+      "anyOf": [
+       {
+        "type": "number",
+        "maximum": 270.0,
+        "minimum": -90.0
+       },
+       {
+        "type": "null"
+       }
+      ],
       "title": "Known Angle Deg"
      }
     },
     "additionalProperties": false,
     "type": "object",
-    "required": [
-     "known_angle_deg"
-    ],
     "title": "CalibrateRequest"
    },
    "CameraConnectRequest": {
@@ -2592,6 +2829,13 @@
       "type": "boolean",
       "title": "Calibrated"
      },
+     "calibrations": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Calibrations"
+     },
      "offset_deg": {
       "anyOf": [
        {
@@ -2622,6 +2866,7 @@
      "source_id",
      "fps",
      "calibrated",
+     "calibrations",
      "offset_deg",
      "last_error"
     ],
@@ -3234,6 +3479,20 @@
       ],
       "title": "On Level"
      },
+     "pattern": {
+      "type": "string",
+      "enum": [
+       "steady",
+       "toggle"
+      ],
+      "title": "Pattern",
+      "default": "steady"
+     },
+     "min_transitions": {
+      "type": "integer",
+      "title": "Min Transitions",
+      "default": 4
+     },
      "min_motion_deg": {
       "type": "number",
       "title": "Min Motion Deg",
@@ -3284,6 +3543,8 @@
      "measurement_source",
      "ack_pattern",
      "on_level",
+     "pattern",
+     "min_transitions",
      "min_motion_deg",
      "min_valid_samples",
      "confirmed_by_engineer",
@@ -3337,6 +3598,32 @@
        }
       ],
       "title": "Trigger Value"
+     },
+     "pattern": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "steady",
+         "toggle"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pattern"
+     },
+     "min_transitions": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Transitions"
      }
     },
     "additionalProperties": false,
@@ -3467,7 +3754,9 @@
        "command_sent",
        "command_acknowledged",
        "physical_motion",
-       "physical_state"
+       "physical_state",
+       "state_transitions",
+       "first_response"
       ],
       "title": "Key"
      },
@@ -4507,6 +4796,119 @@
     ],
     "title": "InvestigationView"
    },
+   "LedLocateResult": {
+    "properties": {
+     "found": {
+      "type": "boolean",
+      "title": "Found"
+     },
+     "roi": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "integer"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Roi"
+     },
+     "candidates": {
+      "items": {
+       "items": {
+        "type": "integer"
+       },
+       "type": "array"
+      },
+      "type": "array",
+      "title": "Candidates",
+      "default": []
+     },
+     "message": {
+      "type": "string",
+      "title": "Message",
+      "default": ""
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "found",
+     "roi",
+     "candidates",
+     "message"
+    ],
+    "title": "LedLocateResult"
+   },
+   "LedRoiRequest": {
+    "properties": {
+     "component_id": {
+      "type": "string",
+      "title": "Component Id"
+     },
+     "roi": {
+      "items": {
+       "type": "integer"
+      },
+      "type": "array",
+      "maxItems": 4,
+      "minItems": 4,
+      "title": "Roi"
+     },
+     "calibrate_baseline": {
+      "type": "boolean",
+      "title": "Calibrate Baseline",
+      "default": true
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "component_id",
+     "roi"
+    ],
+    "title": "LedRoiRequest",
+    "description": "Manual or pick-a-candidate LED region for one component (D-054)."
+   },
+   "LocateLedRequest": {
+    "properties": {
+     "component_id": {
+      "type": "string",
+      "title": "Component Id"
+     },
+     "on_command": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "On Command"
+     },
+     "off_command": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Off Command"
+     },
+     "cycles": {
+      "type": "integer",
+      "maximum": 5.0,
+      "minimum": 1.0,
+      "title": "Cycles",
+      "default": 2
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "component_id",
+     "on_command",
+     "off_command"
+    ],
+    "title": "LocateLedRequest",
+    "description": "Blink-to-find (D-054): engineer-initiated serial toggles; the camera diffs on vs off\nframes and the changed blob is the LED. Commands are engineer-confirmed fixed strings."
+   },
    "ManualResultRequest": {
     "properties": {
      "action_id": {
@@ -4770,7 +5172,7 @@
      "kind"
     ],
     "title": "ObservationSourceSpec",
-    "description": "replay = recorded/synthetic file; sim = simulated rig through the live pipeline; live = real devices."
+    "description": "replay = recorded/synthetic file; sim = simulated environment through the live pipeline; live = real devices."
    },
    "ObservationSourceSpec-Output": {
     "properties": {
@@ -4803,7 +5205,7 @@
      "scenario"
     ],
     "title": "ObservationSourceSpec",
-    "description": "replay = recorded/synthetic file; sim = simulated rig through the live pipeline; live = real devices."
+    "description": "replay = recorded/synthetic file; sim = simulated environment through the live pipeline; live = real devices."
    },
    "PermissionGrant": {
     "properties": {
@@ -5118,6 +5520,36 @@
     "type": "object",
     "title": "ProjectUpdate",
     "description": "Engineer edits to an existing project. Any *_path change (or rescan=True) rebuilds the graph\nfrom the new inputs in place \u2014 same project id, graph_version + 1, wiring confirmations kept.\nFields left as None keep their current value."
+   },
+   "ProposeExpectationRequest": {
+    "properties": {
+     "component_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Component Id"
+     },
+     "command": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Command"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "title": "ProposeExpectationRequest",
+    "description": "Optional targeting for rigs with more than one testable component (D-057)."
    },
    "Provenance": {
     "properties": {

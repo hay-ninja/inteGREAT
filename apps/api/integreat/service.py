@@ -39,6 +39,7 @@ from .models import (
     DemoFixture,
     DiagnosticAction,
     EdgeOrigin,
+    EdgeRelation,
     Epistemic,
     EventFlow,
     Evidence,
@@ -57,9 +58,13 @@ from .models import (
     IncidentState,
     IntegreatEvent,
     InvestigationView,
+    LedLocateResult,
+    LedRoiRequest,
+    LocateLedRequest,
     LogLiteral,
     ManualResultRequest,
     NetlistPreview,
+    NodeKind,
     NetlistPreviewRequest,
     Observation,
     ObservationSourceSpec,
@@ -88,7 +93,7 @@ from .repair import (REPAIR_OUTPUT_SCHEMA, DevinClientProtocol, DevinUnavailable
                      build_brief,
                      make_devin, map_remote_state, repo_snapshot)
 from .observations.cv_angle import ArucoAngleEstimator, render_scene
-from .observations.cv_led import render_led_scene
+from .observations.cv_led import locate_candidates, render_led_scene
 from .observations.devices import DeviceManager
 from .observations.live import LiveStream
 from .observations.replay import ReplayError, ReplayEvent, list_replays, load_replay
@@ -391,6 +396,18 @@ class Service:
     def subsystems(self, pid: str) -> list[Subsystem]:
         project = self.project(pid)
         subs = self.store.list(K_SUBSYS, Subsystem, parent_id=pid)
+        if not subs:
+            # Projects imported before the subsystem collection was persisted have
+            # subsystem nodes in the graph but nothing here — derive it so scope
+            # navigation still works without a re-import.
+            g = self.store.get(K_GRAPH, pid, GraphSnapshot)
+            subs = [Subsystem(id=n.id, label=n.label,
+                              module_ids=[m.id for m in g.nodes
+                                          if m.kind == NodeKind.source_module and m.subsystem_id == n.id],
+                              component_ids=[c.id for c in g.nodes
+                                             if c.kind in (NodeKind.component, NodeKind.power_source)
+                                             and c.subsystem_id == n.id])
+                    for n in g.nodes if n.kind == NodeKind.subsystem]
         if project.subsystem_names:
             subs = [s.model_copy(update={"label": project.subsystem_names[s.id]})
                     if s.id in project.subsystem_names else s for s in subs]
@@ -400,20 +417,13 @@ class Service:
         return self.store.get_many(K_EVIDENCE, list(dict.fromkeys(ids)), Evidence)
 
     def demo_fixtures(self) -> list[DemoFixture]:
+        # One demo card, one story: the halloween rig carries both arcs (inverted
+        # ghost LED + dead pumpkin candle). Older servo/LED fixtures stay on disk
+        # for tests but are no longer offered as demo imports.
         f = self.settings.fixtures_dir
-        led = str(f / "manifests" / "esp32_led_demo.yaml")
-        led_low = str(f / "manifests" / "esp32_led_demo_active_low.yaml")
-        servo = str(f / "manifests" / "esp32_servo_demo.yaml")
-        return [DemoFixture(label="LED demo — code drives the wrong pin",
-                            repo_path=str(f / "esp32_led_demo_fault_a"), manifest_path=led),
-                DemoFixture(label="LED demo — correct firmware (pairs with signal/power faults)",
-                            repo_path=str(f / "esp32_led_demo"), manifest_path=led),
-                DemoFixture(label="LED demo — active-low wiring, active-high code",
-                            repo_path=str(f / "esp32_led_demo"), manifest_path=led_low),
-                DemoFixture(label="Servo — wrong pin (legacy demo)",
-                            repo_path=str(f / "esp32_servo_demo_fault_a"), manifest_path=servo),
-                DemoFixture(label="Servo — correct firmware (legacy demo)",
-                            repo_path=str(f / "esp32_servo_demo"), manifest_path=servo)]
+        return [DemoFixture(label="Halloween — two LEDs, two faults (inverted ghost + dead candle)",
+                            repo_path=str(f / "esp32_halloween"),
+                            manifest_path=str(f / "manifests" / "esp32_halloween.yaml"))]
 
     def demo_netlist(self) -> str:
         return str(self.settings.fixtures_dir / "kicad" / "esp32_servo_demo.xml")
@@ -426,15 +436,18 @@ class Service:
 
     # ------------------------------------------------------------------ expectations
 
-    def propose_expectation(self, pid: str) -> Expectation:
+    def propose_expectation(self, pid: str, component_id: str | None = None,
+                            command: str | None = None) -> Expectation:
         g = self.graph(pid)
         analysis = self.store.get(K_ANALYSIS, pid, ProjectAnalysis)
         evs = self.store.list(K_EVIDENCE, Evidence, project_id=pid)
         exp = expmod.propose_expectation(pid, g.nodes, g.edges, evs,
-                                         [lit.text for lit in analysis.log_literals])
+                                         [lit.text for lit in analysis.log_literals],
+                                         component_id=component_id, command=command)
         if exp is None:
             raise ServiceError(422, "no_testable_component",
-                               "No testable component (servo, led) in the hardware graph")
+                               "No testable component (servo, led) in the hardware graph"
+                               + (f" matching {component_id}" if component_id else ""))
         self.store.put(K_EXPECT, exp)
         return exp
 
@@ -448,6 +461,14 @@ class Service:
         upd = {k: v for k, v in edit.model_dump().items() if v is not None and k != "trigger_value"}
         if edit.trigger_value is not None:
             upd["trigger"] = exp.trigger.model_copy(update={"value": edit.trigger_value})
+            if edit.trigger_value != exp.trigger.value:
+                # The ACK pattern belongs to the command — re-resolve it against the edited
+                # trigger or a stale pattern would invent a MISSING_SERIAL_ACK (D-057).
+                analysis = self.store.get(K_ANALYSIS, pid, ProjectAnalysis)
+                lit = edit.trigger_value.strip()
+                upd["ack_pattern"] = next(
+                    (s.text.strip() for s in analysis.log_literals
+                     if s.text.strip().endswith(lit) and s.text.strip() != lit), None)
         ev = Evidence(id=f"evidence:engineer:{eid}:confirm:{uuid.uuid4().hex[:6]}", project_id=pid,
                       kind=EvidenceKind.engineer_assertion, epistemic=Epistemic.verified,
                       summary="Engineer confirmed expectation", provenance=Provenance(source_id="engineer"),
@@ -487,9 +508,10 @@ class Service:
                 raise ServiceError(409, "serial_unavailable", "Connect the ESP32 serial port before a live test")
             if not d.camera.connected:
                 raise ServiceError(409, "camera_unavailable", "Connect a camera before a live test")
-            if not d.camera.estimator().calibrated:
+            if not d.camera.estimator(exp.metric, exp.component_id).calibrated:
+                what = "the LED baseline" if exp.metric == "led_state" else "the camera (servo at a known angle)"
                 raise ServiceError(409, "camera_uncalibrated",
-                                   "Calibrate the camera (servo at a known angle) before a live test")
+                                   f"Calibrate {what} before a live test")
         run = TestRun(id=_id("test"), project_id=pid, expectation_id=exp.id, attempt_kind=attempt_kind,
                       verifies_test_run_id=verifies, source=src, synthetic=synthetic, incident_id=incident_id)
         self.store.put(K_RUN, run)
@@ -500,6 +522,13 @@ class Service:
         if r is None:
             raise ServiceError(404, "not_found", f"test run {run_id} not found")
         return r
+
+    def list_test_runs(self, pid: str) -> list[TestRun]:
+        """Every run for the project, newest first — the History view's timeline (D-051).
+        Passing runs appear here even though they never open an incident."""
+        self.project(pid)
+        return sorted(self.store.list(K_RUN, TestRun, project_id=pid),
+                      key=lambda r: r.started_at_utc or utcnow(), reverse=True)
 
     def runs_for_incident(self, iid: str) -> list[TestRun]:
         inc = self.incident(iid)
@@ -592,7 +621,8 @@ class Service:
         d = self.devices
         return (LiveStream(scenario="live", synthetic=False, description="live devices", command=command,
                            serial=d.serial if command else None, camera=d.camera.source,
-                           estimator=d.camera.estimator(), window_ms=exp.deadline_ms),
+                           estimator=d.camera.estimator(exp.metric, exp.component_id),
+                           window_ms=exp.deadline_ms),
                 "opencv", d.camera.source.source_id)
 
     @observed("test.collect")
@@ -671,6 +701,85 @@ class Service:
                           "recorded_at_utc": (run.started_at_utc or utcnow()).isoformat()}}
         out.write_text("\n".join(json.dumps(x) for x in [meta, *rec.events]) + "\n", encoding="utf-8")
         return ReplayInfo(id=name, description=meta["_meta"]["description"], synthetic=run.synthetic)
+
+    # ---------------------------------------------------------- LED locator (D-054)
+
+    LOCATE_SETTLE_MS = 350
+
+    async def locate_led(self, req: LocateLedRequest) -> LedLocateResult:
+        """Blink-to-find (D-054): engineer-initiated, fixed-string serial commands toggle the
+        LED while the camera diffs off vs on frames — the changed blob IS the component.
+        One candidate → ROI + baseline set automatically. Many → returned for the engineer
+        to pick (multi-LED). None → honest not-found; the UI offers the manual pick."""
+        from .observations.camera_adapter import CameraError
+
+        d = self.devices
+        if not d.serial.connected:
+            raise ServiceError(409, "serial_unavailable",
+                               "Connect the ESP32 serial port — blink-to-find drives the LED")
+        if not d.camera.connected or d.camera.source is None:
+            raise ServiceError(409, "camera_unavailable", "Connect a camera first")
+        cam, ser = d.camera.source, d.serial
+        est = d.camera.estimator("led_state", req.component_id)
+
+        async def shot():
+            await asyncio.sleep(self.LOCATE_SETTLE_MS / 1000)
+            f = await asyncio.to_thread(cam.latest)
+            if f is None:
+                raise CameraError("no frame yet")
+            return f.image
+
+        rx_before = len([l for l in ser.recent(200) if l.direction == "rx"])
+        try:
+            off_frames: list = []
+            on_frames: list = []
+            await asyncio.to_thread(ser.write_line, req.off_command)
+            off_frames.append(await shot())
+            for _ in range(req.cycles):
+                await asyncio.to_thread(ser.write_line, req.on_command)
+                on_frames.append(await shot())
+                await asyncio.to_thread(ser.write_line, req.off_command)
+                off_frames.append(await shot())
+        except CameraError as e:
+            raise ServiceError(409, "camera_unavailable", str(e)) from e
+
+        cands = locate_candidates(off_frames, on_frames)
+        if len(cands) == 1:
+            est.roi = cands[0]
+            est.calibrate(off_frames[-1])
+            return LedLocateResult(found=True, roi=cands[0],
+                                   message="LED found — baseline recorded")
+        heard = len([l for l in ser.recent(200) if l.direction == "rx"]) - rx_before
+        if not cands:
+            if heard == 0:
+                return LedLocateResult(
+                    found=False,
+                    message=f'Sent "{req.off_command}"/"{req.on_command}" over serial but the board '
+                            "printed nothing back — the firmware may not handle those commands "
+                            "(autonomous sketches, e.g. a fade loop, never read serial). "
+                            "Fix the commands to match your firmware, or mark the LED region on the video instead.")
+            return LedLocateResult(found=False,
+                                   message="The board answered, but nothing changed in frame between "
+                                           "ON and OFF — check the LED is in view and the commands "
+                                           "actually drive it, or mark the region on the video.")
+        return LedLocateResult(found=False, candidates=cands,
+                               message=f"{len(cands)} regions changed — pick the one that is this LED")
+
+    def set_led_roi(self, req: LedRoiRequest):
+        """Manual or picked-candidate ROI for one component's LED (D-054). With
+        calibrate_baseline the engineer asserts the LED is OFF and the current frame
+        becomes the off-baseline."""
+        d = self.devices
+        if not d.camera.connected or d.camera.source is None:
+            raise ServiceError(409, "camera_unavailable", "Connect a camera first")
+        est = d.camera.estimator("led_state", req.component_id)
+        est.roi = [int(v) for v in req.roi]
+        if req.calibrate_baseline:
+            f = d.camera.source.latest()
+            if f is None:
+                raise ServiceError(409, "camera_unavailable", "no frame yet")
+            est.calibrate(f.image)
+        return d.status()
 
     # ------------------------------------------------------------------ incidents
 
@@ -786,7 +895,60 @@ class Service:
             for fid in se.matched_function_ids:
                 out.setdefault(fid, Highlight(element_id=fid, style="observed",
                                               reason=f'Serial log line "{se.raw}" matches a print in this function'))
+        # Failure path last: observed/conflict marks are more specific than
+        # membership in the path, so they keep their colour while the rest of
+        # the signal chain lights up.
+        if run.result and run.result.outcome == ExpectationOutcome.failed and inc.state != IncidentState.resolved:
+            g = self.store.get(K_GRAPH, inc.project_id, GraphSnapshot)
+            if g:
+                for el in self._failure_path(g, exp.component_id):
+                    out.setdefault(el, Highlight(
+                        element_id=el, style="failed_expectation",
+                        reason="On the signal path of the failed expectation — the fault is somewhere along it"))
         return list(out.values())
+
+    # Nodes reached by the trace but never expanded further — expanding the MCU's
+    # containment would light up every wired pin on the board.
+    _TRACE_TERMINALS = {"mcu", "subsystem", "source_module", "function", "power_source"}
+    _TRACE_RELS = {EdgeRelation.contains, EdgeRelation.connected_to, EdgeRelation.powered_by,
+                   EdgeRelation.controls, EdgeRelation.configures}
+
+    def _failure_path(self, g: GraphSnapshot, component_id: str) -> set[str]:
+        """Every node/edge on the signal path feeding a failed component: the code
+        that controls it, the MCU pin it configures, the wiring chain to the
+        component (through intermediate parts like resistors), and power.
+        Deterministic BFS over dependency edges — no AI — so it works with
+        providers down."""
+        kinds = {n.id: n.kind for n in g.nodes}
+        # A pin touched by 2+ connected_to wires is a shared rail/junction (e.g. the
+        # board's GND pin) — mark it, but don't walk through it into other circuits.
+        wire_degree: dict[str, int] = {}
+        for e in g.edges:
+            if e.relation == EdgeRelation.connected_to:
+                wire_degree[e.source_id] = wire_degree.get(e.source_id, 0) + 1
+                wire_degree[e.target_id] = wire_degree.get(e.target_id, 0) + 1
+
+        def expandable(nid: str) -> bool:
+            return kinds.get(nid) not in self._TRACE_TERMINALS and wire_degree.get(nid, 0) < 2
+
+        ids: set[str] = {component_id}
+        frontier = {component_id}
+        for _ in range(8):  # GPIO → series parts → component → ground is ~6 hops
+            nxt: set[str] = set()
+            for e in g.edges:
+                if e.relation not in self._TRACE_RELS:
+                    continue
+                if e.source_id in frontier or e.target_id in frontier:
+                    ids.add(e.id)
+                    for nid in (e.source_id, e.target_id):
+                        if nid not in ids:
+                            ids.add(nid)
+                            if expandable(nid):
+                                nxt.add(nid)
+            if not nxt:
+                break
+            frontier = nxt
+        return ids
 
     # ------------------------------------------------------------------ actions & tools
 
@@ -966,12 +1128,17 @@ class Service:
 
     def _software_evidence(self, inc: Incident) -> bool:
         """A remote code fix is only offered when the incident has evidence of a software issue —
-        never as a remedy for an unverified power/signal problem."""
-        if FaultCode.GPIO_CONFIG_MISMATCH not in inc.fault_codes:
-            return False
+        never as a remedy for an unverified power/signal problem (D-058):
+        - a software-implicating fault code (GPIO mismatch, inverted logic) not ruled out, or
+        - power/signal hypotheses the engineer has weakened by manual checks — a verified-healthy
+          physical path shifts suspicion to firmware behaviour."""
         hyps = self.store.get_many(K_HYP, inc.hypothesis_ids, Hypothesis)
-        return any(h.fault_code == FaultCode.GPIO_CONFIG_MISMATCH
-                   and h.status != HypothesisStatus.ruled_out for h in hyps)
+        software_codes = {FaultCode.GPIO_CONFIG_MISMATCH, FaultCode.INVERTED_LOGIC}
+        if any(h.fault_code in software_codes and h.status != HypothesisStatus.ruled_out for h in hyps):
+            return True
+        physical = [h for h in hyps if h.fault_code == FaultCode.POSSIBLE_POWER_OR_SIGNAL_FAULT]
+        return bool(physical) and all(
+            h.status in (HypothesisStatus.weakened, HypothesisStatus.ruled_out) for h in physical)
 
     def repair_preflight(self, iid: str) -> RepairPreflight:
         inc = self.incident(iid)

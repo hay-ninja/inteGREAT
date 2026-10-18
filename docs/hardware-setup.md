@@ -38,6 +38,23 @@ inteGREAT adds nothing to it.
   doesn't reset (D-005).
 - To reflash (Fault A repair): **Release port** first — Windows lets only one program hold a COM port.
 
+### Windows CH340: “Incorrect function” while opening a port
+
+On 2026-10-18, Windows listed `USB-SERIAL CH340 (COM6)` as healthy with driver
+`3.9.2024.9`, but both pyserial and a direct Windows `CreateFile` call failed with
+WinError 1 (`Incorrect function`) before serial settings could be applied. Replugging
+did not clear it. An engineer-approved administrator restart of that specific CH340
+device with `pnputil /restart-device "<exact PnP instance ID>"` restored access;
+inteGREAT's connect endpoint then returned 200, connected at 115200 with no last error.
+
+For recurrence, identify the current port and its exact PnP device first, release any
+existing connection, then restart only that USB serial device through Windows Device
+Manager or administrator PnP tools and reconnect. A restart can reset attached hardware;
+it is an explicit environment-recovery operation, never an automatic application retry.
+Do not infer that a driver downgrade is needed from this error alone. This check verified
+port opening, not command exchange, reset-free board operation, camera measurement, or
+the complete live hardware demo.
+
 ## Faults
 - **Fault A (software):** flash `fixtures/esp32_servo_demo_fault_a/` (servo on GPIO19) while wiring stays on
   GPIO18. Repair: change `SERVO_PIN` to 18, reflash, click **Rescan**, then **Verify fix**.

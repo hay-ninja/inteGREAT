@@ -6,6 +6,7 @@ import {
   MarkerType,
   Panel,
   Position,
+  PanOnScrollMode,
   ReactFlow,
   ReactFlowProvider,
   applyNodeChanges,
@@ -135,12 +136,11 @@ interface Props {
   onEdgeSelect: (edgeIds: string[], lifted: boolean) => void;
   onExpandAll: () => void;
   onCollapseAll: () => void;
-  onClearFocus: (() => void) | null;
   fitKey: string;
 }
 
 function Inner(p: Props) {
-  const { fitView } = useReactFlow();
+  const { fitView, setCenter, getZoom } = useReactFlow();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
   const rel = useMemo(() => relatedSelection(p.graph, p.selectedId), [p.graph, p.selectedId]);
@@ -178,7 +178,7 @@ function Inner(p: Props) {
     labelShowBg: true,
     labelBgPadding: [4, 2] as [number, number],
     labelBgBorderRadius: 3,
-    animated: e.highlight?.style === "observed" || e.emphasized,
+    animated: e.highlight?.style === "observed" || e.highlight?.style === "failed_expectation" || e.emphasized,
     style: edgeStyle(e),
     markerEnd: e.relation === "contains" ? undefined
       : { type: MarkerType.ArrowClosed, width: 10, height: 10, color: (edgeStyle(e).stroke as string) },
@@ -187,6 +187,23 @@ function Inner(p: Props) {
 
   // Fit only once React Flow has measured every node; fitting earlier silently does nothing.
   const initialized = useNodesInitialized();
+  // When a node is selected, pan it to the right of the canvas — the inspector docks left.
+  const lastPanned = useRef<string | null>(null);
+  useEffect(() => {
+    const id = p.selectedId;
+    if (!id) { lastPanned.current = null; return; }
+    if (!initialized || lastPanned.current === id || !canvasRef.current) return;
+    const v = vg.nodes.find((n) => n.id === id);
+    if (!v) return;
+    const n = nodes.find((nd) => nd.id === id);
+    const w = n?.measured?.width ?? 0, h = n?.measured?.height ?? 0;
+    const zoom = getZoom();
+    lastPanned.current = id;
+    // Node lands at ~66% of canvas width: viewport center sits left of the node by (fx - 0.5).
+    setCenter(v.x + w / 2 - 0.16 * (canvasRef.current.clientWidth / zoom), v.y + h / 2,
+      { zoom, duration: 280 });
+  }, [p.selectedId, initialized, vg, nodes, setCenter, getZoom]);
+
   const lastFit = useRef("");
   useEffect(() => {
     const key = `${p.fitKey}|${p.layer}|${vg.nodes.length}`;
@@ -206,7 +223,7 @@ function Inner(p: Props) {
   }, [initialized, fitView]);
 
   const layerEmpty = p.layer === "hardware"
-    ? { title: "No hardware in this project", body: "Import a hardware manifest or KiCad netlist to see the physical rig." }
+    ? { title: "No hardware in this project", body: "Import a hardware manifest or KiCad netlist to see the physical environment." }
     : p.layer === "software"
       ? { title: "No source code in this scope", body: "The current scope has no modules — import a firmware repository." }
       : { title: "Empty project", body: "Nothing has been imported yet." };
@@ -221,8 +238,6 @@ function Inner(p: Props) {
                 tooltip="Reveal every part hidden inside the grouped boxes" onClick={p.onExpandAll} />
         <Button label="Collapse groups" size="sm" variant="secondary"
                 tooltip="Fold the detailed parts back into their groups" onClick={p.onCollapseAll} />
-        {p.onClearFocus && <Button label="Show whole system" size="sm" variant="secondary"
-                tooltip="Leave the subsystem focus — show the full map again" onClick={p.onClearFocus} />}
         {hiddenNote && <Button label={`${hiddenNote} — show everything`} size="sm" variant="ghost" onClick={() => p.onLayer("combined")} />}
       </HStack>
     </LayoutHeader>} content={<LayoutContent padding={0} isScrollable={false} ref={canvasRef}>
@@ -241,10 +256,14 @@ function Inner(p: Props) {
       className="graph-canvas"
       colorMode="dark"
       minZoom={0.2}
+      panOnScroll
+      panOnScrollMode={PanOnScrollMode.Free}
+      zoomOnScroll={false}
+      zoomActivationKeyCode="Control"
       proOptions={{ hideAttribution: true }}
     >
       <Background gap={28} size={1} />
-      <Panel position="bottom-left"><Legend layer={p.layer} /></Panel>
+      <Panel position="top-right"><Legend layer={p.layer} /></Panel>
       <Controls showInteractive={false} position="bottom-right" />
     </ReactFlow>
     )}
@@ -272,6 +291,7 @@ function Legend({ layer }: { layer: GraphLayer }) {
         </HStack>
         <Text type="supporting">Solid: verified · dashed: from code · dotted: declared, unchecked (from the schematic — not physically checked)</Text>
         <Text type="supporting">Accent outline: related to your selection · dashed border pill: hardware reference</Text>
+        <Text type="supporting">Scroll pans · Ctrl+scroll or pinch zooms</Text>
         <HStack gap={2} wrap="wrap">
           <HStack gap={1} vAlign="center"><StatusDot variant="error" label="Conflict or failed" /><Text type="supporting">conflict / failed</Text></HStack>
           <HStack gap={1} vAlign="center"><StatusDot variant="warning" label="Suspected" /><Text type="supporting">suspected</Text></HStack>

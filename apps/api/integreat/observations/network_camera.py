@@ -93,7 +93,7 @@ class NetworkCamera:
                         if len(buffer) > MAX_FRAME_BYTES:
                             raise CameraError("Phone stream exceeded the frame buffer limit")
                     if not self._stop.is_set():
-                        raise CameraError("Phone stream ended; reconnect in rig setup")
+                        raise CameraError("Phone stream ended; reconnect in environment setup")
         except Exception as exc:
             self.last_error = str(exc) if isinstance(exc, CameraError) else "Phone stream unavailable; check Wi-Fi and reconnect"
         finally:
